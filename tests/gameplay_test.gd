@@ -1,7 +1,71 @@
 extends Node
-## Headless gameplay checks. Run with:
-##   godot --headless --path . res://tests/gameplay_test.tscn
-## Exits with the number of failed checks (0 = all passed).
+## Headless gameplay checks. Run everything with:
+##   godot --headless --path . --fixed-fps 60 --quit-after 200000 res://tests/gameplay_test.tscn
+## or just some segments (see SEGMENTS below):
+##   godot --headless --path . --fixed-fps 60 --quit-after 200000 res://tests/gameplay_test.tscn -- --segment=warden,menus
+## `-- --list` prints the segments. Exits with the number of failed checks
+## (0 = all passed).
+## --fixed-fps 60 steps every frame by exactly 1/60 s as fast as the CPU allows,
+## instead of waiting in real time: the whole suite takes seconds, not minutes.
+## --quit-after is a safety net so a broken test can't hang the run.
+
+# Tests grouped by what they cover, so a change only needs its segments run.
+# Each test spawns its own room, so segments run fine alone or in any order.
+const SEGMENTS := {
+	# Acid, spikes, safe-ground respawn, down-strikes and pogo (player.gd, main.gd hazards).
+	"hazards": [
+		"_test_acid_kills", "_test_acid_kills_through_invulnerability",
+		"_test_spikes_hurt_and_respawn", "_test_spikes_respect_invulnerability",
+		"_test_safe_ground_needs_both_feet", "_test_tapped_down_strike_ends",
+		"_test_held_down_strike_stays_out", "_test_held_pogo_chains_on_spikes",
+	],
+	# First room: layout routes, crawlers, coins, pickups, one-way platforms, its door.
+	"start_room": [
+		"_test_acid_route_jumps", "_test_acid_enemies_stay_on_platforms", "_test_crawler_turns_at_wall",
+		"_test_door_to_boss_room_and_back", "_test_coin_counts_and_stays_collected",
+		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
+		"_test_crawler_kill_heals_half_heart", "_test_health_pickup",
+	],
+	# Boss room layout around the arena: shafts, the drop, the acid gap, the climb door.
+	"boss_room": [
+		"_test_boss_room_shafts_climbable", "_test_right_hallway_drops_to_far_side",
+		"_test_acid_gap_needs_dash", "_test_boss_hallway_door_to_climb_room_and_back",
+	],
+	# The Warden fight (boss_warden.gd, boss_shockwave.gd, main.gd boss/intro/camera code).
+	"warden": [
+		"_test_boss_fight_starts_and_gate_shuts", "_test_boss_fight_starts_from_right_side",
+		"_test_boss_attacks_stay_in_arena", "_test_boss_hurts_player", "_test_player_attacks_hurt_boss",
+		"_test_boss_defeat_opens_gate_and_sticks", "_test_warden_damage_split_and_phase_two",
+		"_test_warden_charge_stops_at_player", "_test_camera_returns_to_player_after_boss",
+	],
+	# Climb room route, knights, and the door up to the Aerie.
+	"climb": [
+		"_test_climb_route_jumps", "_test_knights_are_slow", "_test_knight_swing_hurts",
+		"_test_knight_swing_can_be_dodged", "_test_knight_kill_doesnt_heal",
+		"_test_climb_top_door_to_aerie_and_back",
+	],
+	# The Harrier fight (boss_harrier.gd, boss_feather.gd).
+	"harrier": [
+		"_test_harrier_flies_and_swoops", "_test_harrier_shallow_swoop_hits_standing_player",
+		"_test_harrier_swoops_ignore_player_height", "_test_harrier_phase_two_cycle",
+		"_test_harrier_feathers", "_test_harrier_pulls_up_after_hitting_you",
+		"_test_harrier_crashes_when_it_misses", "_test_harrier_armor_except_dazed",
+		"_test_harrier_defeat_grants_wall_jump",
+	],
+	# Damage numbers and armor, sprint and stamina (player.gd, enemy damage settings).
+	"player": [
+		"_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
+		"_test_sprint_is_faster_and_drains_stamina", "_test_stamina_refills_only_on_ground",
+		"_test_dash_needs_stamina", "_test_wall_jump_needs_stamina",
+	],
+	# Pause menu, main menu, level select, debug tools.
+	"menus": [
+		"_test_pause_menu_toggles", "_test_pause_ignored_during_boss_intro",
+		"_test_debug_kill_boss", "_test_debug_kill_boss_off_outside_debug_mode",
+		"_test_main_menu_starts_game", "_test_level_select_loads_each_room",
+		"_test_pause_menu_quits_to_main_menu",
+	],
+}
 
 const TILE := 32
 const MAIN_SCENE := preload("res://scenes/main.tscn")
@@ -61,66 +125,39 @@ var _player: Player
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS   # keep driving checks through the paused boss intro
 	await get_tree().process_frame   # root can't take new children during startup
-	await _test_acid_kills()
-	await _test_acid_kills_through_invulnerability()
-	await _test_spikes_hurt_and_respawn()
-	await _test_spikes_respect_invulnerability()
-	await _test_safe_ground_needs_both_feet()
-	await _test_tapped_down_strike_ends()
-	await _test_held_down_strike_stays_out()
-	await _test_held_pogo_chains_on_spikes()
-	await _test_acid_route_jumps()
-	await _test_acid_enemies_stay_on_platforms()
-	await _test_crawler_turns_at_wall()
-	await _test_door_to_boss_room_and_back()
-	await _test_boss_room_shafts_climbable()
-	await _test_right_hallway_drops_to_far_side()
-	await _test_acid_gap_needs_dash()
-	await _test_boss_fight_starts_and_gate_shuts()
-	await _test_boss_fight_starts_from_right_side()
-	await _test_boss_attacks_stay_in_arena()
-	await _test_boss_hurts_player()
-	await _test_player_attacks_hurt_boss()
-	await _test_boss_defeat_opens_gate_and_sticks()
-	await _test_coin_counts_and_stays_collected()
-	await _test_down_jump_drops_through_platform()
-	await _test_down_jump_on_solid_ground_still_jumps()
-	await _test_crawler_kill_heals_half_heart()
-	await _test_health_pickup()
-	await _test_boss_hallway_door_to_climb_room_and_back()
-	await _test_climb_route_jumps()
-	await _test_knights_are_slow()
-	await _test_knight_swing_hurts()
-	await _test_knight_swing_can_be_dodged()
-	await _test_knight_kill_doesnt_heal()
-	await _test_enemies_set_their_own_damage()
-	await _test_warden_damage_split_and_phase_two()
-	await _test_warden_charge_stops_at_player()
-	await _test_camera_returns_to_player_after_boss()
-	await _test_climb_top_door_to_aerie_and_back()
-	await _test_harrier_flies_and_swoops()
-	await _test_harrier_shallow_swoop_hits_standing_player()
-	await _test_harrier_swoops_ignore_player_height()
-	await _test_harrier_phase_two_cycle()
-	await _test_harrier_feathers()
-	await _test_harrier_pulls_up_after_hitting_you()
-	await _test_harrier_crashes_when_it_misses()
-	await _test_harrier_armor_except_dazed()
-	await _test_harrier_defeat_grants_wall_jump()
-	await _test_armor_reduces_damage()
-	await _test_sprint_is_faster_and_drains_stamina()
-	await _test_stamina_refills_only_on_ground()
-	await _test_dash_needs_stamina()
-	await _test_wall_jump_needs_stamina()
-	await _test_pause_menu_toggles()
-	await _test_pause_ignored_during_boss_intro()
-	await _test_debug_kill_boss()
-	await _test_debug_kill_boss_off_outside_debug_mode()
-	await _test_main_menu_starts_game()
-	await _test_level_select_loads_each_room()
-	await _test_pause_menu_quits_to_main_menu()
-	print("\n%s: %d failed check(s)" % ["PASS" if _fails == 0 else "FAIL", _fails])
+	var chosen := _chosen_segments()
+	if chosen.is_empty():
+		get_tree().quit(1)
+		return
+	var timings: PackedStringArray = []
+	for segment in chosen:
+		print("\n==== %s ====" % segment)
+		var started := Time.get_ticks_msec()
+		for test in SEGMENTS[segment]:
+			await call(test)
+		timings.append("%s %.0fs" % [segment, (Time.get_ticks_msec() - started) / 1000.0])
+	print("\nRan: %s" % ", ".join(timings))
+	print("%s: %d failed check(s)" % ["PASS" if _fails == 0 else "FAIL", _fails])
 	get_tree().quit(_fails)
+
+
+# Segments named after `-- --segment=` (comma-separated), or all of them.
+# Prints the list and returns nothing for `-- --list` or an unknown name.
+func _chosen_segments() -> Array:
+	var names: Array = SEGMENTS.keys()
+	for arg in OS.get_cmdline_user_args():
+		if arg == "--list":
+			names = []
+		elif arg.begins_with("--segment="):
+			names = Array(arg.trim_prefix("--segment=").split(",", false))
+	var unknown := names.filter(func(n): return not SEGMENTS.has(n))
+	if names.is_empty() or not unknown.is_empty():
+		if not unknown.is_empty():
+			print("Unknown segment(s): %s" % ", ".join(unknown))
+		for segment in SEGMENTS:
+			print("  %-12s %d tests" % [segment, SEGMENTS[segment].size()])
+		return []
+	return names
 
 
 # ------------------------------------------------------------- Helpers ----
