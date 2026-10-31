@@ -1,13 +1,12 @@
 extends Node2D
-## Builds a room from LevelData (ASCII), draws placeholder tiles, spawns
-## entities. Swap this for real room scenes / TileMapLayers when you're ready.
+## Builds a room from LevelData (ASCII): tile art (RoomArt), collisions and
+## hazards, entities. Platforms, spikes, gates and doors are still placeholders
+## drawn here.
 
 const TILE := 32
 const LAYER_WORLD := 1
 const LAYER_PLATFORMS := 32
 const SPIKE_COLOR := Color(0.75, 0.78, 0.85)
-const ACID_COLOR := Color(0.35, 0.85, 0.25)
-const ACID_SURFACE_COLOR := Color(0.7, 1.0, 0.55)
 const DOOR_COLOR := Color(0.02, 0.02, 0.04)
 const DOOR_FRAME_COLOR := Color(0.5, 0.45, 0.35)
 const GATE_COLOR := Color(0.6, 0.6, 0.65)
@@ -42,6 +41,7 @@ func _ready() -> void:
 		_w = maxi(_w, row.length())
 	_h = _rows.size()
 
+	RoomArt.new(_rows, _w, _h).build(self, room, LevelData.ROOMS[room].get("background", []))
 	_build_solids()
 	_spawn_entities()
 	_hud = HUD.new()
@@ -338,7 +338,7 @@ func _add_door(x: int, y: int) -> void:
 	add_child(area)
 	area.body_entered.connect(func(body: Node) -> void:
 		if body is Player:
-			GameState.go_through_door(room, _door_target(x)))
+			GameState.go_through_door(room, _door_target(x), body.health))
 
 
 # Direction pointing from a door into the room (doors sit on the left or right edge).
@@ -442,15 +442,12 @@ func _spawn_pickup(ability: String, label: String, tile_origin: Vector2) -> void
 
 # ------------------------------------------------- Placeholder tile art ----
 
+# Ground, acid and the background are tile art (RoomArt). These still aren't.
 func _draw() -> void:
-	for y in range(-1, _h + 1):
-		for x in range(-1, _w + 1):
+	for y in _h:
+		for x in _w:
 			var r := Rect2(x * TILE, y * TILE, TILE, TILE)
 			match _ch(x, y):
-				"#":
-					draw_rect(r, Color(0.22, 0.25, 0.32))
-					if _ch(x, y - 1) != "#":
-						draw_rect(Rect2(r.position, Vector2(TILE, 4)), Color(0.38, 0.43, 0.52))
 				"=":
 					draw_rect(Rect2(r.position, Vector2(TILE, 10)), Color(0.55, 0.4, 0.25))
 				"^":
@@ -472,9 +469,3 @@ func _draw() -> void:
 					draw_rect(r, DOOR_COLOR)
 					if _ch(x, y - 1) == "#":
 						draw_rect(Rect2(r.position, Vector2(TILE, 6)), DOOR_FRAME_COLOR)
-				"~":
-					if _ch(x, y - 1) == "~":
-						draw_rect(r, ACID_COLOR)   # below the surface: fill the whole tile
-					else:
-						draw_rect(Rect2(r.position + Vector2(0, 8), Vector2(TILE, TILE - 8)), ACID_COLOR)
-						draw_rect(Rect2(r.position + Vector2(0, 8), Vector2(TILE, 3)), ACID_SURFACE_COLOR)

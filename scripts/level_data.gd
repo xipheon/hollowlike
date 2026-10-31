@@ -14,6 +14,8 @@ extends RefCounted
 ## Each room is its own scene (main.gd with `room` set). `doors` maps the wall a
 ## door is in ("left"/"right") to the room it leads to; you arrive next to the
 ## door in that room that leads back.
+## A room can add "background": rows of the wall behind it (see
+## RoomArt.BACKGROUND_LEGEND); without it the wall is decorated automatically.
 
 const ROOMS := {
 	"start": {"scene": "res://scenes/main.tscn", "doors": {"right": "boss"}, "rows": START_ROWS},

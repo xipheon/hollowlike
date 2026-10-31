@@ -169,6 +169,7 @@ func _spawn(scene: PackedScene = MAIN_SCENE, boss_beaten := false) -> void:
 	GameState.bosses_defeated = {"boss": Vector2(49.5 * TILE, 15 * TILE - WardenBoss.SIZE.y * 0.5)} if boss_beaten else {}
 	GameState.collected_coins = {}
 	GameState.coins = 0
+	GameState.carried_health = -1
 	GameState.abilities = GameState.STARTING_ABILITIES.duplicate()
 	GameState.debug_mode = true
 	_main = scene.instantiate()
@@ -1664,6 +1665,7 @@ func _test_door_to_boss_room_and_back() -> void:
 	await _spawn()
 	await _remove_enemies()
 	_player.global_position = Vector2(102.5 * TILE, 12 * TILE - Player.BODY_SIZE.y * 0.5)
+	_player.health = 6
 	Input.action_press("move_right")
 	var room := await _wait_for_room("boss", 120)
 	Input.action_release("move_right")
@@ -1674,8 +1676,10 @@ func _test_door_to_boss_room_and_back() -> void:
 	await _frames(20)
 	var p: Player = room._player
 	_check(GameState.arrived_from == "start", "arrival recorded from start")
+	_check(p.health == 6, "health carried through the door (%d)" % p.health)
 	_check(p.is_on_floor() and p.global_position.x < 5 * TILE and absf(p.global_position.y - (29 * TILE - Player.BODY_SIZE.y * 0.5)) < 4.0,
 			"arrived inside the lower corridor's door (col %.1f, row %.1f)" % [p.global_position.x / TILE, p.global_position.y / TILE])
+	p.health = 5
 	Input.action_press("move_left")
 	room = await _wait_for_room("start", 300)
 	Input.action_release("move_left")
@@ -1683,6 +1687,16 @@ func _test_door_to_boss_room_and_back() -> void:
 	if room != null:
 		await _frames(20)
 		p = room._player
+		_check(p.health == 5, "health carried back (%d)" % p.health)
 		_check(p.is_on_floor() and p.global_position.x > 100 * TILE,
 				"arrived on the ledge beside the door (col %.1f, row %.1f)" % [p.global_position.x / TILE, p.global_position.y / TILE])
+		# Restarting the room afterwards starts at full health, as before.
+		var old := room
+		get_tree().reload_current_scene()
+		for i in 30:
+			await _frames(1)
+			if get_tree().current_scene != old and get_tree().current_scene != null:
+				break
+		room = get_tree().current_scene
+		_check(room != old and room._player.health == room._player.max_health, "restart refills health")
 	await _despawn()

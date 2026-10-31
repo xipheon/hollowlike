@@ -108,7 +108,7 @@ func _ready() -> void:
 	collision_layer = 2
 	collision_mask = LAYER_GROUND
 	floor_snap_length = 6.0
-	health = max_health
+	health = GameState.take_carried_health(max_health)
 	stamina = max_stamina
 	last_safe_position = global_position
 

@@ -28,6 +28,9 @@ var bosses_defeated := {}
 var coins := 0
 ## Coins already picked up, keyed "room:x,y", so they don't respawn.
 var collected_coins := {}
+## Health carried through a door into the next room, in half-hearts (-1 = none,
+## start full). Used once, so dying or restarting a room still refills it.
+var carried_health := -1
 
 var _fade: ColorRect
 var _transitioning := false
@@ -61,9 +64,20 @@ func collect_coin(coin_id: String) -> void:
 	coins_changed.emit(coins)
 
 
-## Fade out, load the target room's scene, fade back in.
-func go_through_door(from_room: String, to_room: String) -> void:
+## Fade out, load the target room's scene, fade back in. The player arrives
+## with the health they left with.
+func go_through_door(from_room: String, to_room: String, health: int) -> void:
+	if _transitioning:
+		return
+	carried_health = health
 	_fade_to_scene(LevelData.ROOMS[to_room].scene, from_room)
+
+
+## The health to start a room with, or `full` if not coming through a door.
+func take_carried_health(full: int) -> int:
+	var health := carried_health if carried_health > 0 else full
+	carried_health = -1
+	return health
 
 
 ## Wipe progress and load the first room (from the main menu).
@@ -77,6 +91,7 @@ func start_at_room(room: String) -> void:
 	bosses_defeated = {}
 	coins = 0
 	collected_coins = {}
+	carried_health = -1
 	_fade_to_scene(LevelData.ROOMS[room].scene, "")
 
 
