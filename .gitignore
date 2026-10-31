@@ -1,0 +1,11 @@
+# Godot 4
+.godot/
+/android/
+
+# Export presets can hold signing credentials
+export_presets.cfg
+
+# Mono / C# build output
+.mono/
+data_*/
+mono_crash.*.json
