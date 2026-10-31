@@ -1011,9 +1011,10 @@ func _test_harrier_feathers() -> void:
 
 	boss._fire_homing()
 	var homing := _feathers()
-	_check(homing.size() == 2 and homing.all(func(f): return f.homing), "phase two: 2 homing feathers")
-	if homing.size() == 2:
-		_check(homing[0].direction.angle_to(homing[1].direction) > deg_to_rad(60), "starting at different angles")
+	var count := boss.homing_count_phase_two
+	_check(homing.size() == count and homing.all(func(f): return f.homing), "phase two: %d homing feathers" % count)
+	if homing.size() == count and count >= 2:
+		_check(absf(homing[0].direction.angle_to(homing[-1].direction)) > deg_to_rad(60), "starting at different angles")
 		_check(homing[0].speed < 230.0, "slower than the fan feathers")
 	for f in homing:
 		f.queue_free()

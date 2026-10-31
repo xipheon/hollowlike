@@ -1,6 +1,7 @@
 class_name RoomArt
 extends RefCounted
-## Builds a room's tile art from its ASCII rows: solid terrain and acid on the
+## Builds a room's tile art from its ASCII rows: solid terrain, one-way
+## platforms and acid on the
 ## main tile sheet, the warehouse wall behind (with windows the skyline shows
 ## through), and the far skyline as a parallax layer. Art only: collisions and
 ## hazards stay in main.gd.
@@ -24,6 +25,10 @@ const TERRAIN := [
 ]
 const ACID_TOP := Vector2i(0, 5)
 const ACID_FILL := Vector2i(4, 5)
+const PLAT_L := Vector2i(0, 4)
+const PLAT_MID := Vector2i(1, 4)
+const PLAT_R := Vector2i(2, 4)
+const PLAT_ONE := Vector2i(3, 4)
 const ACID_FRAMES := 4
 const ACID_FRAME_TIME := 0.24
 
@@ -128,7 +133,7 @@ func _ensure_tile(layer: TileMapLayer, coords: Vector2i) -> void:
 func _make_foreground() -> TileMapLayer:
 	var layer := _layer(TILESET, 0)
 	layer.name = "Terrain"
-	for coords in _terrain_by_sides.values():
+	for coords in _terrain_by_sides.values() + [PLAT_L, PLAT_MID, PLAT_R, PLAT_ONE]:
 		_ensure_tile(layer, coords)
 	for coords in [ACID_TOP, ACID_FILL]:
 		_source(layer).create_tile(coords)
@@ -147,6 +152,11 @@ func _make_foreground() -> TileMapLayer:
 					layer.set_cell(Vector2i(x, y), 0, _terrain_by_sides[sides])
 				"~":
 					layer.set_cell(Vector2i(x, y), 0, ACID_FILL if _ch(x, y - 1) == "~" else ACID_TOP)
+				"=":
+					var left := _ch(x - 1, y) == "="
+					var right := _ch(x + 1, y) == "="
+					var plat := PLAT_MID if left and right else PLAT_R if left else PLAT_L if right else PLAT_ONE
+					layer.set_cell(Vector2i(x, y), 0, plat)
 	return layer
 
 

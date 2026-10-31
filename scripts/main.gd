@@ -1,7 +1,7 @@
 extends Node2D
 ## Builds a room from LevelData (ASCII): tile art (RoomArt), collisions and
-## hazards, entities. Platforms, spikes, gates and doors are still placeholders
-## drawn here.
+## hazards, entities. Spikes, gates and doors are still placeholders drawn
+## here.
 
 const TILE := 32
 const LAYER_WORLD := 1
@@ -442,14 +442,12 @@ func _spawn_pickup(ability: String, label: String, tile_origin: Vector2) -> void
 
 # ------------------------------------------------- Placeholder tile art ----
 
-# Ground, acid and the background are tile art (RoomArt). These still aren't.
+# Ground, platforms, acid and the background are tile art (RoomArt). These still aren't.
 func _draw() -> void:
 	for y in _h:
 		for x in _w:
 			var r := Rect2(x * TILE, y * TILE, TILE, TILE)
 			match _ch(x, y):
-				"=":
-					draw_rect(Rect2(r.position, Vector2(TILE, 10)), Color(0.55, 0.4, 0.25))
 				"^":
 					for i in 4:
 						var x0 := r.position.x + i * 8.0

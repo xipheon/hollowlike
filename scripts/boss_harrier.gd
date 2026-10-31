@@ -44,9 +44,9 @@ enum State { DORMANT, HOVER, SHOT_WINDUP, HOMING_WINDUP, WAIT_HOMING, SHALLOW_WI
 @export var shot_speed := 230.0
 @export var fan_spread_degrees := 18.0   ## angle between the three feathers of a fan
 @export var homing_windup_time := 0.5
-@export var homing_speed := 140.0
+@export var homing_speed := 170.0
 @export var homing_count_phase_one := 1
-@export var homing_count_phase_two := 2
+@export var homing_count_phase_two := 3
 @export var homing_spread_degrees := 120.0   ## angle between homing feathers when there are two or more
 @export var shallow_windup_time := 0.22
 @export var shallow_speed := 800.0
