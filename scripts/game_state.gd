@@ -8,10 +8,18 @@ signal coins_changed(count: int)
 const FADE_TIME := 0.25
 const MENU_SCENE := "res://scenes/main_menu.tscn"
 
-var abilities := {
+## Abilities you begin a new game with (all locked for now).
+const STARTING_ABILITIES := {
+	"sprint": false,
 	"dash": false,
 	"wall_jump": false,
 }
+
+var abilities := STARTING_ABILITIES.duplicate()
+
+## Debug-only tools (F1/F2 unlocks, killing the boss from the pause menu).
+## On when run from the editor or a debug export, off in release exports.
+var debug_mode := OS.is_debug_build()
 
 ## Room the player last came from through a door ("" = fresh start, use P).
 var arrived_from := ""
@@ -60,11 +68,16 @@ func go_through_door(from_room: String, to_room: String) -> void:
 
 ## Wipe progress and load the first room (from the main menu).
 func start_new_game() -> void:
-	abilities = {"dash": false, "wall_jump": false}
+	start_at_room("start")
+
+
+## Wipe progress and load any room at its P marker (level select).
+func start_at_room(room: String) -> void:
+	abilities = STARTING_ABILITIES.duplicate()
 	bosses_defeated = {}
 	coins = 0
 	collected_coins = {}
-	_fade_to_scene(LevelData.ROOMS["start"].scene, "")
+	_fade_to_scene(LevelData.ROOMS[room].scene, "")
 
 
 func return_to_menu() -> void:

@@ -1,6 +1,6 @@
 class_name HUD
 extends CanvasLayer
-## Placeholder HUD: health boxes, ability list, control hints, pop-up messages.
+## Placeholder HUD: health boxes, ability list, pop-up messages.
 
 # Health is in half-hearts: one box per 2 points, half-filled for an odd point.
 class HealthBar extends Control:
@@ -15,6 +15,14 @@ class HealthBar extends Control:
 				draw_rect(Rect2(r.position, Vector2(r.size.x * fill / 2.0, r.size.y)), color)
 			if fill < 2:
 				draw_rect(r, Color(color, 0.5), false, 2.0)
+
+class StaminaBar extends Control:
+	var current := 1.0
+	var maximum := 1.0
+	func _draw() -> void:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.5))
+		var fill := size.x * current / maxf(maximum, 1.0)
+		draw_rect(Rect2(1, 1, maxf(fill - 2, 0), size.y - 2), Color(0.45, 0.85, 0.4))
 
 class BossBar extends Control:
 	var current := 1
@@ -32,6 +40,7 @@ const BOSS_TITLE_DOCKED_Y := 22.0    # text centre above the health bar
 const BOSS_TITLE_DOCKED_SCALE := 0.4
 
 var _health_bar: HealthBar
+var _stamina_bar: StaminaBar
 var _boss_bar: BossBar
 var _boss_label: Label
 var _coins_label: Label
@@ -45,19 +54,19 @@ func _ready() -> void:
 	_health_bar = HealthBar.new()
 	_health_bar.position = Vector2(20, 20)
 	add_child(_health_bar)
+	_stamina_bar = StaminaBar.new()
+	_stamina_bar.position = Vector2(20, 52)
+	_stamina_bar.size = Vector2(144, 8)   # as wide as five hearts
+	add_child(_stamina_bar)
 
-	_abilities_label = _make_label(Vector2(20, 56), 14)
-	var help := _make_label(Vector2(20, 480), 12)
-	help.text = "Move: A/D or arrows   Jump: Space/Z (hold = higher)   Attack: J/X (hold Up / Down-in-air to aim)\n" \
-		+ "Dash: K/C/Shift   Pause: Esc/P   Restart: R   Debug unlock: F1 = dash, F2 = wall jump"
-	help.modulate = Color(1, 1, 1, 0.55)
+	_abilities_label = _make_label(Vector2(20, 66), 14)
 
 	_message_label = _make_label(Vector2(0, 150), 28)
 	_message_label.size = Vector2(960, 40)
 	_message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message_label.modulate.a = 0.0
 
-	_coins_label = _make_label(Vector2(20, 78), 14)
+	_coins_label = _make_label(Vector2(20, 88), 14)
 	_coins_label.modulate = Color(1.0, 0.85, 0.3)
 	GameState.coins_changed.connect(_on_coins_changed)
 	_on_coins_changed(GameState.coins)
@@ -89,6 +98,8 @@ func _make_label(pos: Vector2, font_size: int) -> Label:
 func bind_player(player: Player) -> void:
 	player.health_changed.connect(_on_health_changed)
 	_on_health_changed(player.health, player.max_health)
+	player.stamina_changed.connect(_on_stamina_changed)
+	_on_stamina_changed(player.stamina, player.max_stamina)
 
 
 func show_boss(boss_name: String, current: int, maximum: int) -> void:
@@ -161,6 +172,12 @@ func _on_health_changed(current: int, maximum: int) -> void:
 	_health_bar.current = current
 	_health_bar.maximum = maximum
 	_health_bar.queue_redraw()
+
+
+func _on_stamina_changed(current: float, maximum: float) -> void:
+	_stamina_bar.current = current
+	_stamina_bar.maximum = maximum
+	_stamina_bar.queue_redraw()
 
 
 func _on_coins_changed(count: int) -> void:

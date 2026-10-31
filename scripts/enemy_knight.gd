@@ -6,18 +6,18 @@ extends CharacterBody2D
 ## Needs: take_hit(), "enemy_hitbox" areas (body + sword).
 
 const SIZE := Vector2(24, 44)
-const KILL_HEAL := 1   # half a heart for the player
 const SWORD_SIZE := Vector2(46, 28)
 
 enum State { PATROL, WINDUP, SWING, RECOVER }
 
 @export var max_health := 5
-@export var walk_speed := 45.0
+@export var walk_speed := 90.0
 @export var gravity := 1800.0
+@export var damage := 8   ## per hit (body or sword), in half-hearts: 4 hearts
 @export var sight_range := 220.0     ## starts walking toward you within this
-@export var attack_range := 70.0     ## starts a swing when you're this close
-@export var windup_time := 0.55
-@export var swing_time := 0.18
+@export var attack_range := 90.0     ## starts a swing when you're this close
+@export var windup_time := 0.30
+@export var swing_time := 0.15
 @export var recover_time := 0.8
 
 var health := 0
@@ -60,6 +60,7 @@ func _ready() -> void:
 func _make_hitbox(size: Vector2, offset: Vector2) -> Area2D:
 	var hitbox := Area2D.new()
 	hitbox.add_to_group("enemy_hitbox")
+	hitbox.set_meta("damage", damage)   # read by the player's hurtbox
 	hitbox.collision_layer = 16   # hazard layer, which the player's hurtbox watches
 	hitbox.collision_mask = 0
 	hitbox.monitoring = false
@@ -143,13 +144,12 @@ func _can_see(player: Node2D) -> bool:
 	return absf(d.x) <= sight_range and absf(d.y) <= SIZE.y
 
 
-func take_hit(damage: int, hit_dir: Vector2) -> void:
-	health -= damage
+func take_hit(amount: int, hit_dir: Vector2) -> void:
+	health -= amount
 	_flash_timer = 0.1
 	if hit_dir.x != 0.0:
 		_knockback = signf(hit_dir.x) * 160.0   # heavy: shoved, not staggered
 	if health <= 0:
-		get_tree().call_group("player", "heal", KILL_HEAL)
 		queue_free()
 
 

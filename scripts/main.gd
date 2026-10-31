@@ -12,7 +12,6 @@ const DOOR_COLOR := Color(0.02, 0.02, 0.04)
 const DOOR_FRAME_COLOR := Color(0.5, 0.45, 0.35)
 const GATE_COLOR := Color(0.6, 0.6, 0.65)
 const ARENA_TRIGGER_INSET := 3   # tiles past a gate before the boss fight starts
-const BOSS_NAME := "THE WARDEN"
 const INTRO_ZOOM := 2.2
 const INTRO_ZOOM_IN_TIME := 0.7
 const INTRO_TITLE_FADE_TIME := 0.4
@@ -28,7 +27,7 @@ var _w := 0
 var _h := 0
 var _player: Player
 var _hud: HUD
-var _boss: WardenBoss
+var _boss: BossBase
 var _boss_fight_started := false
 var _gate_shapes: Array[CollisionShape2D] = []
 var _gate_closed := false
@@ -56,19 +55,22 @@ func _physics_process(_delta: float) -> void:
 	# The fight starts once you're a few tiles into the arena, from either side.
 	if _boss != null and not _boss_fight_started:
 		var x := _player.global_position.x
+		var y := _player.global_position.y
 		var inset := ARENA_TRIGGER_INSET * TILE
-		if x > _boss.arena_left + inset and x < _boss.arena_right - inset:
+		if x > _boss.arena_left + inset and x < _boss.arena_right - inset and y > _boss.arena_top and y < _boss.arena_bottom:
 			_start_boss_fight()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("restart"):
 		get_tree().reload_current_scene()
-	elif event is InputEventKey and event.pressed and not event.echo:
+	elif GameState.debug_mode and event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F1:
 			GameState.unlock("dash")
 		elif event.keycode == KEY_F2:
 			GameState.unlock("wall_jump")
+		elif event.keycode == KEY_F3:
+			debug_kill_boss()
 
 
 func _on_player_died() -> void:
@@ -79,9 +81,8 @@ func _on_player_died() -> void:
 
 # --------------------------------------------------------------- Boss ----
 
-func _spawn_boss(x: int, y: int) -> void:
-	var boss := WardenBoss.new()
-	boss.position = Vector2(x * TILE + TILE * 0.5, (y + 1) * TILE - WardenBoss.SIZE.y * 0.5)
+# `boss` is already positioned; (x, y) is its marker tile.
+func _spawn_boss(boss: BossBase, x: int, y: int) -> void:
 	if GameState.bosses_defeated.has(room):
 		# Already beaten: just its corpse, where it fell.
 		var fell_at: Variant = GameState.bosses_defeated[room]
@@ -104,7 +105,12 @@ func _spawn_boss(x: int, y: int) -> void:
 	var top := y
 	while _ch(x, top - 1) != "#":
 		top -= 1
-	_arena_center = Vector2((_boss.arena_left + _boss.arena_right) * 0.5, (top + y + 1) * TILE * 0.5)
+	var bottom := y
+	while _ch(x, bottom + 1) != "#":
+		bottom += 1
+	_boss.arena_top = top * TILE
+	_boss.arena_bottom = (bottom + 1) * TILE
+	_arena_center = Vector2((_boss.arena_left + _boss.arena_right) * 0.5, (top + bottom + 1) * TILE * 0.5)
 	add_child(_boss)
 
 
@@ -133,7 +139,7 @@ func _play_boss_intro() -> void:
 	_arena_camera.make_current()
 
 	await _move_arena_camera(_boss.global_position + Vector2(0, -16), INTRO_ZOOM, INTRO_ZOOM_IN_TIME).finished
-	await _hud.reveal_boss_title(BOSS_NAME, INTRO_TITLE_FADE_TIME).finished
+	await _hud.reveal_boss_title(_boss.boss_name, INTRO_TITLE_FADE_TIME).finished
 	await get_tree().create_timer(INTRO_HOLD_TIME).timeout
 	_hud.dock_boss_title(INTRO_ZOOM_OUT_TIME, _boss.health, _boss.max_health)
 	await _move_arena_camera(_arena_center, 1.0, INTRO_ZOOM_OUT_TIME).finished
@@ -148,22 +154,57 @@ func _move_arena_camera(target: Vector2, zoom: float, duration: float) -> Tween:
 	return tween
 
 
+func can_debug_kill_boss() -> bool:
+	return GameState.debug_mode and _boss != null
+
+
+## Debug: the boss dies on the spot, with the usual rewards. Works before the
+## fight has started too (no intro, gates just stay open).
+func debug_kill_boss() -> void:
+	if not can_debug_kill_boss():
+		return
+	if not _boss_fight_started:
+		_boss_fight_started = true
+		_boss.defeated.connect(_on_boss_defeated)
+	_boss.debug_kill()
+
+
 func _on_boss_defeated() -> void:
 	GameState.bosses_defeated[room] = _boss.global_position
+	var beaten := _boss
 	_boss = null
-	for child in get_children():
-		if child is WardenShockwave:
-			child.queue_free()
+	get_tree().call_group("boss_attack", "queue_free")   # shockwaves, feathers
 	_set_gate_closed(false)
 	_hud.hide_boss()
-	GameState.unlock("dash")
-	_hud.show_message("THE WARDEN FALLS\nDash unlocked", 3.5)
+	GameState.unlock(beaten.reward_ability)
+	_hud.show_message("%s FALLS\n%s unlocked" % [beaten.boss_name, beaten.reward_ability.capitalize()], 3.5)
 	_player.shake(10.0, 0.5)
-	# Unlock the camera: glide over to where the player camera is, then hand off.
-	await _move_arena_camera(_player.camera.get_screen_center_position(), 1.0, CAMERA_RELEASE_TIME).finished
+	if _arena_camera == null:
+		return   # killed (debug) before the fight locked the camera
+	# Unlock the camera: glide to where the player camera *will* be. Its own
+	# position is stale (a camera that isn't current stops tracking), so work it
+	# out from where the player is now, every frame, since they can keep moving.
+	var from := _arena_camera.position
+	var glide := func(t: float) -> void:
+		_arena_camera.position = from.lerp(_player_camera_target(), t)
+	var tween := _arena_camera.create_tween().set_parallel() \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_method(glide, 0.0, 1.0, CAMERA_RELEASE_TIME)
+	tween.tween_property(_arena_camera, "zoom", Vector2.ONE, CAMERA_RELEASE_TIME)
+	await tween.finished
 	_player.camera.make_current()
+	_player.camera.reset_smoothing()   # start from the player, not from where it was switched off
 	_arena_camera.queue_free()
 	_arena_camera = null
+
+
+# Where the player's camera centres right now: on the player, kept inside its limits.
+func _player_camera_target() -> Vector2:
+	var cam := _player.camera
+	var half := get_viewport_rect().size * 0.5 / cam.zoom
+	var p := _player.global_position
+	return Vector2(clampf(p.x, cam.limit_left + half.x, cam.limit_right - half.x),
+			clampf(p.y, cam.limit_top + half.y, cam.limit_bottom - half.y))
 
 
 func _set_gate_closed(closed: bool) -> void:
@@ -352,7 +393,13 @@ func _spawn_entities() -> void:
 				"W":
 					_spawn_pickup("wall_jump", "WALL JUMP", tile_origin)
 				"B":
-					_spawn_boss(x, y)
+					var warden := WardenBoss.new()
+					warden.position = tile_origin + Vector2(TILE * 0.5, TILE - WardenBoss.SIZE.y * 0.5)
+					_spawn_boss(warden, x, y)
+				"F":
+					var harrier := HarrierBoss.new()
+					harrier.position = tile_origin + Vector2(TILE * 0.5, TILE * 0.5)
+					_spawn_boss(harrier, x, y)
 				"o":
 					var coin_id := "%s:%d,%d" % [room, x, y]
 					if not GameState.collected_coins.has(coin_id):

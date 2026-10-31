@@ -1,10 +1,21 @@
 class_name PauseMenu
 extends CanvasLayer
-## Esc / P / Start pauses: Resume, or Quit back to the main menu.
-## Won't open while something else (the boss intro) already has the game paused.
+## Esc / P / Start pauses: Resume, Quit back to the main menu, or Quit the game.
+## Also lists the controls. Won't open while something else (the boss intro)
+## already has the game paused.
+
+const CONTROLS_TEXT := "Move: A/D or arrows · left stick / d-pad\n" \
+	+ "Jump: Space/Z · A   (hold = higher)\n" \
+	+ "Attack: J/X · X   (hold Up / Down-in-air to aim)\n" \
+	+ "Sprint: Shift · LT   (uses stamina)\n" \
+	+ "Dash: K/C · RB/B   (uses stamina)\n" \
+	+ "Pause: Esc/P · Start      Restart: R"
+const DEBUG_CONTROLS_TEXT := "\nDebug: F1 = dash, F2 = wall jump, F3 = kill boss"
 
 var _panel: Control
 var _resume_button: Button
+var _quit_game_button: Button
+var _kill_boss_button: Button
 
 
 func _ready() -> void:
@@ -31,6 +42,20 @@ func _ready() -> void:
 
 	_resume_button = _add_button(box, "Resume", close)
 	_add_button(box, "Quit to Menu", func() -> void: GameState.return_to_menu())
+	_quit_game_button = _add_button(box, "Quit Game", func() -> void: get_tree().quit())
+	# Debug mode only, and only in a room with a living boss (see open()).
+	_kill_boss_button = _add_button(box, "Debug: Kill Boss", _debug_kill_boss)
+	_kill_boss_button.modulate = Color(1.0, 0.6, 0.6)
+
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 16)
+	box.add_child(spacer)
+
+	var controls := Label.new()
+	controls.text = CONTROLS_TEXT + (DEBUG_CONTROLS_TEXT if GameState.debug_mode else "")
+	controls.add_theme_font_size_override("font_size", 13)
+	controls.modulate = Color(1, 1, 1, 0.6)
+	box.add_child(controls)
 
 	_panel.visible = false
 
@@ -51,9 +76,16 @@ func is_open() -> bool:
 func open() -> void:
 	if is_open() or get_tree().paused:
 		return
+	var room := get_parent()
+	_kill_boss_button.visible = room.has_method("can_debug_kill_boss") and room.can_debug_kill_boss()
 	_panel.visible = true
 	get_tree().paused = true
 	_resume_button.grab_focus()
+
+
+func _debug_kill_boss() -> void:
+	close()
+	get_parent().debug_kill_boss()
 
 
 func close() -> void:

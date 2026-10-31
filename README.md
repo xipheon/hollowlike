@@ -8,9 +8,11 @@ Open this folder in Godot (Import -> project.godot) and press F5.
 | Move | A/D or arrows | stick / d-pad |
 | Jump (hold for height) | Space / Z | A |
 | Attack | J / X (hold Up to aim up; Down in air = pogo) | X |
-| Dash (after pickup) | K / C / Shift | RB / B |
+| Sprint (uses stamina) | Shift | LT |
+| Dash (after beating the boss; uses stamina) | K / C | RB / B |
+| Pause | Esc / P | Start |
 | Restart | R | |
-| Debug unlocks | F1 dash, F2 wall jump | |
+| Debug (debug builds only) | F1 dash, F2 wall jump, F3 kill boss | |
 
 ## Layout
 - `scripts/player.gd`          movement + combat, all tuning vars at the top

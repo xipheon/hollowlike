@@ -7,6 +7,7 @@ const TILE := 32
 const MAIN_SCENE := preload("res://scenes/main.tscn")
 const BOSS_SCENE := preload("res://scenes/boss_room.tscn")
 const CLIMB_SCENE := preload("res://scenes/climb_room.tscn")
+const AERIE_SCENE := preload("res://scenes/aerie_room.tscn")
 const MENU_SCENE := preload("res://scenes/main_menu.tscn")
 
 # Climb room, bottom to top. Solid ledges sit 2 rows above the platform before
@@ -51,14 +52,6 @@ const BOSS_LEFT_SHAFT := [
 	[18, 2, 6],
 	[15, 1, 10],    # left hallway floor
 ]
-const BOSS_RIGHT_SHAFT := [
-	[29, 70, 76],   # corridor floor past the acid
-	[26, 66, 69],
-	[23, 62, 65],
-	[20, 66, 69],
-	[17, 62, 65],
-	[15, 62, 69],   # right hallway floor
-]
 
 var _fails := 0
 var _main: Node2D
@@ -99,10 +92,31 @@ func _ready() -> void:
 	await _test_knights_are_slow()
 	await _test_knight_swing_hurts()
 	await _test_knight_swing_can_be_dodged()
-	await _test_knight_kill_heals_half_heart()
+	await _test_knight_kill_doesnt_heal()
+	await _test_enemies_set_their_own_damage()
+	await _test_warden_damage_split_and_phase_two()
+	await _test_warden_charge_stops_at_player()
+	await _test_camera_returns_to_player_after_boss()
+	await _test_climb_top_door_to_aerie_and_back()
+	await _test_harrier_flies_and_swoops()
+	await _test_harrier_shallow_swoop_hits_standing_player()
+	await _test_harrier_phase_two_cycle()
+	await _test_harrier_feather_hurts()
+	await _test_harrier_pulls_up_after_hitting_you()
+	await _test_harrier_crashes_when_it_misses()
+	await _test_harrier_armor_except_dazed()
+	await _test_harrier_defeat_grants_wall_jump()
+	await _test_armor_reduces_damage()
+	await _test_sprint_is_faster_and_drains_stamina()
+	await _test_stamina_refills_only_on_ground()
+	await _test_dash_needs_stamina()
+	await _test_wall_jump_needs_stamina()
 	await _test_pause_menu_toggles()
 	await _test_pause_ignored_during_boss_intro()
+	await _test_debug_kill_boss()
+	await _test_debug_kill_boss_off_outside_debug_mode()
 	await _test_main_menu_starts_game()
+	await _test_level_select_loads_each_room()
 	await _test_pause_menu_quits_to_main_menu()
 	print("\n%s: %d failed check(s)" % ["PASS" if _fails == 0 else "FAIL", _fails])
 	get_tree().quit(_fails)
@@ -117,7 +131,8 @@ func _spawn(scene: PackedScene = MAIN_SCENE, boss_beaten := false) -> void:
 	GameState.bosses_defeated = {"boss": Vector2(49.5 * TILE, 15 * TILE - WardenBoss.SIZE.y * 0.5)} if boss_beaten else {}
 	GameState.collected_coins = {}
 	GameState.coins = 0
-	GameState.abilities = {"dash": false, "wall_jump": false}
+	GameState.abilities = GameState.STARTING_ABILITIES.duplicate()
+	GameState.debug_mode = true
 	_main = scene.instantiate()
 	get_tree().root.add_child(_main)
 	get_tree().current_scene = _main
@@ -149,7 +164,7 @@ func _place(col: float, row: float) -> void:
 
 
 func _release_all() -> void:
-	for a in ["move_left", "move_right", "move_down", "jump", "attack"]:
+	for a in ["move_left", "move_right", "move_down", "jump", "attack", "dash", "sprint"]:
 		Input.action_release(a)
 
 
@@ -196,7 +211,7 @@ func _test_spikes_hurt_and_respawn() -> void:
 	_place(33, 17)
 	await _frames(120)   # long enough for a repeat hit if respawned onto the spikes
 	_check(not _player._dead, "player survived spikes")
-	_check(_player.health == _player.max_health - Player.HIT_DAMAGE, "lost exactly one heart (%d/%d)" % [_player.health, _player.max_health])
+	_check(_player.health == _player.max_health - Player.DEFAULT_HIT_DAMAGE, "lost exactly one heart (%d/%d)" % [_player.health, _player.max_health])
 	_check(_player.global_position.distance_to(safe) < 40.0, "returned to last safe position")
 	await _despawn()
 
@@ -294,42 +309,35 @@ func _test_acid_route_jumps() -> void:
 
 
 func _test_boss_room_shafts_climbable() -> void:
-	print("Both boss-room shafts can be climbed with plain jumps")
+	print("The left boss-room shaft can be climbed with plain jumps")
 	await _spawn(BOSS_SCENE, true)
 	var crawlers := get_tree().get_nodes_in_group("enemy").filter(func(e): return e is CrawlerEnemy)
 	_check(crawlers.size() == 1 and crawlers[0].global_position.x < 11 * TILE and crawlers[0].global_position.y > 16 * TILE,
 			"one crawler, in the left shaft")
 	await _remove_enemies()
 	await _check_route(BOSS_LEFT_SHAFT)
-	await _check_route(BOSS_RIGHT_SHAFT)
 	await _despawn()
 
 
 func _test_right_hallway_drops_to_far_side() -> void:
-	print("Down + jump in the right hallway drops to the far side of the acid")
+	print("The right hallway's shaft drops to the corridor past the acid pools")
 	await _spawn(BOSS_SCENE, true)
 	await _remove_enemies()
-	_player.global_position = Vector2(65.5 * TILE, 15 * TILE - Player.BODY_SIZE.y * 0.5)
-	await _frames(10)
-	Input.action_press("move_down")
-	await _frames(1)
-	Input.action_press("jump")
-	await _frames(3)
-	_release_all()
+	_place(63, 14)
 	for i in 120:
 		await _frames(1)
 		if _player.global_position.y > 25 * TILE and _player.is_on_floor():
 			break
 	var p := _player.global_position
-	_check(_player.is_on_floor() and p.y > 16 * TILE and p.x > 42 * TILE and not _player._dead,
+	_check(_player.is_on_floor() and p.y > 25 * TILE and p.x > 55 * TILE and not _player._dead,
 			"landed below, past the acid (col %.1f, row %.1f)" % [p.x / TILE, p.y / TILE])
 	await _despawn()
 
 
 # Runs at the acid gap from `from_col` toward `dir`, jumps at the edge and
 # dashes at the top of the jump. Returns true if it lands safely across.
-func _try_acid_dash_crossing(from_col: float, dir: int, edge_col: float, far_col: float) -> bool:
-	_player.global_position = Vector2(from_col * TILE, 29 * TILE - Player.BODY_SIZE.y * 0.5)
+func _try_acid_dash_crossing(from_col: float, dir: int, edge_col: float, far_col: float, floor_row := 29) -> bool:
+	_player.global_position = Vector2(from_col * TILE, floor_row * TILE - Player.BODY_SIZE.y * 0.5)
 	_player.velocity = Vector2.ZERO
 	await _frames(5)
 	var move := "move_right" if dir > 0 else "move_left"
@@ -367,7 +375,8 @@ func _test_acid_gap_needs_dash() -> void:
 	await _remove_enemies()
 	GameState.unlock("dash")
 	_check(await _try_acid_dash_crossing(27, 1, 34, 42), "dash crosses left to right (col %.1f)" % (_player.global_position.x / TILE))
-	_check(await _try_acid_dash_crossing(49, -1, 42, 34), "dash crosses right to left (col %.1f)" % (_player.global_position.x / TILE))
+	# Back from the raised block (cols 42-44) between this gap and the next pool.
+	_check(await _try_acid_dash_crossing(44.5, -1, 42, 34, 28), "dash crosses right to left (col %.1f)" % (_player.global_position.x / TILE))
 	await _despawn()
 
 
@@ -446,7 +455,7 @@ func _test_boss_fight_starts_from_right_side() -> void:
 	print("Entering from the right hallway also starts the fight and shuts both gates")
 	await _spawn(BOSS_SCENE)
 	_check(_main._gate_shapes.size() == 8, "two 4-tile gates (%d gate tiles)" % _main._gate_shapes.size())
-	_place(60, 14)
+	_place(57, 14)
 	await _frames(20)
 	_check(not _main._boss_fight_started, "still dormant in the right hallway")
 	_player._invuln_timer = 999.0
@@ -549,9 +558,9 @@ func _test_boss_defeat_opens_gate_and_sticks() -> void:
 
 
 func _test_boss_hallway_door_to_climb_room_and_back() -> void:
-	print("The door behind the arena leads to the climb room, and back")
+	print("The lower corridor's right door leads to the climb room, and back")
 	await _spawn(BOSS_SCENE, true)
-	_place(61, 14)
+	_place(86, 28)
 	Input.action_press("move_right")
 	var room := await _wait_for_room("climb", 120)
 	Input.action_release("move_right")
@@ -570,8 +579,8 @@ func _test_boss_hallway_door_to_climb_room_and_back() -> void:
 	if room != null:
 		await _frames(20)
 		p = room._player
-		_check(p.is_on_floor() and p.global_position.x > 60 * TILE,
-				"arrived in the right hallway (col %.1f, row %.1f)" % [p.global_position.x / TILE, p.global_position.y / TILE])
+		_check(p.is_on_floor() and p.global_position.x > 84 * TILE and p.global_position.y > 27 * TILE,
+				"arrived inside the corridor's right door (col %.1f, row %.1f)" % [p.global_position.x / TILE, p.global_position.y / TILE])
 	await _frames(20)   # let the fade finish before the next test
 	await _despawn()
 
@@ -601,7 +610,7 @@ func _lone_knight() -> KnightEnemy:
 
 
 func _test_knights_are_slow() -> void:
-	print("Knights are as tall as the player and slow")
+	print("Knights are as tall as the player and slower")
 	await _spawn(CLIMB_SCENE)
 	_check(_knights().size() == 3, "3 knights in the climb room (%d)" % _knights().size())
 	_check(KnightEnemy.SIZE.y == Player.BODY_SIZE.y, "same height as the player")
@@ -617,7 +626,7 @@ func _test_knights_are_slow() -> void:
 		prev = knight.global_position.x
 	var speed := travelled / 2.0
 	_check(speed > 10.0, "it patrols (%.0f px/s)" % speed)
-	_check(speed < _player.run_speed * 0.25, "at under a quarter of the player's run speed (%.0f vs %.0f)" % [speed, _player.run_speed])
+	_check(speed < _player.run_speed * 0.5, "at under half the player's run speed (%.0f vs %.0f)" % [speed, _player.run_speed])
 	await _despawn()
 
 
@@ -656,13 +665,456 @@ func _test_knight_swing_can_be_dodged() -> void:
 	await _despawn()
 
 
-func _test_knight_kill_heals_half_heart() -> void:
-	print("Killing a knight heals half a heart")
+func _test_knight_kill_doesnt_heal() -> void:
+	print("Killing a knight doesn't heal (only crawlers do)")
 	await _spawn(CLIMB_SCENE)
 	_player.health = 5
 	var knight: KnightEnemy = _knights()[0]
 	knight.take_hit(knight.max_health, Vector2.RIGHT)
-	_check(_player.health == 6, "health 5 -> %d half-hearts" % _player.health)
+	await _frames(1)
+	_check(not is_instance_valid(knight), "knight died")
+	_check(_player.health == 5, "health stayed at %d half-hearts" % _player.health)
+	await _despawn()
+
+
+# Waits until the player's health drops, up to max_frames. Returns how much it dropped.
+func _wait_for_hit(max_frames: int) -> int:
+	var before := _player.health
+	for i in max_frames:
+		await _frames(1)
+		if _player.health < before:
+			break
+	return before - _player.health
+
+
+func _test_enemies_set_their_own_damage() -> void:
+	print("Each enemy sets its own damage: crawler 1 heart, knight 4 hearts, Warden body 1 heart")
+	await _spawn()
+	var crawler: CrawlerEnemy = get_tree().get_nodes_in_group("enemy")[0]
+	_player.global_position = crawler.global_position + Vector2(0, -6)
+	_check(await _wait_for_hit(30) == crawler.damage and crawler.damage == 2, "crawler hit for %d half-hearts" % crawler.damage)
+	await _despawn()
+
+	await _spawn(CLIMB_SCENE)
+	var knight := await _lone_knight()
+	_player.global_position = knight.global_position + Vector2(-50, 0)
+	_player.velocity = Vector2.ZERO
+	var lost := await _wait_for_hit(180)
+	_check(knight.damage == 8 and lost == 8, "knight hit for %d half-hearts" % lost)
+	await _despawn()
+
+	var boss := await _start_boss_fight()
+	_player.global_position = boss.global_position + Vector2(0, WardenBoss.SIZE.y * 0.5 - Player.BODY_SIZE.y * 0.5)
+	lost = await _wait_for_hit(30)
+	_check(lost == 2, "Warden body hit for %d half-hearts" % lost)
+	await _despawn()
+
+
+func _test_warden_damage_split_and_phase_two() -> void:
+	print("Warden: body 2, shockwave 1, both +1 in phase two")
+	var boss := await _start_boss_fight()
+	_check(boss._hitbox.get_meta("damage") == 2, "body 2")
+	boss._shockwave()
+	var waves := _main.get_children().filter(func(c): return c is WardenShockwave)
+	_check(waves.size() == 2 and waves.all(func(w): return w.get_meta("damage") == 1), "shockwaves 1")
+	for w in waves:
+		w.queue_free()
+	boss.health = boss.max_health / 2 + 1
+	boss.take_hit(1, Vector2.RIGHT)
+	_check(boss.is_phase_two() and boss._hitbox.get_meta("damage") == 3, "phase two body 3")
+	await _frames(1)
+	boss._charge_end()   # phase two: hitting a wall sends shockwaves too
+	waves = _main.get_children().filter(func(c): return c is WardenShockwave)
+	_check(waves.size() == 2 and waves.all(func(w): return w.get_meta("damage") == 2), "phase two shockwaves 2, from a wall hit")
+	await _despawn()
+
+
+func _test_warden_charge_stops_at_player() -> void:
+	print("Warden: a charge stops when it runs into you, without the daze")
+	var boss := await _start_boss_fight()
+	await _frames(1)
+	var floor_y := boss.global_position.y + WardenBoss.SIZE.y * 0.5 - Player.BODY_SIZE.y * 0.5
+	_player.global_position = Vector2(boss.global_position.x - 200, floor_y)
+	var hp := _player.health
+	boss._dir = -1
+	boss._enter(WardenBoss.State.CHARGE, 3.0)
+	var stopped_at := 0.0
+	for i in 60:
+		await _frames(1)
+		if boss._state != WardenBoss.State.CHARGE:
+			stopped_at = boss.global_position.x
+			break
+	await _frames(3)
+	_check(_player.health == hp - boss.body_damage, "the hit landed (%d half-hearts)" % (hp - _player.health))
+	_check(boss._state == WardenBoss.State.RECOVER, "stopped and recovering, not dazed (%s)" % WardenBoss.State.keys()[boss._state])
+	_check(stopped_at - boss.arena_left > 3 * TILE, "well short of the wall (%.1f tiles out)" % ((stopped_at - boss.arena_left) / TILE))
+	await _despawn()
+
+
+func _test_camera_returns_to_player_after_boss() -> void:
+	print("After the boss dies the camera glides to where the player is now")
+	await _start_boss_fight()
+	_place(27, 14)   # far from where the fight started (col 40)
+	await _frames(5)
+	_main.debug_kill_boss()
+	var target: Vector2 = _main._player_camera_target()
+	await _frames(int(_main.CAMERA_RELEASE_TIME * 60) + 10)
+	var cam := get_viewport().get_camera_2d()
+	_check(cam == _player.camera, "player camera is current")
+	var centre := cam.get_screen_center_position()
+	_check(centre.distance_to(target) < 4.0, "centred on the player (off by %.0f px)" % centre.distance_to(target))
+	await _despawn()
+
+
+func _test_climb_top_door_to_aerie_and_back() -> void:
+	print("The door at the top of the climb leads to the Harrier's arena, and back")
+	await _spawn(CLIMB_SCENE)
+	await _remove_enemies()
+	_place(26, 3)
+	Input.action_press("move_right")
+	var room := await _wait_for_room("aerie", 120)
+	Input.action_release("move_right")
+	_check(room != null, "aerie loaded")
+	if room == null:
+		await _despawn()
+		return
+	await _frames(20)
+	var p: Player = room._player
+	_check(p.is_on_floor() and p.global_position.x < 4 * TILE and p.global_position.y > 15 * TILE,
+			"arrived in the hallway (col %.1f, row %.1f)" % [p.global_position.x / TILE, p.global_position.y / TILE])
+	_check(room._boss is HarrierBoss and not room._boss_fight_started, "Harrier waiting")
+	Input.action_press("move_left")
+	room = await _wait_for_room("climb", 120)
+	Input.action_release("move_left")
+	_check(room != null, "back in the climb room")
+	if room != null:
+		await _frames(20)
+		p = room._player
+		_check(p.is_on_floor() and p.global_position.x > 25 * TILE and p.global_position.y < 5 * TILE,
+				"arrived on the top ledge (col %.1f, row %.1f)" % [p.global_position.x / TILE, p.global_position.y / TILE])
+	await _frames(20)
+	await _despawn()
+
+
+# Walks into the Harrier's arena and waits out the intro.
+func _start_harrier_fight() -> HarrierBoss:
+	seed(1)
+	await _spawn(AERIE_SCENE)
+	_place(15, 15)
+	await _frames(3)
+	_check(await _wait_for_intro_end(), "intro cutscene finished")
+	_check(get_viewport().get_camera_2d() == _main._arena_camera, "camera locked on the arena")
+	return _main._boss
+
+
+func _test_harrier_flies_and_swoops() -> void:
+	print("Harrier: shallow swoops first, then a full swoop; stays inside the arena")
+	var boss := await _start_harrier_fight()
+	_player._invuln_timer = 999.0
+	var in_bounds := true
+	var highest := INF
+	var shallow_lowest := -INF
+	var shallow_touched_floor := false
+	for i in 900:
+		await _frames(1)
+		var p := boss.global_position
+		highest = minf(highest, p.y)
+		if boss._state == HarrierBoss.State.SHALLOW:
+			shallow_lowest = maxf(shallow_lowest, p.y)
+			shallow_touched_floor = shallow_touched_floor or boss.is_on_floor()
+		if p.x < boss.arena_left or p.x > boss.arena_right or p.y < boss.arena_top or p.y > boss.arena_bottom:
+			in_bounds = false
+		if boss.attack_log.size() >= 6:
+			break
+	print("        attacks: %s" % [boss.attack_log])
+	_check(boss.attack_log.slice(0, 6) == ["shallow", "shallow", "swoop", "shallow", "shallow", "swoop"],
+			"cycle: 2 shallow swoops then a full swoop, repeating")
+	_check(boss.shallow_windup_time < boss.windup_time, "shallow swoops have the shorter telegraph")
+	var floor_y := boss.arena_bottom
+	_check(not shallow_touched_floor and floor_y - (shallow_lowest + HarrierBoss.SIZE.y * 0.5) > 16.0,
+			"shallow swoops stay off the floor (lowest %.0f px above it)" % (floor_y - shallow_lowest - HarrierBoss.SIZE.y * 0.5))
+	_check(shallow_lowest > _player.global_position.y - Player.BODY_SIZE.y, "but dip down to the player's height")
+	_check(highest < _player.global_position.y - 4 * TILE, "flew well above the player")
+	_check(in_bounds, "stayed inside the arena")
+	await _despawn()
+
+
+func _test_harrier_shallow_swoop_hits_standing_player() -> void:
+	print("Harrier: a shallow swoop clips a player standing still")
+	var boss := await _start_harrier_fight()
+	var hp := _player.health
+	for i in 300:
+		await _frames(1)
+		if _player.health < hp or boss.attack_log.has("swoop"):
+			break
+	_check(_player.health == hp - boss.damage and not boss.attack_log.has("swoop"),
+			"hit by a shallow swoop (%d half-hearts)" % (hp - _player.health))
+	await _despawn()
+
+
+func _test_harrier_phase_two_cycle() -> void:
+	print("Harrier phase two: feather shots, shallow swoops, full swoop, then shots again")
+	var boss := await _start_harrier_fight()
+	boss.health = boss.max_health / 2   # before its first attack
+	_player._invuln_timer = 999.0
+	var feathers := 0
+	var seen := {}
+	for i in 1200:
+		await _frames(1)
+		for f in _main.get_children():
+			if f is HarrierFeather and not seen.has(f):
+				seen[f] = true
+				feathers += 1
+		if boss.attack_log.size() >= 8:
+			break
+	print("        attacks: %s" % [boss.attack_log])
+	_check(boss.attack_log.slice(0, 8) == ["shot", "shot", "shot", "shallow", "shallow", "swoop", "shot", "shot"],
+			"3 shots, 2 shallow swoops, a full swoop, then back to shots")
+	_check(feathers >= 5, "fired feathers (%d)" % feathers)
+	await _despawn()
+
+
+func _test_harrier_feather_hurts() -> void:
+	print("Harrier: a feather hits for half a heart and is cleared when it dies")
+	var boss := await _start_harrier_fight()
+	boss.health = boss.max_health / 2
+	var hp := _player.health
+	var feather := HarrierFeather.new()
+	feather.direction = Vector2.RIGHT
+	feather.set_meta("damage", boss.shot_damage)
+	feather.position = _player.global_position + Vector2(-60, 0)
+	_main.add_child(feather)
+	await _frames(20)
+	_check(_player.health == hp - 1 and boss.shot_damage == 1, "feather hit for %d half-heart(s)" % (hp - _player.health))
+	for i in 3:
+		var f := HarrierFeather.new()
+		f.direction = Vector2.UP
+		f.position = Vector2(20 * TILE, 10 * TILE)
+		_main.add_child(f)
+	await _frames(1)
+	_main.debug_kill_boss()
+	await _frames(2)
+	_check(not _main.get_children().any(func(c): return c is HarrierFeather), "feathers cleared on defeat")
+	await _despawn()
+
+
+# Waits for the Harrier to lock in a full dive (after its shallow swoops).
+func _wait_for_swoop_windup(boss: HarrierBoss) -> bool:
+	for i in 600:
+		await _frames(1)
+		if boss._state == HarrierBoss.State.SWOOP_WINDUP:
+			return true
+	return false
+
+
+func _test_harrier_pulls_up_after_hitting_you() -> void:
+	print("Harrier: a swoop that hits you pulls back up, no crash")
+	var boss := await _start_harrier_fight()
+	_check(await _wait_for_swoop_windup(boss), "wound up a swoop")
+	var hp := _player.health
+	var dazed := false
+	for i in 120:
+		await _frames(1)
+		dazed = dazed or boss.is_dazed()
+		if boss._state == HarrierBoss.State.RISE:
+			break
+	_check(_player.health == hp - boss.damage, "player hit for %d half-hearts" % (hp - _player.health))
+	_check(boss._state == HarrierBoss.State.RISE and not dazed, "pulled up without crashing")
+	await _despawn()
+
+
+func _test_harrier_crashes_when_it_misses() -> void:
+	print("Harrier: a missed swoop crashes into the floor and leaves it dazed")
+	var boss := await _start_harrier_fight()
+	_check(await _wait_for_swoop_windup(boss), "wound up a swoop")
+	# Step well clear of the dive line, to the other side of the arena.
+	var aside := 28.0 if boss._swoop_dir.x < 0.0 else 7.0
+	_place(aside, 15)
+	_player._invuln_timer = 999.0
+	for i in 150:
+		await _frames(1)
+		if boss.is_dazed():
+			break
+	_check(boss.is_dazed() and boss.is_on_floor(), "dazed on the floor")
+	await _frames(2)
+	_check(boss._hit_shape.disabled, "harmless to touch while dazed")
+	await _frames(int(boss.dazed_time * 60) + 5)
+	_check(boss._state == HarrierBoss.State.RISE or boss._state == HarrierBoss.State.HOVER, "gets back up")
+	await _frames(2)
+	_check(not boss._hit_shape.disabled, "and is dangerous again")
+	await _despawn()
+
+
+func _test_harrier_armor_except_dazed() -> void:
+	print("Harrier: takes half damage, full damage while dazed")
+	var boss := await _start_harrier_fight()
+	_check(boss.damage_reduction == 0.5, "50% damage reduction by default")
+	var hp := boss.health
+	boss.take_hit(1, Vector2.RIGHT)
+	_check(boss.health == hp, "first hit absorbed (half a point)")
+	boss.take_hit(1, Vector2.RIGHT)
+	_check(boss.health == hp - 1, "two hits = 1 damage (%d -> %d)" % [hp, boss.health])
+	boss._crash()
+	hp = boss.health
+	boss.take_hit(1, Vector2.RIGHT)
+	boss.take_hit(1, Vector2.RIGHT)
+	_check(boss.health == hp - 2, "dazed: full damage (%d -> %d)" % [hp, boss.health])
+	_check(_main._hud._boss_bar.current == boss.health, "health bar follows")
+	await _despawn()
+
+
+func _test_harrier_defeat_grants_wall_jump() -> void:
+	print("Beating the Harrier grants wall jump and leaves its body behind")
+	var boss := await _start_harrier_fight()
+	boss._crash()
+	while boss.health > 0:
+		boss.take_hit(1, Vector2.RIGHT)
+	await _frames(60)
+	_check(GameState.has_ability("wall_jump"), "wall jump granted")
+	_check(not _main._gate_closed and not _main._hud.is_boss_shown(), "gate open, bar hidden")
+	_check(boss._state == HarrierBoss.State.DEAD and boss.is_on_floor(), "body lies on the floor")
+	_check(GameState.bosses_defeated.has("aerie"), "defeat recorded")
+	await _frames(int(_main.CAMERA_RELEASE_TIME * 60))
+	_check(get_viewport().get_camera_2d() == _player.camera, "camera handed back")
+	get_tree().reload_current_scene()
+	var room := await _wait_for_room("aerie", 30)
+	await _frames(30)
+	var bodies := room.get_children().filter(func(c): return c is HarrierBoss) if room != null else []
+	_check(room != null and room._boss == null and bodies.size() == 1 and bodies[0]._state == HarrierBoss.State.DEAD,
+			"still beaten after reloading")
+	await _despawn()
+
+
+func _test_armor_reduces_damage() -> void:
+	print("Armor: flat reduction first, then percentage")
+	await _spawn()
+	_check(_player.reduce_damage(8) == 8, "no armor: 8 stays 8")
+	_player.armor_flat = 2
+	_check(_player.reduce_damage(8) == 6, "flat 2: 8 -> 6")
+	_player.armor_percent = 0.5
+	_check(_player.reduce_damage(8) == 3, "flat 2 then 50%%: 8 -> 3 (got %d)" % _player.reduce_damage(8))
+	_check(_player.reduce_damage(1) == 0, "never below 0")
+	_player.take_damage(8, _player.global_position + Vector2(-20, 0), false)
+	_check(_player.health == _player.max_health - 3, "take_damage applies it (%d/%d)" % [_player.health, _player.max_health])
+	_player._invuln_timer = 0.0
+	_player.armor_flat = 99
+	_player.kill()
+	_check(_player._dead, "lethal hazards ignore armor")
+	await _despawn()
+
+
+# Flat floor in the boss room's lower corridor, clear of acid: cols 55-70, row 28.
+func _place_in_corridor(col := 56.0) -> void:
+	_player.global_position = Vector2(col * TILE, 29 * TILE - Player.BODY_SIZE.y * 0.5)
+	_player.velocity = Vector2.ZERO
+
+
+func _test_sprint_is_faster_and_drains_stamina() -> void:
+	print("Sprint: faster while held, drains stamina, stops when it runs out")
+	await _spawn(BOSS_SCENE, true)
+	await _remove_enemies()
+	_place_in_corridor()
+	await _frames(5)
+	Input.action_press("move_right")
+	Input.action_press("sprint")
+	await _frames(20)
+	_check(not GameState.has_ability("sprint") and absf(_player.velocity.x - _player.run_speed) < 1.0, "locked at first: just runs")
+	_release_all()
+	GameState.unlock("sprint")
+	_check(_main._hud._stamina_bar.visible and _main._hud._stamina_bar.position.y > _main._hud._health_bar.position.y,
+			"stamina bar under the health bar")
+	_place_in_corridor()
+	await _frames(5)
+	Input.action_press("move_right")
+	Input.action_press("sprint")
+	await _frames(20)
+	var speed := _player.velocity.x
+	_check(speed > _player.run_speed + 50.0, "sprinting at %.0f (run %.0f)" % [speed, _player.run_speed])
+	_check(_player.stamina < _player.max_stamina, "stamina draining (%.0f)" % _player.stamina)
+	_check(_main._hud._stamina_bar.current == _player.stamina, "bar follows")
+	_release_all()
+	_player.stamina = 1.0
+	_place_in_corridor()
+	await _frames(5)
+	Input.action_press("move_right")
+	Input.action_press("sprint")
+	await _frames(20)
+	_check(absf(_player.velocity.x - _player.run_speed) < 1.0, "out of stamina: back to run speed (%.0f)" % _player.velocity.x)
+	await _frames(40)   # refilling on the ground meanwhile
+	_check(absf(_player.velocity.x - _player.run_speed) < 1.0 and _player.stamina > 10.0,
+			"stays off until sprint is let go, even as stamina refills (%.0f stamina)" % _player.stamina)
+	Input.action_release("sprint")
+	await _frames(1)
+	Input.action_press("sprint")
+	await _frames(10)
+	_check(_player.velocity.x > _player.run_speed + 50.0, "works again after letting go")
+	_release_all()
+	await _despawn()
+
+
+func _test_stamina_refills_only_on_ground() -> void:
+	print("Stamina refills over time, but only on the ground")
+	await _spawn(BOSS_SCENE, true)
+	await _remove_enemies()
+	_place(63, 8)   # top of the shaft above the right hallway: a long fall
+	await _frames(2)   # is_on_floor() still holds from before the move for a frame
+	_player.stamina = 10.0
+	await _frames(12)
+	_check(not _player.is_on_floor() and _player.stamina == 10.0, "no refill in the air (%.1f)" % _player.stamina)
+	_place_in_corridor()
+	_player.stamina = 10.0
+	await _frames(60)
+	_check(_player.stamina > 40.0, "refilled on the ground (%.1f after 1s)" % _player.stamina)
+	await _frames(120)
+	_check(_player.stamina == _player.max_stamina, "up to full")
+	await _despawn()
+
+
+func _test_dash_needs_stamina() -> void:
+	print("Dash costs stamina and won't fire without enough")
+	await _spawn(BOSS_SCENE, true)
+	await _remove_enemies()
+	GameState.unlock("dash")
+	_place_in_corridor()
+	await _frames(5)
+	Input.action_press("dash")
+	await _frames(2)
+	Input.action_release("dash")
+	_check(_player.stamina <= _player.max_stamina - _player.dash_stamina_cost + 1.0, "dash spent %.0f stamina" % (_player.max_stamina - _player.stamina))
+	await _frames(30)
+	_place_in_corridor()
+	_player.stamina = _player.dash_stamina_cost - 10.0   # regen won't top it up within the test
+	var x0 := _player.global_position.x
+	Input.action_press("dash")
+	await _frames(6)
+	Input.action_release("dash")
+	_check(absf(_player.global_position.x - x0) < 4.0, "no dash with too little stamina (moved %.0f px)" % absf(_player.global_position.x - x0))
+	await _despawn()
+
+
+# Airborne beside the right shaft's left wall (col 58 is solid), pressing into it.
+func _try_wall_jump(stamina: float) -> float:
+	_place(59, 18)
+	_player.stamina = stamina
+	Input.action_press("move_left")
+	await _frames(8)
+	Input.action_press("jump")
+	await _frames(3)
+	var vx := _player.velocity.x
+	_release_all()
+	return vx
+
+
+func _test_wall_jump_needs_stamina() -> void:
+	print("Wall jump costs stamina and won't fire without enough")
+	await _spawn(BOSS_SCENE, true)
+	await _remove_enemies()
+	GameState.unlock("wall_jump")
+	var vx := await _try_wall_jump(_player.max_stamina)
+	_check(vx > 50.0, "wall jump kicks off the wall (vx %.0f)" % vx)
+	_check(_player.stamina <= _player.max_stamina - _player.wall_jump_stamina_cost, "spent %.0f stamina" % (_player.max_stamina - _player.stamina))
+	vx = await _try_wall_jump(_player.wall_jump_stamina_cost - 1.0)
+	_check(vx <= 0.0, "no wall jump with too little stamina (vx %.0f)" % vx)
 	await _despawn()
 
 
@@ -695,7 +1147,26 @@ func _test_pause_menu_toggles() -> void:
 	await _press_pause()
 	menu._resume_button.pressed.emit()
 	_check(not menu.is_open() and not get_tree().paused, "closed and resumed with Resume")
+	await _press_pause()
+	await _press_pad_a()
+	_check(not menu.is_open() and not get_tree().paused, "gamepad A presses the focused Resume")
+	_check(menu._quit_game_button != null and menu._quit_game_button.text == "Quit Game", "has a Quit Game button")
+	var labels := menu._panel.find_children("*", "Label", true, false)
+	_check(labels.any(func(l: Label) -> bool: return l.text.contains("Jump:")), "controls listed in the menu")
+	var screen_labels := _main.find_children("*", "Label", true, false).filter(
+		func(l: Label) -> bool: return not menu.is_ancestor_of(l))
+	_check(not screen_labels.any(func(l: Label) -> bool: return l.text.contains("Jump:")), "controls gone from the game screen")
 	await _despawn()
+
+
+func _press_pad_a() -> void:
+	for pressed in [true, false]:
+		var event := InputEventJoypadButton.new()
+		event.button_index = JOY_BUTTON_A
+		event.pressed = pressed
+		Input.parse_input_event(event)
+		await _frames(1)
+	await _frames(1)
 
 
 func _test_pause_ignored_during_boss_intro() -> void:
@@ -709,6 +1180,89 @@ func _test_pause_ignored_during_boss_intro() -> void:
 	await _despawn()
 
 
+func _test_debug_kill_boss() -> void:
+	print("Debug: the pause menu's Kill Boss button kills the Warden")
+	await _spawn(BOSS_SCENE)
+	await _press_pause()
+	var menu := _pause_menu()
+	_check(menu._kill_boss_button.visible, "button shown in debug mode with a live boss")
+	menu._kill_boss_button.pressed.emit()
+	await _frames(2)
+	_check(not menu.is_open() and not get_tree().paused, "menu closed")
+	_check(_main._boss == null and GameState.bosses_defeated.has("boss"), "boss dead")
+	_check(GameState.has_ability("dash"), "dash granted")
+	_check(not _main._gate_closed, "gates open")
+	await _press_pause()
+	_check(not menu._kill_boss_button.visible, "button hidden once the boss is dead")
+	await _despawn()
+	# Mid-fight, after the intro.
+	await _start_boss_fight()
+	_main.debug_kill_boss()
+	await _frames(60)
+	_check(_main._boss == null and not _main._gate_closed and not _main._hud.is_boss_shown(), "works mid-fight too")
+	_check(get_viewport().get_camera_2d() == _player.camera, "camera handed back to the player")
+	await _despawn()
+
+
+func _test_debug_kill_boss_off_outside_debug_mode() -> void:
+	print("Debug: Kill Boss (button and F3) does nothing outside debug mode")
+	await _spawn(BOSS_SCENE)
+	GameState.debug_mode = false
+	await _press_pause()
+	_check(not _pause_menu()._kill_boss_button.visible, "button hidden")
+	_pause_menu().close()
+	var f3 := InputEventKey.new()
+	f3.keycode = KEY_F3
+	f3.pressed = true
+	Input.parse_input_event(f3)
+	await _frames(2)
+	_check(_main._boss != null and not GameState.bosses_defeated.has("boss"), "F3 ignored, boss alive")
+	GameState.debug_mode = true
+	Input.parse_input_event(f3)
+	await _frames(2)
+	_check(_main._boss == null, "F3 kills it in debug mode")
+	await _despawn()
+
+
+func _test_level_select_loads_each_room() -> void:
+	print("Main menu: Level Select lists every room and starts at its P")
+	for room in LevelData.ROOMS:
+		GameState.coins = 7
+		var menu := MENU_SCENE.instantiate()
+		get_tree().root.add_child(menu)
+		get_tree().current_scene = menu
+		await _frames(2)
+		menu.level_select_button.pressed.emit()
+		_check(menu.level_buttons.size() == LevelData.ROOMS.size(), "%d level buttons" % menu.level_buttons.size())
+		_check(menu.level_buttons["start"].has_focus(), "first level focused")
+		menu.level_buttons[room].pressed.emit()
+		var loaded := await _wait_for_room(room, 120)
+		_check(loaded != null, "%s loaded" % room)
+		if loaded != null:
+			var p: Player = loaded._player
+			var start := _find_tile(LevelData.ROOMS[room].rows, "P")
+			_check(absf(p.global_position.x - (start.x + 0.5) * TILE) < 2.0 and GameState.coins == 0,
+					"%s: fresh progress, starting at P (col %.1f)" % [room, p.global_position.x / TILE])
+		await _frames(30)   # let the fade finish
+		await _despawn()
+	var menu := MENU_SCENE.instantiate()
+	get_tree().root.add_child(menu)
+	get_tree().current_scene = menu
+	await _frames(2)
+	menu.level_select_button.pressed.emit()
+	menu.back_button.pressed.emit()
+	_check(menu._main_box.visible and not menu._level_box.visible and menu.level_select_button.has_focus(), "Back returns to the main menu")
+	await _despawn()
+
+
+func _find_tile(rows: Array, tile: String) -> Vector2i:
+	for y in rows.size():
+		var x: int = rows[y].find(tile)
+		if x >= 0:
+			return Vector2i(x, y)
+	return Vector2i(-1, -1)
+
+
 func _test_main_menu_starts_game() -> void:
 	print("Main menu: Start loads the first room with fresh progress")
 	GameState.coins = 7
@@ -718,7 +1272,7 @@ func _test_main_menu_starts_game() -> void:
 	get_tree().current_scene = menu
 	await _frames(2)
 	_check(menu.start_button.has_focus(), "Start focused")
-	menu.start_button.pressed.emit()
+	await _press_pad_a()
 	var room := await _wait_for_room("start", 120)
 	_check(room != null, "first room loaded")
 	_check(GameState.coins == 0 and not GameState.has_ability("dash"), "progress reset")
@@ -734,6 +1288,7 @@ func _test_pause_menu_quits_to_main_menu() -> void:
 	await _spawn()
 	await _press_pause()
 	var quit: Button = _pause_menu()._panel.find_children("*", "Button", true, false)[1]
+	_check(quit.text == "Quit to Menu", "second button is Quit to Menu")
 	quit.pressed.emit()
 	var at_menu := false
 	for i in 120:

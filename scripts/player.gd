@@ -7,16 +7,18 @@ extends CharacterBody2D
 ## Collision layers: 1 world | 2 player | 3 enemy | 4 player_attack | 5 hazard | 6 platforms
 
 signal health_changed(current: int, maximum: int)
+signal stamina_changed(current: float, maximum: float)
 signal died
 
 const BODY_SIZE := Vector2(22, 44)
+const HURTBOX_SIZE := BODY_SIZE - Vector2(4, 6)
 const LAYER_ENEMY := 4
 const LAYER_HAZARD := 16
 const LAYER_WORLD := 1
 const LAYER_GROUND := 1 | 32   # world solids + one-way platforms
 const PLATFORM_LAYER_NUMBER := 6
 const SAFE_GROUND_DELAY := 0.1
-const HIT_DAMAGE := 2   # one full heart, in half-hearts
+const DEFAULT_HIT_DAMAGE := 2   # one full heart, in half-hearts, for hitboxes with no "damage" meta
 const PLATFORM_DROP_TIME := 0.25
 
 @export_group("Run")
@@ -25,6 +27,14 @@ const PLATFORM_DROP_TIME := 0.25
 @export var ground_friction := 3600.0
 @export var air_accel := 2200.0
 @export var air_friction := 900.0
+
+@export_group("Sprint & Stamina")
+@export var sprint_speed := 480.0
+@export var max_stamina := 100.0
+@export var sprint_drain := 35.0            ## per second while sprinting
+@export var stamina_regen := 45.0           ## per second, only while standing on ground
+@export var dash_stamina_cost := 30.0
+@export var wall_jump_stamina_cost := 20.0
 
 @export_group("Jump")
 @export var jump_velocity := -640.0
@@ -50,13 +60,18 @@ const PLATFORM_DROP_TIME := 0.25
 @export var attack_damage := 1
 @export var attack_duration := 0.12
 @export var attack_cooldown := 0.26
-@export var pogo_velocity := -560.0
+@export var pogo_velocity := -500.0
 @export var invulnerability_time := 0.5
 @export var knockback := Vector2(500, -300)
 @export var stun_time := 0.22
 
+@export_group("Armor")
+@export var armor_flat := 0          ## half-hearts taken off every hit, applied first
+@export_range(0.0, 1.0) var armor_percent := 0.0   ## then this fraction of what's left is blocked
+
 var camera: Camera2D
 var health := 0
+var stamina := 0.0
 var facing := 1
 var last_safe_position := Vector2.ZERO
 
@@ -83,6 +98,7 @@ var _shake_timer := 0.0
 var _shake_strength := 0.0
 var _safe_ground_timer := 0.0
 var _platform_drop_timer := 0.0
+var _sprint_exhausted := false   # ran dry: let go of sprint before it works again
 var _hitstop_active := false
 var _dead := false
 
@@ -93,6 +109,7 @@ func _ready() -> void:
 	collision_mask = LAYER_GROUND
 	floor_snap_length = 6.0
 	health = max_health
+	stamina = max_stamina
 	last_safe_position = global_position
 
 	var body_shape := CollisionShape2D.new()
@@ -108,7 +125,7 @@ func _ready() -> void:
 	_hurtbox.monitorable = false
 	var hurt_shape := CollisionShape2D.new()
 	var hurt_rect := RectangleShape2D.new()
-	hurt_rect.size = BODY_SIZE - Vector2(4, 6)
+	hurt_rect.size = HURTBOX_SIZE
 	hurt_shape.shape = hurt_rect
 	_hurtbox.add_child(hurt_shape)
 	add_child(_hurtbox)
@@ -146,6 +163,7 @@ func _physics_process(delta: float) -> void:
 		_coyote_timer = coyote_time
 		_air_dash_available = true
 	_update_safe_ground(on_floor, delta)
+	var sprinting := _update_stamina(input_x, on_floor and not stunned, delta)
 	if Input.is_action_just_pressed("jump"):
 		_jump_buffer_timer = jump_buffer_time
 
@@ -160,7 +178,7 @@ func _physics_process(delta: float) -> void:
 	# Dash
 	if not stunned and _dash_timer <= 0.0 and _dash_cooldown_timer <= 0.0 \
 			and Input.is_action_just_pressed("dash") and GameState.has_ability("dash") \
-			and (on_floor or _air_dash_available):
+			and (on_floor or _air_dash_available) and stamina >= dash_stamina_cost:
 		_start_dash(input_x, on_floor)
 
 	if _dash_timer > 0.0:
@@ -182,7 +200,8 @@ func _physics_process(delta: float) -> void:
 				velocity.y = jump_velocity
 				_coyote_timer = 0.0
 				_jump_buffer_timer = 0.0
-			elif wall_sliding:
+			elif wall_sliding and stamina >= wall_jump_stamina_cost:
+				_set_stamina(stamina - wall_jump_stamina_cost)
 				velocity = Vector2(_wall_normal_x * wall_jump_velocity.x, wall_jump_velocity.y)
 				facing = int(signf(_wall_normal_x))
 				_wall_lock_timer = wall_jump_lock_time
@@ -198,7 +217,8 @@ func _physics_process(delta: float) -> void:
 			var accel := ground_accel if on_floor else air_accel
 			if input_x == 0.0:
 				accel = ground_friction if on_floor else air_friction
-			velocity.x = move_toward(velocity.x, input_x * run_speed, accel * delta)
+			var top_speed := sprint_speed if sprinting else run_speed
+			velocity.x = move_toward(velocity.x, input_x * top_speed, accel * delta)
 
 	# Attack
 	if not stunned and Input.is_action_just_pressed("attack") and _attack_cooldown_timer <= 0.0:
@@ -300,9 +320,36 @@ func _update_timers(delta: float) -> void:
 			_attack_shape.set_deferred("disabled", true)
 
 
+# ------------------------------------------------------ Sprint/Stamina ----
+
+# Drains while sprinting, refills only while standing on ground. Returns
+# whether you're sprinting this frame.
+func _update_stamina(input_x: float, grounded: bool, delta: float) -> bool:
+	var held := Input.is_action_pressed("sprint")
+	if not held:
+		_sprint_exhausted = false
+	var sprinting := held and input_x != 0.0 and not _sprint_exhausted \
+			and stamina > 0.0 and GameState.has_ability("sprint")
+	if sprinting:
+		_set_stamina(stamina - sprint_drain * delta)
+		if stamina <= 0.0:
+			_sprint_exhausted = true
+	elif grounded and _dash_timer <= 0.0:
+		_set_stamina(stamina + stamina_regen * delta)
+	return sprinting
+
+
+func _set_stamina(value: float) -> void:
+	var clamped := clampf(value, 0.0, max_stamina)
+	if clamped != stamina:
+		stamina = clamped
+		stamina_changed.emit(stamina, max_stamina)
+
+
 # ---------------------------------------------------------------- Dash ----
 
 func _start_dash(input_x: float, on_floor: bool) -> void:
+	_set_stamina(stamina - dash_stamina_cost)
 	_dash_dir = int(signf(input_x)) if input_x != 0.0 else facing
 	facing = _dash_dir
 	_dash_timer = dash_duration
@@ -380,11 +427,24 @@ func _check_hurtbox() -> void:
 		return
 	for area in _hurtbox.get_overlapping_areas():
 		if area.is_in_group("hazard"):
-			take_damage(HIT_DAMAGE, area.global_position, true)
+			take_damage(damage_of(area), area.global_position, true)
 			return
 		if area.is_in_group("enemy_hitbox"):
-			take_damage(HIT_DAMAGE, area.global_position, false)
+			take_damage(damage_of(area), area.global_position, false)
 			return
+
+
+## How hard a hitbox hits, in half-hearts. Enemies and hazards set it as a
+## "damage" meta on their hitbox Area2D.
+static func damage_of(area: Area2D) -> int:
+	return area.get_meta("damage", DEFAULT_HIT_DAMAGE)
+
+
+## Armor: flat reduction first, then percentage. A hit can be reduced to 0
+## (it still knocks you back), never below.
+func reduce_damage(amount: int) -> int:
+	var after_flat := maxi(amount - armor_flat, 0)
+	return roundi(after_flat * (1.0 - clampf(armor_percent, 0.0, 1.0)))
 
 
 func heal(amount: int) -> void:
@@ -394,12 +454,17 @@ func heal(amount: int) -> void:
 	health_changed.emit(health, max_health)
 
 
+# Lethal: skips armor and invulnerability.
 func kill() -> void:
 	_invuln_timer = 0.0
-	take_damage(health, global_position, true)
+	_apply_damage(health, global_position, true)
 
 
 func take_damage(amount: int, source_position: Vector2, is_hazard: bool) -> void:
+	_apply_damage(reduce_damage(amount), source_position, is_hazard)
+
+
+func _apply_damage(amount: int, source_position: Vector2, is_hazard: bool) -> void:
 	if _dead or _invuln_timer > 0.0:
 		return
 	health = maxi(health - amount, 0)

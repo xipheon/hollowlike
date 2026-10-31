@@ -9,6 +9,7 @@ const KILL_HEAL := 1   # half a heart for the player
 @export var max_health := 3
 @export var speed := 70.0
 @export var gravity := 1800.0
+@export var damage := 2   ## per hit, in half-hearts
 
 var health := 0
 var _dir := -1
@@ -31,6 +32,7 @@ func _ready() -> void:
 
 	var hitbox := Area2D.new()
 	hitbox.add_to_group("enemy_hitbox")
+	hitbox.set_meta("damage", damage)   # read by the player's hurtbox
 	hitbox.collision_layer = 16   # hazard layer, which the player's hurtbox watches
 	hitbox.collision_mask = 0
 	hitbox.monitoring = false
@@ -74,8 +76,8 @@ func _turn() -> void:
 	_ledge_ray.force_raycast_update()
 
 
-func take_hit(damage: int, hit_dir: Vector2) -> void:
-	health -= damage
+func take_hit(amount: int, hit_dir: Vector2) -> void:
+	health -= amount
 	_flash_timer = 0.1
 	_stagger_timer = 0.3
 	if health <= 0:

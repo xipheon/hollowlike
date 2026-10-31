@@ -11,6 +11,7 @@ var speed := 380.0
 
 func _ready() -> void:
 	add_to_group("enemy_hitbox")
+	add_to_group("boss_attack")   # cleared when the boss dies
 	collision_layer = 16   # hazard layer, which the player's hurtbox watches
 	collision_mask = 0
 	monitoring = false

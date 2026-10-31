@@ -10,7 +10,8 @@ const KEYS := {
 	"move_down": [KEY_S, KEY_DOWN],
 	"jump": [KEY_SPACE, KEY_Z],
 	"attack": [KEY_J, KEY_X],
-	"dash": [KEY_K, KEY_C, KEY_SHIFT],
+	"dash": [KEY_K, KEY_C],
+	"sprint": [KEY_SHIFT],
 	"restart": [KEY_R],
 	"pause": [KEY_ESCAPE, KEY_P],
 }
@@ -24,6 +25,8 @@ const PAD_BUTTONS := {
 	"move_up": [JOY_BUTTON_DPAD_UP],
 	"move_down": [JOY_BUTTON_DPAD_DOWN],
 	"pause": [JOY_BUTTON_START],
+	"ui_accept": [JOY_BUTTON_A],   # Godot's default only has Enter/Space, so menus ignored the pad
+	"ui_cancel": [JOY_BUTTON_B],   # back out of level select
 }
 
 const PAD_AXES := {
@@ -31,6 +34,7 @@ const PAD_AXES := {
 	"move_right": [JOY_AXIS_LEFT_X, 1.0],
 	"move_up": [JOY_AXIS_LEFT_Y, -1.0],
 	"move_down": [JOY_AXIS_LEFT_Y, 1.0],
+	"sprint": [JOY_AXIS_TRIGGER_LEFT, 1.0],
 }
 
 func _ready() -> void:

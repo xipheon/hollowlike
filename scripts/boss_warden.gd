@@ -1,40 +1,40 @@
 class_name WardenBoss
-extends CharacterBody2D
+extends BossBase
 ## Arena boss. Sleeps until activate(), then loops: recover -> pick an attack.
-##   Charge: crouches (orange), then rushes until it hits a wall, and is dazed.
+##   Charge: crouches (orange), then rushes until it hits a wall (dazed; in
+##           phase two the impact also sends shockwaves) or runs into you.
 ##   Leap:   hops to where you stand and slams, sending shockwaves both ways.
-## Below half health it gets faster. When beaten it stays where it fell as a corpse. Needs: take_hit(), "enemy_hitbox" area.
-
-signal health_changed(current: int, maximum: int)
-signal defeated
+## Below half health it gets faster and hits harder. When beaten it stays where
+## it fell as a corpse. Grants dash.
 
 const SIZE := Vector2(56, 72)
+const HITBOX_SIZE := SIZE - Vector2(6, 6)
 const LAYER_WORLD := 1
 
 enum State { DORMANT, RECOVER, CHARGE_WINDUP, CHARGE, DAZED, LEAP_WINDUP, LEAP, LANDED, DEAD }
 
-@export var max_health := 24
 @export var gravity := 2400.0
+@export var body_damage := 2             ## contact, in half-hearts
+@export var shockwave_damage := 1        ## in half-hearts
+@export var phase_two_damage_bonus := 1  ## added to both below half health
 @export var charge_speed := 620.0
 @export var leap_velocity := -900.0
 @export var shockwave_speed := 380.0
 @export var recover_time := 0.9
 @export var phase_two_speedup := 1.3   ## timers shrink and charge speeds up by this
 
-var health := 0
-## Horizontal limits for leap targets (set by the room before activate()).
-var arena_left := 0.0
-var arena_right := 0.0
-## Attacks started, in order. Handy for tests and debugging.
-var attack_log: Array[String] = []
-
 var _state := State.DORMANT
 var _timer := 0.0
 var _dir := -1
 var _flash_timer := 0.0
 var _last_attack := ""
-var _target: Node2D
 var _hitbox: Area2D
+
+
+func _init() -> void:
+	boss_name = "THE WARDEN"
+	reward_ability = "dash"
+	max_health = 24
 
 
 func _ready() -> void:
@@ -51,24 +51,25 @@ func _ready() -> void:
 
 	_hitbox = Area2D.new()
 	_hitbox.add_to_group("enemy_hitbox")
+	_hitbox.set_meta("damage", body_damage)   # read by the player's hurtbox
 	_hitbox.collision_layer = 16   # hazard layer, which the player's hurtbox watches
 	_hitbox.collision_mask = 0
 	_hitbox.monitoring = false
 	var hit_shape := CollisionShape2D.new()
 	var hit_rect := RectangleShape2D.new()
-	hit_rect.size = SIZE - Vector2(6, 6)
+	hit_rect.size = HITBOX_SIZE
 	hit_shape.shape = hit_rect
 	_hitbox.add_child(hit_shape)
 	add_child(_hitbox)
 
 
 func activate(target: Node2D) -> void:
-	_target = target
+	super(target)
 	_enter(State.RECOVER, 1.0)
 
 
-func is_phase_two() -> bool:
-	return health * 2 <= max_health
+func _damage_bonus() -> int:
+	return phase_two_damage_bonus if is_phase_two() else 0
 
 
 func _speed() -> float:
@@ -107,10 +108,10 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
-	if _state == State.CHARGE and (is_on_wall() or _timer <= 0.0):
-		velocity.x = 0.0
-		get_tree().call_group("player", "shake", 6.0, 0.2)
-		_enter(State.DAZED, 0.7 / _speed())
+	if _state == State.CHARGE and _touching_target(HITBOX_SIZE):
+		_charge_into_player()
+	elif _state == State.CHARGE and (is_on_wall() or _timer <= 0.0):
+		_charge_end()
 	elif _state == State.LEAP and is_on_floor() and _timer <= 0.0:
 		_land()
 	queue_redraw()
@@ -158,29 +159,53 @@ func _start_leap() -> void:
 func _land() -> void:
 	velocity.x = 0.0
 	get_tree().call_group("player", "shake", 8.0, 0.25)
+	_shockwave()
+	_enter(State.LANDED, 0.5 / _speed())
+
+func _charge_end() -> void:
+	velocity.x = 0.0
+	get_tree().call_group("player", "shake", 6.0, 0.2)
+	_enter(State.DAZED, 0.7 / _speed())
+	if is_phase_two():
+		_shockwave()
+
+# Ran into you: stops short, no daze (that's the reward for dodging into a wall).
+func _charge_into_player() -> void:
+	velocity.x = 0.0
+	_enter(State.RECOVER, recover_time / _speed())
+
+func _shockwave() -> void:
 	var feet := global_position + Vector2(0, SIZE.y * 0.5)
 	for dir in [-1, 1]:
 		var wave := WardenShockwave.new()
 		wave.direction = dir
 		wave.speed = shockwave_speed * _speed()
+		wave.set_meta("damage", shockwave_damage + _damage_bonus())
 		wave.position = feet + Vector2(dir * SIZE.x * 0.5, 0)
 		get_parent().add_child(wave)
-	_enter(State.LANDED, 0.5 / _speed())
 
 
-func take_hit(damage: int, _hit_dir: Vector2) -> void:
+func take_hit(amount: int, _hit_dir: Vector2) -> void:
 	if _state == State.DORMANT or _state == State.DEAD:
 		return
-	health = maxi(health - damage, 0)
+	health = maxi(health - amount, 0)
 	_flash_timer = 0.08
+	_hitbox.set_meta("damage", body_damage + _damage_bonus())
 	health_changed.emit(health, max_health)
 	if health <= 0:
 		become_corpse()
 		defeated.emit()
 
 
-## Stops fighting and stays put as harmless scenery (also used to restore the
-## corpse when a beaten boss's room reloads).
+func debug_kill() -> void:
+	if _state == State.DEAD:
+		return
+	health = 0
+	health_changed.emit(health, max_health)
+	become_corpse()
+	defeated.emit()
+
+
 func become_corpse() -> void:
 	health = 0
 	_enter(State.DEAD, 0.0)
