@@ -934,10 +934,12 @@ func _test_harrier_shallow_swoop_hits_standing_player() -> void:
 
 
 func _test_harrier_swoops_ignore_player_height() -> void:
-	print("Harrier: swoops go to the ground under you, even when you're up on a perch")
+	print("Harrier: swoops go to the ground under you, even when you're up in the air")
 	var boss := await _start_harrier_fight()
-	_player._invuln_timer = 999.0   # stays put on the perch
-	_player.global_position = Vector2(10.5 * TILE, 10 * TILE - Player.BODY_SIZE.y * 0.5)   # upper-left perch
+	# The hall has no perches any more, so hold the player in mid-air at the old perch height.
+	_player._invuln_timer = 999.0
+	_player.global_position = Vector2(10.5 * TILE, 10 * TILE - Player.BODY_SIZE.y * 0.5)
+	_player.process_mode = Node.PROCESS_MODE_DISABLED
 	var lowest := -INF
 	var dive_target_y := 0.0
 	for i in 1800:
@@ -953,7 +955,7 @@ func _test_harrier_swoops_ignore_player_height() -> void:
 			_check(absf(dive_target_x - _player.global_position.x) < 1.0 * TILE,
 					"full swoop aims at the floor under the player (%.1f tiles off)" % ((dive_target_x - _player.global_position.x) / TILE))
 			break
-	_check(_player.is_on_floor() and _player.global_position.y < 10 * TILE, "player stayed on the perch")
+	_check(_player.global_position.y < 10 * TILE, "player stayed up in the air")
 	_check(lowest > boss.arena_bottom - 2 * TILE, "shallow swoops still skim the floor (%.0f px above it)" % (boss.arena_bottom - lowest))
 	await _despawn()
 
@@ -1021,10 +1023,18 @@ func _test_harrier_feathers() -> void:
 	_player._invuln_timer = 999.0   # so it doesn't break on contact mid-check
 	var curver := boss._spawn_feather(Vector2.UP, boss.homing_speed, true)
 	curver.global_position = _player.global_position + Vector2(-100, -60)
-	await _frames(75)
+	# A faster feather swings wider, so give it up to two seconds to come round.
+	var faced_player := false
+	for i in 120:
+		await _frames(1)
+		if not is_instance_valid(curver):
+			break
+		var to_player := (_player.global_position - curver.global_position).normalized()
+		if curver.direction.dot(to_player) > 0.7:
+			faced_player = true
+			break
 	_player._invuln_timer = 0.0
-	var to_player := (_player.global_position - curver.global_position).normalized()
-	_check(is_instance_valid(curver) and curver.direction.dot(to_player) > 0.7, "homing feather turns toward the player")
+	_check(faced_player, "homing feather turns toward the player")
 	if is_instance_valid(curver):
 		curver.queue_free()
 

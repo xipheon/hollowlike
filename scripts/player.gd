@@ -443,6 +443,11 @@ func _check_hurtbox() -> void:
 			return
 
 
+## True if `hitbox` is touching us and would land a hit right now.
+func can_be_hit_by(hitbox: Area2D) -> bool:
+	return not _dead and _invuln_timer <= 0.0 and _hurtbox.overlaps_area(hitbox)
+
+
 # Lets whatever just hit us react: a charge stops, a feather breaks. The hitbox
 # itself or its owner (an enemy's contact box) can define on_hit_player().
 func _notify_hit(area: Area2D) -> void:

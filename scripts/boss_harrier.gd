@@ -42,16 +42,16 @@ enum State { DORMANT, HOVER, SHOT_WINDUP, HOMING_WINDUP, WAIT_HOMING, SHALLOW_WI
 @export var shot_count := 3              ## volleys per cycle; the last one is the homing volley
 @export var shot_windup_time := 0.3
 @export var shot_speed := 230.0
-@export var fan_spread_degrees := 16.0   ## angle between the three feathers of a fan
+@export var fan_spread_degrees := 18.0   ## angle between the three feathers of a fan
 @export var homing_windup_time := 0.5
-@export var homing_speed := 120.0
+@export var homing_speed := 140.0
 @export var homing_count_phase_one := 1
 @export var homing_count_phase_two := 2
-@export var homing_spread_degrees := 100.0   ## angle between homing feathers when there are two or more
+@export var homing_spread_degrees := 120.0   ## angle between homing feathers when there are two or more
 @export var shallow_windup_time := 0.22
-@export var shallow_speed := 620.0
+@export var shallow_speed := 800.0
 @export var windup_time := 0.45          ## full swoop
-@export var swoop_speed := 760.0
+@export var swoop_speed := 960.0
 @export var dazed_time := 1.8
 @export var rise_speed := 320.0
 @export var gravity := 2000.0            ## only while dazed or dead
@@ -80,7 +80,7 @@ var _hit_shape: CollisionShape2D
 func _init() -> void:
 	boss_name = "THE HARRIER"
 	reward_ability = "wall_jump"
-	max_health = 16
+	max_health = 32
 
 
 func _ready() -> void:
@@ -178,7 +178,9 @@ func _physics_process(delta: float) -> void:
 	if _state == State.SHALLOW and (_path_t >= 1.0 or is_on_wall() or is_on_floor() or is_on_ceiling()):
 		_hover(chain_gap)
 	elif _state == State.SWOOP:
-		if is_on_floor():
+		if is_on_floor() and _about_to_hit_player():
+			_enter(State.RISE, 3.0)   # reached you and the floor in the same frame: it's a hit, not a crash
+		elif is_on_floor():
 			_crash()
 		elif (is_on_wall() and get_wall_normal().dot(_swoop_dir) < -0.1) or is_on_ceiling() or _timer <= 0.0:
 			_enter(State.RISE, 3.0)   # flew into a wall: no daze (not one it's leaving)
@@ -353,6 +355,16 @@ func _start_windup() -> void:
 		_swoop_dir = Vector2(signf(_swoop_dir.x) * sqrt(1.0 - MIN_DIVE_STEEPNESS ** 2), MIN_DIVE_STEEPNESS)
 	_face_target()
 	_enter(State.SWOOP_WINDUP, windup_time)
+
+
+## True if our contact box is on the player and will hurt them this frame. A
+## fast swoop can touch you on the same frame it touches the floor, and the
+## player only registers the hit (on_hit_player) after we've moved.
+func _about_to_hit_player() -> bool:
+	for player in get_tree().get_nodes_in_group("player"):
+		if player.can_be_hit_by(_hitbox):
+			return true
+	return false
 
 
 func _crash() -> void:

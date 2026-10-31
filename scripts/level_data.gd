@@ -21,7 +21,8 @@ const ROOMS := {
 	"start": {"scene": "res://scenes/main.tscn", "doors": {"right": "boss"}, "rows": START_ROWS},
 	"boss": {"scene": "res://scenes/boss_room.tscn", "doors": {"left": "start", "right": "climb"}, "rows": BOSS_ROWS},
 	"climb": {"scene": "res://scenes/climb_room.tscn", "doors": {"left": "boss", "right": "aerie"}, "rows": CLIMB_ROWS},
-	"aerie": {"scene": "res://scenes/aerie_room.tscn", "doors": {"left": "climb"}, "rows": AERIE_ROWS},
+	"aerie": {"scene": "res://scenes/aerie_room.tscn", "doors": {"left": "climb"}, "rows": AERIE_ROWS,
+		"background": AERIE_BACKGROUND},
 }
 
 const START_ROWS := [
@@ -136,7 +137,7 @@ const CLIMB_ROWS := [
 ]
 
 # The Harrier's arena, through the door at the top of the climb. One screen:
-# a short hallway, a gate, and an open hall with two one-way perches.
+# a short hallway, a gate, and an open hall.
 const AERIE_ROWS := [
 	"##################################",
 	"##################################",
@@ -148,12 +149,29 @@ const AERIE_ROWS := [
 	"#####                            #",
 	"#####                            #",
 	"#####                            #",
-	"#####    ====            ====    #",
+	"#####                            #",
 	"#####                            #",
 	"#   |                            #",
-	">   |    ====            ====    #",
+	">   |                            #",
 	">   |                            #",
 	">  P|                            #",
 	"##################################",
 	"##################################",
+]
+
+# Most of the Aerie's back wall has caved in, opening the hall to the skyline.
+const AERIE_BACKGROUND := [
+	"",
+	"",
+	"",
+	"            ....................",
+	"        ........................",
+	"      ..........................",
+	"      ..........................",
+	"      ..........................",
+	"       .........................",
+	"       ........................",
+	"         ......................",
+	"             ................",
+	"  V               ..........",
 ]

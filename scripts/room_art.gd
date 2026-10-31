@@ -28,7 +28,7 @@ const ACID_FRAMES := 4
 const ACID_FRAME_TIME := 0.24
 
 const SKYLINE_SCROLL := Vector2(0.15, 0.0)  # x drifts slowly; y stays fixed on screen
-const SKYLINE_SCREEN_BOTTOM := 540.0        # the skyline's bottom edge sits at the bottom of the screen
+const SKYLINE_SCREEN_BOTTOM := 450.0        # screen y of the skyline's bottom edge (the screen is 540 tall)
 
 # Background sheet cells (art/tiles/background.png). Pieces bigger than one
 # tile give their top-left cell and size.
@@ -45,10 +45,14 @@ const POSTERS := [Vector2i(5, 1), Vector2i(2, 1)]
 const GRAFFITI := [Vector2i(5, 2), Vector2i(2, 1)]
 const LIGHT_LIT := Vector2i(7, 1)
 const LIGHT_DEAD := Vector2i(7, 2)
+# Broken wall around a hole: tile n has bit 1 = N open, 2 = E, 4 = S, 8 = W,
+# at EDGE_ORIGIN + (n % 8, n / 8). See tools/make_background_tiles.gd.
+const EDGE_ORIGIN := Vector2i(0, 4)
 
 ## For hand-made `background` rows. A piece's letter marks its top-left cell;
-## the rest of its cells can be anything. "." leaves the cell open to the
-## skyline; any other character is plain wall.
+## the rest of its cells can be anything. "." knocks the wall out so the
+## skyline shows (the wall around it gets a crumbled edge); any other
+## character is plain wall.
 const BACKGROUND_LEGEND := {
 	"W": WINDOW_SMALL, "L": WINDOW_LARGE, "P": POSTERS, "G": GRAFFITI,
 	"V": [LIGHT_LIT, Vector2i.ONE], "v": [LIGHT_DEAD, Vector2i.ONE],
@@ -161,6 +165,7 @@ func _make_background(hand_rows: Array) -> TileMapLayer:
 		_decorate(cells)
 	else:
 		_apply_hand_rows(cells, hand_rows)
+		_break_edges(cells)
 	for cell in cells:
 		var coords: Vector2i = cells[cell]
 		_ensure_tile(layer, coords)
@@ -255,10 +260,28 @@ func _apply_hand_rows(cells: Dictionary, hand_rows: Array) -> void:
 				_put(cells, c, BACKGROUND_LEGEND[ch])
 
 
+## Plain wall next to an opening gets a crumbled edge on each open side.
+func _break_edges(cells: Dictionary) -> void:
+	var sides := [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
+	var edges := {}
+	for cell in cells:
+		if not cells[cell] in WALLS:
+			continue
+		var open := 0
+		for i in sides.size():
+			var n: Vector2i = cell + sides[i]
+			if n.x >= 0 and n.y >= 0 and n.x < _w and n.y < _h and not cells.has(n):
+				open |= 1 << i
+		if open != 0:
+			edges[cell] = EDGE_ORIGIN + Vector2i(open % 8, open / 8)
+	cells.merge(edges, true)
+
+
 # ------------------------------------------------------------- Skyline ----
 
-## The skyline repeats sideways and stays put vertically, with its bottom edge
-## at the bottom of the screen. Sky colour fills above it, ground colour below.
+## The skyline repeats sideways and stays put vertically, its bottom edge a
+## little above the bottom of the screen. Sky colour fills above it, ground
+## colour below.
 func _make_skyline() -> Parallax2D:
 	var parallax := Parallax2D.new()
 	parallax.name = "Skyline"

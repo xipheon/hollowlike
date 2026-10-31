@@ -34,7 +34,7 @@ var _hitbox: Area2D
 func _init() -> void:
 	boss_name = "THE WARDEN"
 	reward_ability = "dash"
-	max_health = 24
+	max_health = 40
 
 
 func _ready() -> void:

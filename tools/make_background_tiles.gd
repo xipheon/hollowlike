@@ -11,7 +11,7 @@ extends SceneTree
 const TILE := 32
 const SRC := "res://art/tiles/source/"
 const SHEET_PATH := "res://art/tiles/background.png"
-const SHEET_SIZE := Vector2i(8, 4)  # in tiles
+const SHEET_SIZE := Vector2i(8, 6)  # in tiles
 const PREVIEW_PATH := "res://art/tiles/source/background_preview.png"
 const PREVIEW_SCALE := 2
 const SKYLINE_PATH := "res://art/backgrounds/skyline.png"
@@ -46,6 +46,12 @@ const PIECES := [
 	["graffiti_raw.png", Vector2i(5, 2), Vector2i(2, 1)],
 ]
 const JUNCTION_CELL := Vector2i(0, 3)
+# Broken wall edges around a hole knocked through the wall: 16 tiles in rows
+# 4-5, one per set of open sides. Tile n has bit 1 = N open, 2 = E, 4 = S,
+# 8 = W, and sits at (n % 8, 4 + n / 8).
+const EDGE_ORIGIN := Vector2i(0, 4)
+const EDGE_DEPTH := Vector2i(1, 9)  # how far a broken edge bites in, min/max px
+const EDGE_CHUNK := 4               # edge pixels per bite
 
 # Sample wall for the preview. Letters are sheet cells, see LEGEND.
 const PREVIEW_ROWS := [
@@ -84,6 +90,8 @@ func _init() -> void:
 	_pipe(sheet, JUNCTION_CELL * TILE, false)
 	_pipe(sheet, JUNCTION_CELL * TILE, true)
 	_fitting(sheet, JUNCTION_CELL * TILE)
+	for n in 16:
+		_broken_edges(sheet, (EDGE_ORIGIN + Vector2i(n % 8, n / 8)) * TILE, n)
 	for p in PIECES:
 		var path: String = SRC + p[0]
 		if not FileAccess.file_exists(path):
@@ -211,6 +219,30 @@ func _fitting(img: Image, o: Vector2i) -> void:
 	for a in range(lo + 1, hi + 1):
 		img.set_pixel(o.x + hi, o.y + a, img.get_pixel(o.x + hi, o.y + a).darkened(0.4))
 		img.set_pixel(o.x + a, o.y + hi, img.get_pixel(o.x + a, o.y + hi).darkened(0.4))
+
+
+## Knocks ragged bites out of the wall along each open side in `open_sides`
+## (bits: 1 N, 2 E, 4 S, 8 W), with a dark broken face just inside the bite.
+func _broken_edges(img: Image, o: Vector2i, open_sides: int) -> void:
+	for y in TILE:
+		for x in TILE:
+			var bite := 0     # how far inside the nearest broken edge this pixel is (<0 = gone)
+			var nearest := TILE
+			for side in 4:
+				if open_sides & (1 << side) == 0:
+					continue
+				# [distance from that side, position along it]
+				var d: Array = [[y, x], [TILE - 1 - x, y], [TILE - 1 - y, x], [x, y]][side]
+				var depth := EDGE_DEPTH.x + int(_noise(d[1] / EDGE_CHUNK, side, 11) * (EDGE_DEPTH.y - EDGE_DEPTH.x + 1))
+				nearest = mini(nearest, d[0] - depth)
+			bite = nearest
+			var at := o + Vector2i(x, y)
+			if bite < 0 or (bite == 0 and _noise(x, y, 12) < 0.35):
+				img.set_pixelv(at, Color(0, 0, 0, 0))
+			elif bite <= 1:
+				img.set_pixelv(at, SOOT)
+			elif bite == 2:
+				img.set_pixelv(at, img.get_pixelv(at).darkened(0.3))
 
 
 ## Crops away empty columns on either side, keeping the full height so a
