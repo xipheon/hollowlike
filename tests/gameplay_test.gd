@@ -48,7 +48,7 @@ const SEGMENTS := {
 	"harrier": [
 		"_test_harrier_flies_and_swoops", "_test_harrier_shallow_swoop_hits_standing_player",
 		"_test_harrier_swoops_ignore_player_height", "_test_harrier_phase_two_cycle",
-		"_test_harrier_feathers", "_test_harrier_pulls_up_after_hitting_you",
+		"_test_harrier_feathers", "_test_homing_feather_limits", "_test_harrier_pulls_up_after_hitting_you",
 		"_test_harrier_crashes_when_it_misses", "_test_harrier_armor_except_dazed",
 		"_test_harrier_defeat_grants_wall_jump",
 	],
@@ -1021,9 +1021,9 @@ func _test_harrier_feathers() -> void:
 
 	# Curves toward the player.
 	_player._invuln_timer = 999.0   # so it doesn't break on contact mid-check
-	var curver := boss._spawn_feather(Vector2.UP, boss.homing_speed, true)
-	curver.global_position = _player.global_position + Vector2(-100, -60)
-	# A faster feather swings wider, so give it up to two seconds to come round.
+	var curver := boss._spawn_feather(Vector2.DOWN, boss.homing_speed, true)
+	curver.global_position = _player.global_position + Vector2(-100, -160)
+	# Its turns are wide (see _test_homing_feather_limits), so give it up to two seconds.
 	var faced_player := false
 	for i in 120:
 		await _frames(1)
@@ -1078,6 +1078,68 @@ func _test_harrier_feathers() -> void:
 	_main.debug_kill_boss()
 	await _frames(2)
 	_check(_feathers().is_empty(), "feathers cleared on defeat")
+	await _despawn()
+
+
+func _test_homing_feather_limits() -> void:
+	print("Homing feathers: only head downward, turn no tighter than their radius, and can be sidestepped")
+	var boss := await _start_harrier_fight()
+	boss.health = boss.max_health / 2
+	boss.process_mode = Node.PROCESS_MODE_DISABLED   # only the feathers spawned here
+	for f in _feathers():
+		f.queue_free()
+	_player._invuln_timer = 999.0
+	var floor_y := _player.global_position.y
+
+	# Fired sideways from level with you: it swings down and never climbs or flattens out.
+	var flat := boss._spawn_feather(Vector2.RIGHT, boss.homing_speed, true)
+	flat.global_position = _player.global_position + Vector2(-260, -40)
+	var max_tilt := 0.0
+	var climbed := false
+	for i in 90:
+		await _frames(1)
+		if not is_instance_valid(flat):
+			break
+		if flat._heading_down:
+			max_tilt = maxf(max_tilt, absf(flat.tilt()))
+			climbed = climbed or flat.direction.y < 0.0
+	_check(not climbed and rad_to_deg(max_tilt) <= 70.5,
+			"never above 70 degrees from straight down (max %.1f)" % rad_to_deg(max_tilt))
+	if is_instance_valid(flat):
+		flat.queue_free()
+
+	# Once it has seen you, its turn rate is capped by the minimum radius.
+	var turner := boss._spawn_feather(Vector2.DOWN, boss.homing_speed, true)
+	turner.global_position = _player.global_position + Vector2(-140, -200)
+	var cap: float = turner.speed / turner.min_turn_radius / 60.0
+	var fastest := 0.0
+	var last := turner.direction
+	var saw := false
+	for i in 60:
+		await _frames(1)
+		if not is_instance_valid(turner):
+			break
+		saw = saw or turner._seen_player
+		fastest = maxf(fastest, absf(last.angle_to(turner.direction)))
+		last = turner.direction
+	_check(saw, "saw the player")
+	_check(fastest <= cap + 0.0001, "turns no tighter than its radius (%.3f <= %.3f rad/frame)" % [fastest, cap])
+	if is_instance_valid(turner):
+		turner.queue_free()
+
+	# Dropping on you from above: a dash-length sidestep at the last moment gets clear.
+	_player._invuln_timer = 0.0
+	var hp := _player.health
+	var diver := boss._spawn_feather(Vector2.DOWN, boss.homing_speed, true)
+	diver.global_position = _player.global_position + Vector2(0, -160)
+	await _frames(int(100.0 / diver.speed * 60))
+	_player.global_position.x += 3 * TILE
+	for i in 90:
+		await _frames(1)
+		if not is_instance_valid(diver):
+			break
+	_check(_player.health == hp, "sidestepped it (health %d -> %d)" % [hp, _player.health])
+	_check(not is_instance_valid(diver) or diver.global_position.y > floor_y, "it carried on into the floor")
 	await _despawn()
 
 
