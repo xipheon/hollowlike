@@ -1,14 +1,18 @@
 class_name HarrierBoss
 extends BossBase
-## Flying arena boss. Sleeps until activate(), then repeats an attack cycle,
-## hovering high above you between attacks:
-##   Phase one: a few shallow swoops, then a full swoop.
-##   Phase two: a few feather shots, then the shallow swoops, then a full swoop.
+## Flying arena boss. Sleeps until activate(), then repeats an attack cycle:
+##   two feather fans and a homing volley (hovering close to you), then a few
+##   shallow swoops and a full swoop (retreating to the far side of the arena
+##   from you before each). Phase two fires two homing feathers instead of one.
 ## Each new cycle starts once the full swoop is over, crash or not.
-##   Shot:    flashes cyan, then throws a feather straight at you.
-##   Shallow: brief yellow flash, then a fast U-shaped pass that dips to your
-##            height but never reaches the floor.
-##   Full:    flashes orange, then dives in a straight line at where you stood.
+##   Fan:     flashes cyan, then throws three feathers in a spread at you.
+##   Homing:  flashes violet, then releases slow feathers that curve toward
+##            you from different angles. Strike them down, or dodge until they
+##            hit a wall or the floor. It waits for them to be gone.
+##   Shallow: brief yellow flash, then a fast pass from one side of the arena
+##            to the other, diving steeply to skim the floor under you and climbing out
+##            again without touching the floor.
+##   Full:    flashes orange, then dives in a straight line at the floor under you.
 ##            Hits you -> pulls straight back up. Misses -> crashes into the
 ##            floor and lies dazed.
 ## Armoured: takes half damage, except while dazed (full damage). Below half
@@ -16,25 +20,34 @@ extends BossBase
 
 const SIZE := Vector2(52, 36)
 const HITBOX_SIZE := SIZE - Vector2(6, 6)
-const FOLLOW_THROUGH := 0.08   # keeps diving this long after contact so the hit registers
 const LAYER_WORLD := 1
-const MIN_DIVE_STEEPNESS := 0.45   # dives always head this much downward, so they reach the floor
-const SHALLOW_MIN_SPAN := 4.0 * 32.0   # a shallow pass carries at least this far past you
-const SHALLOW_FLOOR_CLEARANCE := 48.0  # its lowest point stays this far above the floor (centre)
+const MIN_DIVE_STEEPNESS := 0.2   # dives always head this much downward, so they reach the floor
+const SHALLOW_FLOOR_CLEARANCE := SIZE.y * 0.5 + 6.0   # lowest a shallow pass goes (centre above floor)
+const ARENA_MARGIN := SIZE.x * 0.5 + 16.0   # how close to the walls it flies
+const HOVER_ARRIVE_DISTANCE := 24.0   # within this of its hover spot, it starts counting down
 
-enum State { DORMANT, HOVER, SHOT_WINDUP, SHALLOW_WINDUP, SHALLOW, SWOOP_WINDUP, SWOOP, DAZED, RISE, DEAD }
+enum State { DORMANT, HOVER, SHOT_WINDUP, HOMING_WINDUP, WAIT_HOMING, SHALLOW_WINDUP, SHALLOW,
+		SWOOP_WINDUP, SWOOP, DAZED, RISE, DEAD }
 
 @export var damage := 2                  ## contact, in half-hearts
 @export var shot_damage := 1             ## per feather, in half-hearts
 @export_range(0.0, 1.0) var damage_reduction := 0.5   ## fraction of each hit blocked, unless dazed
-@export var hover_speed := 420.0
-@export var hover_height := 4.5          ## tiles below the ceiling it hovers at
+@export var hover_speed := 520.0
+@export var hover_height := 4.5          ## tiles below the ceiling it waits at before swoops
+@export var close_hover_distance := 3.5  ## tiles to the side of the player it waits at for feathers
+@export var close_hover_height := 5.5    ## tiles below the ceiling, for feathers
 @export var hover_time := 1.1            ## before each cycle
 @export var chain_gap := 0.35            ## between attacks within a cycle
 @export var shallow_swoop_count := 2
-@export var shot_count := 3              ## phase two only
+@export var shot_count := 3              ## volleys per cycle; the last one is the homing volley
 @export var shot_windup_time := 0.3
-@export var shot_speed := 460.0
+@export var shot_speed := 230.0
+@export var fan_spread_degrees := 16.0   ## angle between the three feathers of a fan
+@export var homing_windup_time := 0.5
+@export var homing_speed := 120.0
+@export var homing_count_phase_one := 1
+@export var homing_count_phase_two := 2
+@export var homing_spread_degrees := 100.0   ## angle between homing feathers when there are two or more
 @export var shallow_windup_time := 0.22
 @export var shallow_speed := 620.0
 @export var windup_time := 0.45          ## full swoop
@@ -49,14 +62,15 @@ var _timer := 0.0
 var _dir := -1
 var _flash_timer := 0.0
 var _swoop_dir := Vector2.DOWN
-var _hover_side := 1
+var _hover_side := 1       # which wall it hangs back by for swoops: -1 left, 1 right
+var _close_side := 1       # which side of the player it hangs by for feathers
 var _damage_carry := 0.0   # reduced hits leave fractions; they add up across hits
-var _swoop_hit := false    # this dive connected: pull up instead of crashing
 var _plan: Array[String] = []   # attacks left in the current cycle
-# Shallow pass: from _path_from across to _path_end_x, dipping to _path_low_y.
+var _homing: Array[HarrierFeather] = []   # live homing feathers it's waiting on
+# Shallow pass: from _path_from across to _path_end_x, bottoming out at _path_low.
 var _path_from := Vector2.ZERO
 var _path_end_x := 0.0
-var _path_low_y := 0.0
+var _path_low := Vector2.ZERO
 var _path_t := 0.0
 var _path_duration := 1.0
 var _hitbox: Area2D
@@ -97,7 +111,7 @@ func _ready() -> void:
 
 func activate(target: Node2D) -> void:
 	super(target)
-	_enter(State.HOVER, hover_time)
+	_hover(hover_time)
 
 
 func is_dazed() -> bool:
@@ -110,19 +124,30 @@ func _speed() -> float:
 
 func _physics_process(delta: float) -> void:
 	_flash_timer = maxf(_flash_timer - delta, 0.0)
-	_timer -= delta * (_speed() if _state in [State.HOVER, State.SHOT_WINDUP, State.SWOOP_WINDUP] else 1.0)
+	var tick := delta * (_speed() if _state in [State.HOVER, State.SHOT_WINDUP, State.HOMING_WINDUP, State.SWOOP_WINDUP] else 1.0)
+	if _state == State.HOVER and global_position.distance_to(_hover_spot()) > HOVER_ARRIVE_DISTANCE:
+		tick = 0.0   # get back to the far side before the next attack
+	_timer -= tick
 
 	match _state:
 		State.DORMANT:
 			velocity = Vector2.ZERO
-		State.HOVER, State.SHOT_WINDUP:
+		State.HOVER, State.SHOT_WINDUP, State.HOMING_WINDUP, State.WAIT_HOMING:
 			_hover_toward_spot(delta)
-			if _timer <= 0.0:
-				if _state == State.SHOT_WINDUP:
-					_fire_feather()
-					_enter(State.HOVER, chain_gap)
-				else:
-					_next_attack()
+			if _state == State.WAIT_HOMING:
+				_homing = _homing.filter(func(f): return is_instance_valid(f))
+				if _homing.is_empty():
+					_hover(chain_gap)
+			elif _timer <= 0.0:
+				match _state:
+					State.SHOT_WINDUP:
+						_fire_fan()
+						_hover(chain_gap)
+					State.HOMING_WINDUP:
+						_fire_homing()
+						_enter(State.WAIT_HOMING, 0.0)
+					_:
+						_next_attack()
 		State.SHALLOW_WINDUP:
 			velocity = Vector2(-_dir * 60.0, -30.0)   # quick flinch back
 			if _timer <= 0.0:
@@ -134,7 +159,6 @@ func _physics_process(delta: float) -> void:
 			velocity = -_swoop_dir * 40.0   # rears back
 			if _timer <= 0.0:
 				attack_log.append("swoop")
-				_swoop_hit = false
 				_enter(State.SWOOP, 2.5)
 		State.SWOOP:
 			velocity = _swoop_dir * swoop_speed * _speed()
@@ -147,21 +171,25 @@ func _physics_process(delta: float) -> void:
 		State.RISE:
 			velocity = Vector2(0, -rise_speed * _speed())
 			if global_position.y <= _hover_spot().y or _timer <= 0.0 or is_on_ceiling():
-				_enter(State.HOVER, hover_time)
+				_hover(hover_time)
 
 	move_and_slide()
 
 	if _state == State.SHALLOW and (_path_t >= 1.0 or is_on_wall() or is_on_floor() or is_on_ceiling()):
-		_enter(State.HOVER, chain_gap)
+		_hover(chain_gap)
 	elif _state == State.SWOOP:
-		if not _swoop_hit and _touching_target(HITBOX_SIZE):
-			_swoop_hit = true   # got you: follow through a moment, then pull up
-			_timer = minf(_timer, FOLLOW_THROUGH)
-		if is_on_floor() and not _swoop_hit:
+		if is_on_floor():
 			_crash()
-		elif is_on_floor() or is_on_wall() or is_on_ceiling() or _timer <= 0.0:
-			_enter(State.RISE, 3.0)   # hit you, or glanced off a wall: no daze
+		elif (is_on_wall() and get_wall_normal().dot(_swoop_dir) < -0.1) or is_on_ceiling() or _timer <= 0.0:
+			_enter(State.RISE, 3.0)   # flew into a wall: no daze (not one it's leaving)
 	queue_redraw()
+
+
+## Called by the player when our contact hitbox lands a hit. A full swoop that
+## connects pulls straight back up instead of crashing.
+func on_hit_player() -> void:
+	if _state == State.SWOOP:
+		_enter(State.RISE, 3.0)
 
 
 func _enter(state: State, time: float) -> void:
@@ -169,21 +197,45 @@ func _enter(state: State, time: float) -> void:
 	_timer = time
 
 
-# High above the player, a little to one side, inside the arena.
-func _hover_spot() -> Vector2:
-	var x := global_position.x
+# Pick where to wait before the next attack: for swoops, the far side of the
+# arena from the player; for feathers, near them on whichever side it's on.
+func _hover(time: float) -> void:
 	if is_instance_valid(_target):
-		x = _target.global_position.x + _hover_side * 3.0 * 32.0
-	var margin := SIZE.x * 0.5 + 16.0
-	x = clampf(x, arena_left + margin, arena_right - margin)
-	return Vector2(x, arena_top + hover_height * 32.0)
+		var px := _target.global_position.x
+		_hover_side = 1 if px < (arena_left + arena_right) * 0.5 else -1
+		_close_side = 1 if global_position.x >= px else -1
+	_enter(State.HOVER, time)
+
+
+## True while it's (about to be) throwing feathers: it hangs close for those.
+func is_feather_phase() -> bool:
+	if _state in [State.SHOT_WINDUP, State.HOMING_WINDUP, State.WAIT_HOMING]:
+		return true
+	# Waiting to start the next attack: a fresh cycle opens with feathers.
+	return _state == State.HOVER and (_plan.is_empty() or _plan[0] in ["shot", "homing"])
+
+
+func _hover_spot() -> Vector2:
+	if is_feather_phase() and is_instance_valid(_target):
+		# Up and to one side of the player, following them; switches sides
+		# rather than pressing into a wall.
+		var lo := arena_left + ARENA_MARGIN
+		var hi := arena_right - ARENA_MARGIN
+		var x := _target.global_position.x + _close_side * close_hover_distance * 32.0
+		if x < lo or x > hi:
+			_close_side = -_close_side
+			x = clampf(_target.global_position.x + _close_side * close_hover_distance * 32.0, lo, hi)
+		return Vector2(x, arena_top + close_hover_height * 32.0)
+	# High up, by the wall on the side away from the player.
+	var far_x := arena_right - ARENA_MARGIN if _hover_side > 0 else arena_left + ARENA_MARGIN
+	return Vector2(far_x, arena_top + hover_height * 32.0)
 
 
 func _hover_toward_spot(delta: float) -> void:
+	# Full speed, easing in over the last couple of tiles, never overshooting.
 	var to_spot := _hover_spot() - global_position
-	velocity = to_spot.limit_length(hover_speed * _speed())
-	if to_spot.length() < 6.0:
-		velocity = to_spot / delta * 0.5
+	var speed := minf(hover_speed * _speed(), to_spot.length() * 6.0)
+	velocity = to_spot.normalized() * minf(speed, to_spot.length() / delta)
 	_face_target()
 
 
@@ -194,75 +246,111 @@ func _face_target() -> void:
 			_dir = int(signf(dx))
 
 
+func _aim_at_target() -> Vector2:
+	if is_instance_valid(_target):
+		return (_target.global_position - global_position).normalized()
+	return Vector2(_dir, 1).normalized()
+
+
 # Starts the next attack in the cycle, planning a new cycle when the last one is done.
 func _next_attack() -> void:
 	if _plan.is_empty():
-		if is_phase_two():
-			for i in shot_count:
-				_plan.append("shot")
+		for i in shot_count - 1:
+			_plan.append("shot")
+		_plan.append("homing")
 		for i in shallow_swoop_count:
 			_plan.append("shallow")
 		_plan.append("swoop")
+	_face_target()
 	match _plan.pop_front():
 		"shot":
-			_face_target()
 			_enter(State.SHOT_WINDUP, shot_windup_time)
+		"homing":
+			_enter(State.HOMING_WINDUP, homing_windup_time)
 		"shallow":
-			_face_target()
 			_enter(State.SHALLOW_WINDUP, shallow_windup_time)
 		"swoop":
 			_start_windup()
 
 
-func _fire_feather() -> void:
+func _fire_fan() -> void:
 	attack_log.append("shot")
-	var aim := global_position + Vector2(_dir, 1)
-	if is_instance_valid(_target):
-		aim = _target.global_position
+	var aim := _aim_at_target()
+	for i in [-1, 0, 1]:
+		_spawn_feather(aim.rotated(deg_to_rad(fan_spread_degrees) * i), shot_speed, false)
+
+
+# Homing feathers start fanned out (so they arrive from different angles)
+# and curve in.
+func _fire_homing() -> void:
+	attack_log.append("homing")
+	var count := homing_count_phase_two if is_phase_two() else homing_count_phase_one
+	var aim := _aim_at_target()
+	for i in count:
+		var offset := 0.0 if count == 1 else lerpf(-0.5, 0.5, float(i) / (count - 1)) * deg_to_rad(homing_spread_degrees)
+		_homing.append(_spawn_feather(aim.rotated(offset), homing_speed, true))
+
+
+func _spawn_feather(direction: Vector2, speed: float, homing: bool) -> HarrierFeather:
 	var feather := HarrierFeather.new()
-	feather.direction = (aim - global_position).normalized()
-	feather.speed = shot_speed * _speed()
+	feather.direction = direction
+	feather.speed = speed * _speed()
+	feather.homing = homing
+	if homing:
+		feather.lifetime = 7.0   # a safety net; walls, floor, you or an attack end it first
 	feather.set_meta("damage", shot_damage)
 	feather.position = global_position
 	get_parent().add_child(feather)
+	return feather
 
 
-# Locks the pass onto the player: across and past them, dipping to their
-# height (clipping a standing player's head), never down to the floor.
+# Locks the pass onto the player's x: wall to wall across the arena, diving steeply
+# to skim the floor under them and climbing out again, never touching it.
 func _start_shallow() -> void:
 	attack_log.append("shallow")
-	var target := global_position + Vector2(_dir * SHALLOW_MIN_SPAN, 4.0 * 32.0)
+	# Only the player's x counts: it always bottoms out just above the floor.
+	var low := Vector2((arena_left + arena_right) * 0.5, arena_bottom - SHALLOW_FLOOR_CLEARANCE)
 	if is_instance_valid(_target):
-		target = _target.global_position
-	var dir := signf(target.x - global_position.x)
-	if dir == 0.0:
-		dir = _dir
-	var margin := SIZE.x * 0.5 + 16.0
+		low.x = _target.global_position.x
+	var heading := signf(low.x - global_position.x)
+	if heading == 0.0:
+		heading = -_hover_side
 	_path_from = global_position
-	_path_end_x = clampf(target.x + dir * maxf(absf(target.x - global_position.x), SHALLOW_MIN_SPAN),
-			arena_left + margin, arena_right - margin)
-	_path_low_y = maxf(minf(target.y - 26.0, arena_bottom - SHALLOW_FLOOR_CLEARANCE), _path_from.y)
-	var length := absf(_path_end_x - _path_from.x) + 2.0 * (_path_low_y - _path_from.y)
-	_path_duration = maxf(length / shallow_speed, 0.3)
+	_path_end_x = arena_right - ARENA_MARGIN if heading > 0.0 else arena_left + ARENA_MARGIN
+	_path_low = low
+	var span := absf(_path_end_x - _path_from.x)
+	_path_duration = maxf((span + 2.0 * (low.y - _path_from.y)) / shallow_speed, 0.4)
 	_path_t = 0.0
-	_hover_side = -_hover_side   # pass ends on the other side; hover there next
 	_enter(State.SHALLOW, 0.0)
 
 
+# x moves steadily wall to wall; y eases down to the low point (steep at first,
+# levelling out under the player) and back up the same way on the far side.
 func _shallow_point(t: float) -> Vector2:
-	return Vector2(lerpf(_path_from.x, _path_end_x, t),
-			_path_from.y + (_path_low_y - _path_from.y) * sin(PI * t))
+	var x := lerpf(_path_from.x, _path_end_x, t)
+	var span := _path_end_x - _path_from.x
+	var low_t := clampf((_path_low.x - _path_from.x) / span, 0.15, 0.85) if span != 0.0 else 0.5
+	var depth := _path_low.y - _path_from.y
+	var y: float
+	if t < low_t:
+		y = _path_from.y + depth * sin(PI * 0.5 * t / low_t)
+	else:
+		y = _path_from.y + depth * sin(PI * 0.5 * (1.0 - t) / (1.0 - low_t))
+	return Vector2(x, y)
 
 
-# Locks the dive line onto where the player stands right now.
+# Locks the dive line onto the floor under the player right now (their height
+# doesn't matter: it always dives to the ground).
 func _start_windup() -> void:
-	var aim := global_position + Vector2.DOWN * 100.0
+	var aim_x := global_position.x + _dir * 32.0
 	if is_instance_valid(_target):
-		aim = _target.global_position
-	_swoop_dir = (aim - global_position).normalized()
+		aim_x = _target.global_position.x
+	# Aim our centre a hair below body height above the floor: we pass through
+	# a standing player there and hit the ground just beyond.
+	var aim_y := arena_bottom - SIZE.y * 0.5 + 4.0
+	_swoop_dir = (Vector2(aim_x, aim_y) - global_position).normalized()
 	if _swoop_dir.y < MIN_DIVE_STEEPNESS:
 		_swoop_dir = Vector2(signf(_swoop_dir.x) * sqrt(1.0 - MIN_DIVE_STEEPNESS ** 2), MIN_DIVE_STEEPNESS)
-	_hover_side = -_hover_side   # come back up on the other side next time
 	_face_target()
 	_enter(State.SWOOP_WINDUP, windup_time)
 
@@ -319,14 +407,17 @@ func become_corpse() -> void:
 func _draw() -> void:
 	var half := SIZE * 0.5
 	var body := Color(0.2, 0.45, 0.5) if not is_phase_two() else Color(0.45, 0.25, 0.55)
-	if _state == State.SWOOP_WINDUP:
-		body = Color(1.0, 0.55, 0.15)   # telegraphs: orange = full dive,
-	elif _state == State.SHALLOW_WINDUP:
-		body = Color(1.0, 0.9, 0.3)     # yellow = shallow pass,
-	elif _state == State.SHOT_WINDUP:
-		body = Color(0.55, 0.95, 1.0)   # cyan = feather
-	elif _state in [State.DAZED, State.DEAD]:
-		body = body.darkened(0.4)
+	match _state:
+		State.SWOOP_WINDUP:
+			body = Color(1.0, 0.55, 0.15)   # telegraphs: orange = full dive,
+		State.SHALLOW_WINDUP:
+			body = Color(1.0, 0.9, 0.3)     # yellow = shallow pass,
+		State.SHOT_WINDUP:
+			body = Color(0.55, 0.95, 1.0)   # cyan = feather fan,
+		State.HOMING_WINDUP:
+			body = Color(0.8, 0.6, 1.0)     # violet = homing feathers
+		State.DAZED, State.DEAD:
+			body = body.darkened(0.4)
 	if _flash_timer > 0.0:
 		body = Color.WHITE
 	if _state == State.DEAD:

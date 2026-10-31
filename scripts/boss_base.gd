@@ -4,7 +4,9 @@ extends CharacterBody2D
 ## it sets the arena bounds, calls activate() after the intro, shows boss_name,
 ## and on `defeated` grants reward_ability and saves where the corpse lies.
 ## Subclasses set boss_name / reward_ability / max_health in _init() and
-## implement activate(), take_hit(), debug_kill() and become_corpse().
+## implement activate(), take_hit(), debug_kill() and become_corpse(). They can
+## also define on_hit_player(), which the player calls when their contact
+## hitbox lands a hit.
 
 signal health_changed(current: int, maximum: int)
 signal defeated
@@ -46,13 +48,3 @@ func become_corpse() -> void:
 
 func is_phase_two() -> bool:
 	return health * 2 <= max_health
-
-
-# Whether our contact hitbox (of `hitbox_size`, centred on us) overlaps the
-# living player's hurtbox, i.e. the hit actually lands.
-func _touching_target(hitbox_size: Vector2) -> bool:
-	if not is_instance_valid(_target) or not _target.visible:
-		return false
-	var d := (_target.global_position - global_position).abs()
-	var reach := (hitbox_size + Player.HURTBOX_SIZE) * 0.5 - Vector2(2, 2)
-	return d.x < reach.x and d.y < reach.y

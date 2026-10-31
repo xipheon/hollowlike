@@ -100,8 +100,9 @@ func _ready() -> void:
 	await _test_climb_top_door_to_aerie_and_back()
 	await _test_harrier_flies_and_swoops()
 	await _test_harrier_shallow_swoop_hits_standing_player()
+	await _test_harrier_swoops_ignore_player_height()
 	await _test_harrier_phase_two_cycle()
-	await _test_harrier_feather_hurts()
+	await _test_harrier_feathers()
 	await _test_harrier_pulls_up_after_hitting_you()
 	await _test_harrier_crashes_when_it_misses()
 	await _test_harrier_armor_except_dazed()
@@ -730,25 +731,29 @@ func _test_warden_damage_split_and_phase_two() -> void:
 
 
 func _test_warden_charge_stops_at_player() -> void:
-	print("Warden: a charge stops when it runs into you, without the daze")
-	var boss := await _start_boss_fight()
-	await _frames(1)
-	var floor_y := boss.global_position.y + WardenBoss.SIZE.y * 0.5 - Player.BODY_SIZE.y * 0.5
-	_player.global_position = Vector2(boss.global_position.x - 200, floor_y)
-	var hp := _player.health
-	boss._dir = -1
-	boss._enter(WardenBoss.State.CHARGE, 3.0)
-	var stopped_at := 0.0
-	for i in 60:
+	for running_away in [false, true]:
+		print("Warden: a charge stops when it hits you, without the daze (%s)" % ["running away" if running_away else "standing"])
+		var boss := await _start_boss_fight()
 		await _frames(1)
-		if boss._state != WardenBoss.State.CHARGE:
-			stopped_at = boss.global_position.x
-			break
-	await _frames(3)
-	_check(_player.health == hp - boss.body_damage, "the hit landed (%d half-hearts)" % (hp - _player.health))
-	_check(boss._state == WardenBoss.State.RECOVER, "stopped and recovering, not dazed (%s)" % WardenBoss.State.keys()[boss._state])
-	_check(stopped_at - boss.arena_left > 3 * TILE, "well short of the wall (%.1f tiles out)" % ((stopped_at - boss.arena_left) / TILE))
-	await _despawn()
+		var floor_y := boss.global_position.y + WardenBoss.SIZE.y * 0.5 - Player.BODY_SIZE.y * 0.5
+		_player.global_position = Vector2(boss.global_position.x - 200, floor_y)
+		var hp := _player.health
+		if running_away:
+			Input.action_press("move_left")
+		boss._dir = -1
+		boss._enter(WardenBoss.State.CHARGE, 3.0)
+		var stopped_at := 0.0
+		for i in 90:
+			await _frames(1)
+			if boss._state != WardenBoss.State.CHARGE:
+				stopped_at = boss.global_position.x
+				break
+		_release_all()
+		await _frames(3)
+		_check(_player.health == hp - boss.body_damage, "the hit landed (%d half-hearts)" % (hp - _player.health))
+		_check(boss._state == WardenBoss.State.RECOVER, "stopped and recovering, not dazed (%s)" % WardenBoss.State.keys()[boss._state])
+		_check(stopped_at - boss.arena_left > 2 * TILE, "short of the wall (%.1f tiles out)" % ((stopped_at - boss.arena_left) / TILE))
+		await _despawn()
 
 
 func _test_camera_returns_to_player_after_boss() -> void:
@@ -804,103 +809,233 @@ func _start_harrier_fight() -> HarrierBoss:
 	await _frames(3)
 	_check(await _wait_for_intro_end(), "intro cutscene finished")
 	_check(get_viewport().get_camera_2d() == _main._arena_camera, "camera locked on the arena")
+	# Feathers and swoops land a lot of hits on a player standing still; enough
+	# health to sit through a whole cycle.
+	_player.max_health = 99
+	_player.health = 99
 	return _main._boss
 
 
 func _test_harrier_flies_and_swoops() -> void:
-	print("Harrier: shallow swoops first, then a full swoop; stays inside the arena")
+	print("Harrier phase one: feathers up close, then shallow swoops and a full swoop from the far side")
 	var boss := await _start_harrier_fight()
 	_player._invuln_timer = 999.0
 	var in_bounds := true
-	var highest := INF
+	var hover_frames := 0
+	var hover_far_side := 0
+	var feather_hover_frames := 0
+	var feather_hover_close := 0
+	var most_homing := 0
 	var shallow_lowest := -INF
 	var shallow_touched_floor := false
-	for i in 900:
+	var shallow_min_x := INF
+	var shallow_max_x := -INF
+	var arena_mid := (boss.arena_left + boss.arena_right) * 0.5
+	for i in 1800:
 		await _frames(1)
 		var p := boss.global_position
-		highest = minf(highest, p.y)
+		var settled := p.distance_to(boss._hover_spot()) < HarrierBoss.HOVER_ARRIVE_DISTANCE
+		if boss.is_feather_phase() and settled:
+			feather_hover_frames += 1
+			if absf(p.x - _player.global_position.x) < 5 * TILE:
+				feather_hover_close += 1
+		elif boss._state == HarrierBoss.State.HOVER and settled:
+			hover_frames += 1
+			if signf(p.x - arena_mid) != signf(_player.global_position.x - arena_mid):
+				hover_far_side += 1
+		most_homing = maxi(most_homing, _feathers().filter(func(f): return f.homing).size())
 		if boss._state == HarrierBoss.State.SHALLOW:
 			shallow_lowest = maxf(shallow_lowest, p.y)
 			shallow_touched_floor = shallow_touched_floor or boss.is_on_floor()
+			shallow_min_x = minf(shallow_min_x, p.x)
+			shallow_max_x = maxf(shallow_max_x, p.x)
 		if p.x < boss.arena_left or p.x > boss.arena_right or p.y < boss.arena_top or p.y > boss.arena_bottom:
 			in_bounds = false
 		if boss.attack_log.size() >= 6:
 			break
 	print("        attacks: %s" % [boss.attack_log])
-	_check(boss.attack_log.slice(0, 6) == ["shallow", "shallow", "swoop", "shallow", "shallow", "swoop"],
-			"cycle: 2 shallow swoops then a full swoop, repeating")
+	_check(boss.attack_log.slice(0, 6) == ["shot", "shot", "homing", "shallow", "shallow", "swoop"],
+			"cycle: 2 fans, homing, 2 shallow swoops, a full swoop")
+	_check(most_homing == 1, "a single homing feather in phase one (%d)" % most_homing)
+	_check(feather_hover_frames > 20 and feather_hover_close == feather_hover_frames,
+			"hovers close to you for feathers (%d/%d frames)" % [feather_hover_close, feather_hover_frames])
+	_check(hover_frames > 20 and hover_far_side == hover_frames,
+			"hovers on the far side from you for swoops (%d/%d frames)" % [hover_far_side, hover_frames])
 	_check(boss.shallow_windup_time < boss.windup_time, "shallow swoops have the shorter telegraph")
-	var floor_y := boss.arena_bottom
-	_check(not shallow_touched_floor and floor_y - (shallow_lowest + HarrierBoss.SIZE.y * 0.5) > 16.0,
-			"shallow swoops stay off the floor (lowest %.0f px above it)" % (floor_y - shallow_lowest - HarrierBoss.SIZE.y * 0.5))
-	_check(shallow_lowest > _player.global_position.y - Player.BODY_SIZE.y, "but dip down to the player's height")
-	_check(highest < _player.global_position.y - 4 * TILE, "flew well above the player")
+	var arena_width := boss.arena_right - boss.arena_left
+	_check(shallow_max_x - shallow_min_x > arena_width * 0.75,
+			"shallow swoops go wall to wall (%.0f of %.0f px)" % [shallow_max_x - shallow_min_x, arena_width])
+	var gap := boss.arena_bottom - (shallow_lowest + HarrierBoss.SIZE.y * 0.5)
+	_check(not shallow_touched_floor and gap > 0.0, "shallow swoops stay off the floor (lowest %.0f px above it)" % gap)
+	_check(absf(shallow_lowest - _player.global_position.y) < 6.0,
+			"and skim close to the ground, through a standing player (%.0f px off their middle)" % (shallow_lowest - _player.global_position.y))
 	_check(in_bounds, "stayed inside the arena")
 	await _despawn()
 
 
 func _test_harrier_shallow_swoop_hits_standing_player() -> void:
-	print("Harrier: a shallow swoop clips a player standing still")
+	print("Harrier: a shallow swoop hits a player standing still")
 	var boss := await _start_harrier_fight()
-	var hp := _player.health
-	for i in 300:
+	for i in 1500:
 		await _frames(1)
-		if _player.health < hp or boss.attack_log.has("swoop"):
+		if boss._state == HarrierBoss.State.SHALLOW_WINDUP:
 			break
-	_check(_player.health == hp - boss.damage and not boss.attack_log.has("swoop"),
-			"hit by a shallow swoop (%d half-hearts)" % (hp - _player.health))
+	_place(15, 15)   # standing on the floor (feather hits may have knocked us about)
+	_player._invuln_timer = 0.0
+	for i in 60:
+		await _frames(1)
+		if boss._state == HarrierBoss.State.SHALLOW:
+			break
+	var hp := _player.health
+	for i in 180:
+		await _frames(1)
+		if boss._state != HarrierBoss.State.SHALLOW:
+			break
+	_check(_player.health == hp - boss.damage, "hit by a shallow swoop (%d half-hearts)" % (hp - _player.health))
 	await _despawn()
+
+
+func _test_harrier_swoops_ignore_player_height() -> void:
+	print("Harrier: swoops go to the ground under you, even when you're up on a perch")
+	var boss := await _start_harrier_fight()
+	_player._invuln_timer = 999.0   # stays put on the perch
+	_player.global_position = Vector2(10.5 * TILE, 10 * TILE - Player.BODY_SIZE.y * 0.5)   # upper-left perch
+	var lowest := -INF
+	var dive_target_y := 0.0
+	for i in 1800:
+		await _frames(1)
+		if boss._state == HarrierBoss.State.SHALLOW:
+			lowest = maxf(lowest, boss.global_position.y)
+		if boss._state == HarrierBoss.State.SWOOP_WINDUP:
+			# Where the locked dive line reaches skimming height (centre half a body above the floor).
+			var d := boss._swoop_dir
+			var t := (boss.arena_bottom - HarrierBoss.SIZE.y * 0.5 - boss.global_position.y) / d.y
+			dive_target_y = boss.global_position.y + d.y * t
+			var dive_target_x := boss.global_position.x + d.x * t
+			_check(absf(dive_target_x - _player.global_position.x) < 1.0 * TILE,
+					"full swoop aims at the floor under the player (%.1f tiles off)" % ((dive_target_x - _player.global_position.x) / TILE))
+			break
+	_check(_player.is_on_floor() and _player.global_position.y < 10 * TILE, "player stayed on the perch")
+	_check(lowest > boss.arena_bottom - 2 * TILE, "shallow swoops still skim the floor (%.0f px above it)" % (boss.arena_bottom - lowest))
+	await _despawn()
+
+
+func _feathers() -> Array:
+	return _main.get_children().filter(func(c): return c is HarrierFeather)
 
 
 func _test_harrier_phase_two_cycle() -> void:
-	print("Harrier phase two: feather shots, shallow swoops, full swoop, then shots again")
+	print("Harrier phase two: 2 feather fans, a homing volley, shallow swoops, full swoop, repeat")
 	var boss := await _start_harrier_fight()
 	boss.health = boss.max_health / 2   # before its first attack
 	_player._invuln_timer = 999.0
-	var feathers := 0
+	var fan_sizes: Array[int] = []
 	var seen := {}
-	for i in 1200:
+	var homing_alive_at_shallow := false
+	for i in 1500:
 		await _frames(1)
-		for f in _main.get_children():
-			if f is HarrierFeather and not seen.has(f):
-				seen[f] = true
-				feathers += 1
+		var fresh := _feathers().filter(func(f): return not seen.has(f))
+		for f in fresh:
+			seen[f] = true
+		var plain := fresh.filter(func(f): return not f.homing)
+		if not plain.is_empty():
+			fan_sizes.append(plain.size())
+		if boss._state == HarrierBoss.State.SHALLOW_WINDUP and _feathers().any(func(f): return f.homing):
+			homing_alive_at_shallow = true
 		if boss.attack_log.size() >= 8:
 			break
 	print("        attacks: %s" % [boss.attack_log])
-	_check(boss.attack_log.slice(0, 8) == ["shot", "shot", "shot", "shallow", "shallow", "swoop", "shot", "shot"],
-			"3 shots, 2 shallow swoops, a full swoop, then back to shots")
-	_check(feathers >= 5, "fired feathers (%d)" % feathers)
+	_check(boss.attack_log.slice(0, 8) == ["shot", "shot", "homing", "shallow", "shallow", "swoop", "shot", "shot"],
+			"2 fans, homing, 2 shallow swoops, a full swoop, then back to fans")
+	_check(fan_sizes.size() >= 2 and fan_sizes.all(func(n): return n == 3), "each fan is 3 feathers %s" % [fan_sizes])
+	_check(not homing_alive_at_shallow, "waited for the homing feathers before swooping")
 	await _despawn()
 
 
-func _test_harrier_feather_hurts() -> void:
-	print("Harrier: a feather hits for half a heart and is cleared when it dies")
+func _test_harrier_feathers() -> void:
+	print("Harrier feathers: fans spread at half speed; homing feathers curve in and can be struck")
 	var boss := await _start_harrier_fight()
 	boss.health = boss.max_health / 2
-	var hp := _player.health
-	var feather := HarrierFeather.new()
-	feather.direction = Vector2.RIGHT
-	feather.set_meta("damage", boss.shot_damage)
-	feather.position = _player.global_position + Vector2(-60, 0)
-	_main.add_child(feather)
-	await _frames(20)
-	_check(_player.health == hp - 1 and boss.shot_damage == 1, "feather hit for %d half-heart(s)" % (hp - _player.health))
-	for i in 3:
-		var f := HarrierFeather.new()
-		f.direction = Vector2.UP
-		f.position = Vector2(20 * TILE, 10 * TILE)
-		_main.add_child(f)
+	boss._fire_fan()
+	var fan := _feathers()
+	_check(fan.size() == 3, "fan of 3")
+	if fan.size() == 3:
+		var angles: Array = fan.map(func(f): return rad_to_deg(f.direction.angle()))
+		angles.sort()
+		_check(absf(angles[1] - angles[0] - boss.fan_spread_degrees) < 0.5 and absf(angles[2] - angles[1] - boss.fan_spread_degrees) < 0.5,
+				"spread %.0f degrees apart" % boss.fan_spread_degrees)
+		_check(is_equal_approx(fan[0].speed, 230.0 * boss.phase_two_speedup), "half the old speed (230, x phase two speed-up)")
+	for f in fan:
+		f.queue_free()
 	await _frames(1)
+
+	boss._fire_homing()
+	var homing := _feathers()
+	_check(homing.size() == 2 and homing.all(func(f): return f.homing), "phase two: 2 homing feathers")
+	if homing.size() == 2:
+		_check(homing[0].direction.angle_to(homing[1].direction) > deg_to_rad(60), "starting at different angles")
+		_check(homing[0].speed < 230.0, "slower than the fan feathers")
+	for f in homing:
+		f.queue_free()
+	await _frames(1)
+
+	# Curves toward the player.
+	_player._invuln_timer = 999.0   # so it doesn't break on contact mid-check
+	var curver := boss._spawn_feather(Vector2.UP, boss.homing_speed, true)
+	curver.global_position = _player.global_position + Vector2(-100, -60)
+	await _frames(75)
+	_player._invuln_timer = 0.0
+	var to_player := (_player.global_position - curver.global_position).normalized()
+	_check(is_instance_valid(curver) and curver.direction.dot(to_player) > 0.7, "homing feather turns toward the player")
+	if is_instance_valid(curver):
+		curver.queue_free()
+
+	# Hits the player: half a heart, and it's gone.
+	var hp := _player.health
+	var hitter := boss._spawn_feather(Vector2.RIGHT, boss.homing_speed, true)
+	hitter.global_position = _player.global_position + Vector2(-40, 0)
+	await _frames(30)
+	_check(_player.health == hp - 1 and not is_instance_valid(hitter), "hit the player for half a heart and broke")
+
+	# Struck by an attack.
+	_player._invuln_timer = 999.0
+	_player.facing = 1
+	var target := boss._spawn_feather(Vector2.UP, 10.0, true)
+	target.global_position = _player.global_position + Vector2(40, 0)
+	await _frames(1)
+	Input.action_press("attack")
+	await _frames(3)
+	Input.action_release("attack")
+	await _frames(2)
+	_check(not is_instance_valid(target), "an attack destroys a homing feather")
+
+	# Plain feathers ignore attacks.
+	var plain := boss._spawn_feather(Vector2.UP, 5.0, false)
+	plain.global_position = _player.global_position + Vector2(40, 0)
+	await _frames(20)
+	Input.action_press("attack")
+	await _frames(3)
+	Input.action_release("attack")
+	await _frames(2)
+	_check(is_instance_valid(plain), "plain feathers can't be struck")
+
+	# Walls and floor.
+	var into_wall := boss._spawn_feather(Vector2.LEFT, boss.homing_speed, true)
+	into_wall.global_position = Vector2(boss.arena_left + 20, 8 * TILE)
+	var into_floor := boss._spawn_feather(Vector2.DOWN, boss.homing_speed, true)
+	into_floor.global_position = Vector2(30 * TILE, boss.arena_bottom - 20)
+	await _frames(20)
+	_check(not is_instance_valid(into_wall) and not is_instance_valid(into_floor), "breaks on walls and the floor")
+
 	_main.debug_kill_boss()
 	await _frames(2)
-	_check(not _main.get_children().any(func(c): return c is HarrierFeather), "feathers cleared on defeat")
+	_check(_feathers().is_empty(), "feathers cleared on defeat")
 	await _despawn()
 
 
 # Waits for the Harrier to lock in a full dive (after its shallow swoops).
 func _wait_for_swoop_windup(boss: HarrierBoss) -> bool:
-	for i in 600:
+	for i in 1200:
 		await _frames(1)
 		if boss._state == HarrierBoss.State.SWOOP_WINDUP:
 			return true
@@ -926,6 +1061,7 @@ func _test_harrier_pulls_up_after_hitting_you() -> void:
 func _test_harrier_crashes_when_it_misses() -> void:
 	print("Harrier: a missed swoop crashes into the floor and leaves it dazed")
 	var boss := await _start_harrier_fight()
+	_player._invuln_timer = 999.0   # stay put at col 15: no knockback from feathers or passes
 	_check(await _wait_for_swoop_windup(boss), "wound up a swoop")
 	# Step well clear of the dive line, to the other side of the arena.
 	var aside := 28.0 if boss._swoop_dir.x < 0.0 else 7.0

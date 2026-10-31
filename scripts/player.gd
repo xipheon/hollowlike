@@ -397,6 +397,14 @@ func _on_attack_body_entered(body: Node) -> void:
 
 
 func _on_attack_area_entered(area: Area2D) -> void:
+	# Breakable projectiles (the Harrier's homing feather); down-strikes bounce off them.
+	if area.is_in_group("breakable") and not _hit_this_swing.has(area):
+		_hit_this_swing[area] = true
+		area.take_hit(attack_damage, _attack_dir)
+		hit_stop(0.03)
+		if _attack_dir == Vector2.DOWN:
+			_pogo()
+		return
 	# Downward strike on spikes bounces you, like Hollow Knight.
 	if _attack_dir == Vector2.DOWN and area.is_in_group("pogo") and not _hit_this_swing.has(area):
 		_hit_this_swing[area] = true
@@ -430,8 +438,17 @@ func _check_hurtbox() -> void:
 			take_damage(damage_of(area), area.global_position, true)
 			return
 		if area.is_in_group("enemy_hitbox"):
-			take_damage(damage_of(area), area.global_position, false)
+			if take_damage(damage_of(area), area.global_position, false):
+				_notify_hit(area)
 			return
+
+
+# Lets whatever just hit us react: a charge stops, a feather breaks. The hitbox
+# itself or its owner (an enemy's contact box) can define on_hit_player().
+func _notify_hit(area: Area2D) -> void:
+	var source: Node = area if area.has_method("on_hit_player") else area.get_parent()
+	if source != null and source.has_method("on_hit_player"):
+		source.on_hit_player()
 
 
 ## How hard a hitbox hits, in half-hearts. Enemies and hazards set it as a
@@ -460,13 +477,14 @@ func kill() -> void:
 	_apply_damage(health, global_position, true)
 
 
-func take_damage(amount: int, source_position: Vector2, is_hazard: bool) -> void:
-	_apply_damage(reduce_damage(amount), source_position, is_hazard)
+## Returns whether the hit landed (false while invulnerable or dead).
+func take_damage(amount: int, source_position: Vector2, is_hazard: bool) -> bool:
+	return _apply_damage(reduce_damage(amount), source_position, is_hazard)
 
 
-func _apply_damage(amount: int, source_position: Vector2, is_hazard: bool) -> void:
+func _apply_damage(amount: int, source_position: Vector2, is_hazard: bool) -> bool:
 	if _dead or _invuln_timer > 0.0:
-		return
+		return false
 	health = maxi(health - amount, 0)
 	health_changed.emit(health, max_health)
 	_invuln_timer = invulnerability_time
@@ -481,7 +499,7 @@ func _apply_damage(amount: int, source_position: Vector2, is_hazard: bool) -> vo
 		_dead = true
 		visible = false
 		died.emit()
-		return
+		return true
 
 	if is_hazard:
 		# Hollow Knight-style: hazards hurt, then put you back on safe ground.
@@ -492,6 +510,7 @@ func _apply_damage(amount: int, source_position: Vector2, is_hazard: bool) -> vo
 		if away == 0.0:
 			away = -facing
 		velocity = Vector2(away * knockback.x, knockback.y)
+	return true
 
 
 # ---------------------------------------------------------------- Juice ----

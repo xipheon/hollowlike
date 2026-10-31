@@ -108,9 +108,7 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
-	if _state == State.CHARGE and _touching_target(HITBOX_SIZE):
-		_charge_into_player()
-	elif _state == State.CHARGE and (is_on_wall() or _timer <= 0.0):
+	if _state == State.CHARGE and (is_on_wall() or _timer <= 0.0):
 		_charge_end()
 	elif _state == State.LEAP and is_on_floor() and _timer <= 0.0:
 		_land()
@@ -169,10 +167,12 @@ func _charge_end() -> void:
 	if is_phase_two():
 		_shockwave()
 
-# Ran into you: stops short, no daze (that's the reward for dodging into a wall).
-func _charge_into_player() -> void:
-	velocity.x = 0.0
-	_enter(State.RECOVER, recover_time / _speed())
+## Called by the player when our contact hitbox lands a hit. A charge that
+## connects stops short, no daze (that's the reward for dodging into a wall).
+func on_hit_player() -> void:
+	if _state == State.CHARGE:
+		velocity.x = 0.0
+		_enter(State.RECOVER, recover_time / _speed())
 
 func _shockwave() -> void:
 	var feet := global_position + Vector2(0, SIZE.y * 0.5)
