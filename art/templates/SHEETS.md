@@ -185,7 +185,7 @@ Guide colours:
 | Tile | What it is |
 |---|---|
 | PLAT L / MID / R / ONE | One-way platform (`=`). Its collision is the top 10 px. ONE is a single-tile platform. |
-| SPIKE, SPIKE 2 | Floor spikes (`^`). The damage area is the bottom 14 px. Two variants so a long row doesn't repeat. |
+| SPIKE, SPIKE 2-4 | Floor spikes (`^`). The damage area is the bottom 24 px. Four variants so a long row doesn't repeat. |
 | GATE / GATE END | Arena gate (`|`), shut: the middle of the column and its bottom tile (spiked tips). |
 | GATE UP | Raised gate: only the tips peek out, about 8 px. |
 | ACID TOP 1-4 | Acid surface (`~` with air above). The liquid starts 8 px down. 4 animation frames. |

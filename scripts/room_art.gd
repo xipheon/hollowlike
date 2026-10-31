@@ -1,7 +1,7 @@
 class_name RoomArt
 extends RefCounted
 ## Builds a room's tile art from its ASCII rows: solid terrain, one-way
-## platforms and acid on the
+## platforms, spikes and acid on the
 ## main tile sheet, the warehouse wall behind (with windows the skyline shows
 ## through), and the far skyline as a parallax layer. Art only: collisions and
 ## hazards stay in main.gd.
@@ -29,6 +29,7 @@ const PLAT_L := Vector2i(0, 4)
 const PLAT_MID := Vector2i(1, 4)
 const PLAT_R := Vector2i(2, 4)
 const PLAT_ONE := Vector2i(3, 4)
+const SPIKES := [Vector2i(4, 4), Vector2i(5, 4), Vector2i(3, 6), Vector2i(4, 6)]
 const ACID_FRAMES := 4
 const ACID_FRAME_TIME := 0.24
 
@@ -133,8 +134,9 @@ func _ensure_tile(layer: TileMapLayer, coords: Vector2i) -> void:
 func _make_foreground() -> TileMapLayer:
 	var layer := _layer(TILESET, 0)
 	layer.name = "Terrain"
-	for coords in _terrain_by_sides.values() + [PLAT_L, PLAT_MID, PLAT_R, PLAT_ONE]:
+	for coords in _terrain_by_sides.values() + [PLAT_L, PLAT_MID, PLAT_R, PLAT_ONE] + SPIKES:
 		_ensure_tile(layer, coords)
+	var last_spike := -1   # variant of the spike just to the left, so neighbours differ
 	for coords in [ACID_TOP, ACID_FILL]:
 		_source(layer).create_tile(coords)
 		_source(layer).set_tile_animation_columns(coords, ACID_FRAMES)
@@ -157,6 +159,12 @@ func _make_foreground() -> TileMapLayer:
 					var right := _ch(x + 1, y) == "="
 					var plat := PLAT_MID if left and right else PLAT_R if left else PLAT_L if right else PLAT_ONE
 					layer.set_cell(Vector2i(x, y), 0, plat)
+				"^":
+					var variant := absi(hash(Vector2i(x, y))) % SPIKES.size()
+					if _ch(x - 1, y) == "^" and variant == last_spike:
+						variant = (variant + 1) % SPIKES.size()
+					last_spike = variant
+					layer.set_cell(Vector2i(x, y), 0, SPIKES[variant])
 	return layer
 
 

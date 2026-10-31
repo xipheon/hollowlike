@@ -1,12 +1,11 @@
 extends Node2D
 ## Builds a room from LevelData (ASCII): tile art (RoomArt), collisions and
-## hazards, entities. Spikes, gates and doors are still placeholders drawn
-## here.
+## hazards, entities. Gates and doors are still placeholders drawn here.
 
 const TILE := 32
 const LAYER_WORLD := 1
 const LAYER_PLATFORMS := 32
-const SPIKE_COLOR := Color(0.75, 0.78, 0.85)
+const SPIKE_HEIGHT := 24.0   # damage area: the bottom of the tile, up to the spike tips
 const DOOR_COLOR := Color(0.02, 0.02, 0.04)
 const DOOR_FRAME_COLOR := Color(0.5, 0.45, 0.35)
 const GATE_COLOR := Color(0.6, 0.6, 0.65)
@@ -286,9 +285,9 @@ func _add_spikes(x: int, y: int) -> void:
 	area.monitoring = false
 	var shape := CollisionShape2D.new()
 	var rs := RectangleShape2D.new()
-	rs.size = Vector2(28, 16)
+	rs.size = Vector2(28, SPIKE_HEIGHT)
 	shape.shape = rs
-	shape.position = Vector2(x * TILE + 16, y * TILE + 24)
+	shape.position = Vector2(x * TILE + 16, (y + 1) * TILE - SPIKE_HEIGHT * 0.5)
 	area.add_child(shape)
 	add_child(area)
 
@@ -442,18 +441,12 @@ func _spawn_pickup(ability: String, label: String, tile_origin: Vector2) -> void
 
 # ------------------------------------------------- Placeholder tile art ----
 
-# Ground, platforms, acid and the background are tile art (RoomArt). These still aren't.
+# Ground, platforms, spikes, acid and the background are tile art (RoomArt). These still aren't.
 func _draw() -> void:
 	for y in _h:
 		for x in _w:
 			var r := Rect2(x * TILE, y * TILE, TILE, TILE)
 			match _ch(x, y):
-				"^":
-					for i in 4:
-						var x0 := r.position.x + i * 8.0
-						draw_colored_polygon(PackedVector2Array([
-							Vector2(x0, r.end.y), Vector2(x0 + 4, r.end.y - 18), Vector2(x0 + 8, r.end.y)]),
-							SPIKE_COLOR)
 				"|":
 					if _gate_closed:
 						for i in 4:

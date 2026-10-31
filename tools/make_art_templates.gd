@@ -70,10 +70,11 @@ const TERRAIN := [
 # Everything else on the tile sheet: [col, row, label, guide line y or -1].
 const TILE_CELLS := [
 	[0, 4, "PLAT\nL", 10], [1, 4, "PLAT\nMID", 10], [2, 4, "PLAT\nR", 10], [3, 4, "PLAT\nONE", 10],
-	[4, 4, "SPIKE", 14], [5, 4, "SPIKE\n2", 14], [6, 4, "GATE", -1], [7, 4, "GATE\nEND", -1],
+	[4, 4, "SPIKE", 24], [5, 4, "SPIKE\n2", 24], [6, 4, "GATE", -1], [7, 4, "GATE\nEND", -1],
 	[0, 5, "ACID\nTOP 1", 8], [1, 5, "ACID\nTOP 2", 8], [2, 5, "ACID\nTOP 3", 8], [3, 5, "ACID\nTOP 4", 8],
 	[4, 5, "ACID\nFILL1", -1], [5, 5, "ACID\nFILL2", -1], [6, 5, "ACID\nFILL3", -1], [7, 5, "ACID\nFILL4", -1],
 	[0, 6, "GATE\nUP", 8], [1, 6, "DOOR", -1], [2, 6, "DOOR\nTOP", 6],
+	[3, 6, "SPIKE\n3", 24], [4, 6, "SPIKE\n4", 24],
 ]
 
 const CELL_A := Color8(236, 236, 242)
@@ -216,7 +217,7 @@ func _tile_guide() -> Image:
 		var pos := Vector2i(t[0] * TILE, t[1] * TILE)
 		# Labels sit at the bottom, clear of the guide lines near the top.
 		var lines: int = t[2].count("\n") + 1
-		var label_y := 2 if t[2].begins_with("SPIKE") else TILE - 1 - lines * 6
+		var label_y := TILE - 1 - lines * 6
 		_text(img, pos + Vector2i(2, label_y), t[2])
 		if t[3] >= 0:
 			# Platform thickness / spike height / acid surface / frame depth.
@@ -286,7 +287,7 @@ func _write_spec() -> void:
 	md += "**Other tiles.** The blue dotted line marks a size the game uses:\n\n"
 	md += "| Tile | What it is |\n|---|---|\n"
 	md += "| PLAT L / MID / R / ONE | One-way platform (`=`). Its collision is the top 10 px. ONE is a single-tile platform. |\n"
-	md += "| SPIKE, SPIKE 2 | Floor spikes (`^`). The damage area is the bottom 14 px. Two variants so a long row doesn't repeat. |\n"
+	md += "| SPIKE, SPIKE 2-4 | Floor spikes (`^`). The damage area is the bottom 24 px. Four variants so a long row doesn't repeat. |\n"
 	md += "| GATE / GATE END | Arena gate (`|`), shut: the middle of the column and its bottom tile (spiked tips). |\n"
 	md += "| GATE UP | Raised gate: only the tips peek out, about 8 px. |\n"
 	md += "| ACID TOP 1-4 | Acid surface (`~` with air above). The liquid starts 8 px down. 4 animation frames. |\n"
