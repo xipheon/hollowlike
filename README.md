@@ -1,4 +1,4 @@
-# Hollowlike Prototype (Godot 4.3+)
+# Hollowlike Prototype (Godot 4.7+)
 
 Open this folder in Godot (Import -> project.godot) and press F5.
 
