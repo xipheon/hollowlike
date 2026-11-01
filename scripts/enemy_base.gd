@@ -3,11 +3,12 @@ extends CharacterBody2D
 ## What every regular enemy shares (bosses have BossBase): health, contact
 ## damage, the hit flash, healing the player on a kill, and dying. Each placed
 ## enemy can override these in the Inspector. A type that wants different
-## defaults sets them on its scene's root (e.g. knight.tscn), not in code, so
+## defaults sets them on its scene's root (e.g. thug.tscn), not in code, so
 ## the Inspector shows them; script-only instances (.new()) keep these.
-## Subclasses hook in with _on_hit() (stagger, knockback...) and _on_death()
-## (play a death animation, then queue_free; the default frees at once), and
-## can give their type a default kill heal with default_kill_heal().
+## Subclasses hook in with _on_hit() (stagger, knockback...), damage_taken()
+## (blocking) and _on_death() (play a death animation, then queue_free; the
+## default frees at once), and can give their type a default kill heal with
+## default_kill_heal().
 
 signal died
 
@@ -57,7 +58,7 @@ func is_dying() -> bool:
 func take_hit(amount: int, hit_dir: Vector2) -> void:
 	if _dying:
 		return
-	health -= amount
+	health -= damage_taken(amount)
 	_flash_timer = FLASH_TIME
 	if health <= 0:
 		if kill_heal() > 0:
@@ -65,6 +66,12 @@ func take_hit(amount: int, hit_dir: Vector2) -> void:
 		_die()
 	else:
 		_on_hit(hit_dir)
+
+
+## How much of a hit of `amount` it actually takes. A type that can guard
+## (ThugEnemy's block) takes less.
+func damage_taken(amount: int) -> int:
+	return amount
 
 
 ## Stops being an enemy at once: no more contact damage, can't be hit again.

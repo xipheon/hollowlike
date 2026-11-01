@@ -1,9 +1,0 @@
-[gd_scene load_steps=2 format=3]
-
-[ext_resource type="Script" path="res://scripts/enemy_knight.gd" id="1"]
-
-[node name="Knight" type="CharacterBody2D"]
-script = ExtResource("1")
-max_health = 5
-damage = 8
-hit_recoil = 180.0

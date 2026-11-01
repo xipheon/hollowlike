@@ -5,7 +5,7 @@
 [ext_resource type="TileSet" uid="uid://00at4qbp0e2p" path="res://art/tiles/background_tileset.tres" id="3_iwld0"]
 [ext_resource type="TileSet" uid="uid://rm55alkb3j7e" path="res://art/tiles/foreground_tileset.tres" id="4_v3h64"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/crawler_sewer.tscn" id="5_q3tmi"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/knight.tscn" id="7_3p6ex"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/thug.tscn" id="7_3p6ex"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/crawler_pink.tscn" id="9_bxhul"]
 [ext_resource type="Script" uid="uid://7l6ef5tfrino" path="res://scripts/player_start.gd" id="9_v8nrs"]
 [ext_resource type="Script" uid="uid://c0iiycufi7sln" path="res://scripts/room_door.gd" id="10_msgnt"]
@@ -43,13 +43,13 @@ tile_set = ExtResource("4_v3h64")
 position = Vector2(624, 172)
 on_ceiling = true
 
-[node name="Knight" parent="Entities" unique_id=642904087 instance=ExtResource("7_3p6ex")]
+[node name="Thug" parent="Entities" unique_id=642904087 instance=ExtResource("7_3p6ex")]
 position = Vector2(848, 714)
 
-[node name="Knight2" parent="Entities" unique_id=1721887126 instance=ExtResource("7_3p6ex")]
+[node name="Thug2" parent="Entities" unique_id=1721887126 instance=ExtResource("7_3p6ex")]
 position = Vector2(144, 970)
 
-[node name="Knight3" parent="Entities" unique_id=1787352696 instance=ExtResource("7_3p6ex")]
+[node name="Thug3" parent="Entities" unique_id=1787352696 instance=ExtResource("7_3p6ex")]
 position = Vector2(354, 362)
 
 [node name="PlayerStart" type="Node2D" parent="Entities" unique_id=931875028]

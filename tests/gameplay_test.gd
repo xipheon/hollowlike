@@ -56,10 +56,11 @@ const SEGMENTS := {
 		"_test_boss_defeat_opens_gate_and_sticks", "_test_warden_damage_split_and_phase_two",
 		"_test_warden_charge_stops_at_player", "_test_camera_returns_to_player_after_boss",
 	],
-	# Climb room route, knights, and the door up to the Aerie.
+	# Climb room route, thugs (enemy_thug.gd), and the door up to the Aerie.
 	"climb": [
-		"_test_climb_route_jumps", "_test_knights_are_slow", "_test_knight_swing_hurts",
-		"_test_knight_swing_can_be_dodged", "_test_knight_kill_doesnt_heal",
+		"_test_climb_route_jumps", "_test_thugs_are_slow", "_test_thug_punch_hurts",
+		"_test_thug_punch_can_be_dodged", "_test_thug_kill_doesnt_heal",
+		"_test_thug_blocks", "_test_thug_pauses",
 		"_test_climb_top_door_to_aerie_and_back",
 	],
 	# The Harrier fight (boss_harrier.gd, boss_feather.gd).
@@ -99,12 +100,12 @@ const CLIMB_ROUTE := [
 	[44, 0, 5],     # floor, up to just beside the first platform
 	[41, 6, 11],
 	[38, 13, 18],
-	[36, 20, 29],   # knight ledge
+	[36, 20, 29],   # thug ledge
 	[33, 12, 16],
-	[31, 0, 8],     # knight ledge
+	[31, 0, 8],     # thug ledge
 	[28, 11, 15],
 	[25, 17, 21],
-	[23, 23, 29],   # knight ledge
+	[23, 23, 29],   # thug ledge
 	[20, 15, 20],
 	[17, 9, 14],
 	[15, 0, 6],     # health pickup ledge
@@ -388,8 +389,8 @@ func _test_boss_room_shafts_climbable() -> void:
 	print("The left boss-room shaft can be climbed with plain jumps")
 	await _spawn(BOSS_SCENE, true)
 	var crawlers := get_tree().get_nodes_in_group("enemy").filter(func(e): return e is CrawlerEnemy and not e.on_ceiling)
-	_check(crawlers.size() == 1 and crawlers[0].global_position.x < 11 * TILE and crawlers[0].global_position.y > 16 * TILE,
-			"one floor crawler, in the left shaft")
+	var in_shaft := crawlers.filter(func(c): return c.global_position.x < 11 * TILE and c.global_position.y > 16 * TILE)
+	_check(not in_shaft.is_empty(), "a floor crawler guards the left shaft (%d)" % in_shaft.size())
 	await _remove_enemies()
 	await _check_route(BOSS_LEFT_SHAFT)
 	await _despawn()
@@ -681,87 +682,153 @@ func _test_climb_route_jumps() -> void:
 	await _despawn()
 
 
-func _knights() -> Array:
-	return get_tree().get_nodes_in_group("enemy").filter(func(e): return e is KnightEnemy)
+func _thugs() -> Array:
+	return get_tree().get_nodes_in_group("enemy").filter(func(e): return e is ThugEnemy)
 
 
-# The knight on the first ledge (row 36, cols 20-29), with the others removed.
-func _lone_knight() -> KnightEnemy:
-	var keep: KnightEnemy = null
-	for k in _knights():
-		if absf(k.global_position.y - (36 * TILE - KnightEnemy.SIZE.y * 0.5)) < 4.0:
-			keep = k
-		else:
-			k.queue_free()
+# The lowest thug in the room (the first one you meet climbing), with the others removed.
+func _lone_thug() -> ThugEnemy:
+	var thugs := _thugs()
+	thugs.sort_custom(func(a, b): return a.global_position.y > b.global_position.y)
+	for k in thugs.slice(1):
+		k.queue_free()
 	await _frames(1)
-	return keep
+	return thugs[0] if not thugs.is_empty() else null
 
 
-func _test_knights_are_slow() -> void:
-	print("Knights are as tall as the player and slower")
+func _test_thugs_are_slow() -> void:
+	print("Thugs are as tall as the player and slower")
 	await _spawn(CLIMB_SCENE)
-	_check(_knights().size() == 3, "3 knights in the climb room (%d)" % _knights().size())
-	_check(KnightEnemy.SIZE.y == Player.BODY_SIZE.y, "same height as the player")
-	var knight := await _lone_knight()
+	_check(_thugs().size() == 3, "3 thugs in the climb room (%d)" % _thugs().size())
+	_check(ThugEnemy.SIZE.y == Player.BODY_SIZE.y, "same height as the player")
+	var thug := await _lone_thug()
+	thug.patrol_time = Vector2(999, 999)   # no pauses while its speed is measured
 	_player.process_mode = Node.PROCESS_MODE_DISABLED   # out of sight at the door
 	await _frames(10)
-	var x0 := knight.global_position.x
+	var x0 := thug.global_position.x
 	var travelled := 0.0
 	var prev := x0
 	for i in 120:
 		await _frames(1)
-		travelled += absf(knight.global_position.x - prev)
-		prev = knight.global_position.x
+		travelled += absf(thug.global_position.x - prev)
+		prev = thug.global_position.x
 	var speed := travelled / 2.0
 	_check(speed > 10.0, "it patrols (%.0f px/s)" % speed)
 	_check(speed < _player.run_speed * 0.5, "at under half the player's run speed (%.0f vs %.0f)" % [speed, _player.run_speed])
 	await _despawn()
 
 
-func _test_knight_swing_hurts() -> void:
-	print("Standing in front of a knight gets you hit by its sword")
+func _test_thug_punch_hurts() -> void:
+	print("Standing in front of a thug gets you punched")
 	await _spawn(CLIMB_SCENE)
-	var knight := await _lone_knight()
-	_player.global_position = knight.global_position + Vector2(-50, 0)
+	var thug := await _lone_thug()
+	_player.global_position = thug.global_position + Vector2(-50, 0)
 	_player.velocity = Vector2.ZERO
 	var frames := 0
 	while _player.health == _player.max_health and frames < 180:
 		await _frames(1)
 		frames += 1
-	_check(knight.swings >= 1, "knight swung (%d)" % knight.swings)
+	_check(thug.swings >= 1, "thug swung (%d)" % thug.swings)
 	_check(_player.health < _player.max_health, "player hit after %d frames" % frames)
-	_check(frames >= int(knight.windup_time * 60) - 2, "only after the wind-up (%d frames)" % frames)
+	_check(frames >= int(thug.windup_time * 60) - 2, "only after the wind-up (%d frames)" % frames)
 	await _despawn()
 
 
-func _test_knight_swing_can_be_dodged() -> void:
-	print("Backing off during the wind-up dodges the swing")
+func _test_thug_punch_can_be_dodged() -> void:
+	print("Backing off during the wind-up dodges the punch")
 	await _spawn(CLIMB_SCENE)
-	var knight := await _lone_knight()
-	_player.global_position = knight.global_position + Vector2(-50, 0)
+	var thug := await _lone_thug()
+	_player.global_position = thug.global_position + Vector2(-50, 0)
 	_player.velocity = Vector2.ZERO
 	for i in 60:
 		await _frames(1)
-		if knight._state == KnightEnemy.State.WINDUP:
+		if thug._state == ThugEnemy.State.WINDUP:
 			break
-	_check(knight._state == KnightEnemy.State.WINDUP, "knight wound up")
-	_player.global_position = knight.global_position + Vector2(-150, 0)
+	_check(thug._state == ThugEnemy.State.WINDUP, "thug wound up")
+	_player.global_position = thug.global_position + Vector2(-150, 0)
 	_player.velocity = Vector2.ZERO
-	await _frames(int((knight.windup_time + knight.swing_time) * 60) + 10)
-	_check(knight.swings >= 1, "it swung anyway")
+	await _frames(int((thug.windup_time + thug.swing_time) * 60) + 10)
+	_check(thug.swings >= 1, "it swung anyway")
 	_check(_player.health == _player.max_health, "and missed")
 	await _despawn()
 
 
-func _test_knight_kill_doesnt_heal() -> void:
-	print("Killing a knight doesn't heal (only pink crawlers do)")
+func _test_thug_kill_doesnt_heal() -> void:
+	print("Killing a thug doesn't heal (only pink crawlers do)")
 	await _spawn(CLIMB_SCENE)
 	_player.health = 5
-	var knight: KnightEnemy = _knights()[0]
-	knight.take_hit(knight.max_health, Vector2.RIGHT)
+	var thug: ThugEnemy = _thugs()[0]
+	thug.take_hit(thug.max_health + thug.block_reduction, Vector2.RIGHT)   # through a block too
 	await _frames(1)
-	_check(not is_instance_valid(knight), "knight died")
+	_check(not is_instance_valid(thug), "thug died")
 	_check(_player.health == 5, "health stayed at %d half-hearts" % _player.health)
+	await _despawn()
+
+
+func _test_thug_blocks() -> void:
+	print("Thugs block (guard up) while paused or winding up: hits do block_reduction less; walking, they don't")
+	await _spawn(CLIMB_SCENE)
+	var thug := await _lone_thug()
+	thug.patrol_time = Vector2(999, 999)   # no pause of its own while walking
+	_player.visible = false   # nobody to chase
+	await _frames(20)
+	var hp := thug.health
+	_check(thug._state == ThugEnemy.State.PATROL and absf(thug.velocity.x) > 1.0 and not thug.is_blocking()
+			and thug.sprite.animation == "walk" and thug.sprite.flip_h == (thug._dir < 0),
+			"walking, facing its way: guard down")
+	thug.take_hit(1, Vector2.RIGHT)
+	_check(thug.health == hp - 1, "a hit while walking does full damage (%d -> %d)" % [hp, thug.health])
+
+	thug._enter(ThugEnemy.State.PAUSE, 5.0)
+	await _frames(2)
+	hp = thug.health
+	thug.take_hit(2, Vector2.RIGHT)
+	_check(thug.is_blocking() and thug.sprite.animation == "block", "paused: guard up (%s)" % thug.sprite.animation)
+	_check(thug.health == hp - (2 - thug.block_reduction),
+			"a 2-damage hit does %d less (%d -> %d)" % [thug.block_reduction, hp, thug.health])
+	await _frames(2)
+	_check(thug.sprite.self_modulate == ThugEnemy.BLOCK_FLASH, "and flashes blue-grey")
+
+	# Winding up a punch at the player is guarded too.
+	_player.visible = true
+	_player._invuln_timer = 999.0
+	_player.global_position = thug.global_position + Vector2(-50, 0)
+	_player.velocity = Vector2.ZERO
+	for i in 60:
+		await _frames(1)
+		if thug._state == ThugEnemy.State.WINDUP:
+			break
+	hp = thug.health
+	thug.take_hit(1, Vector2.RIGHT)
+	_check(thug._state == ThugEnemy.State.WINDUP and thug.sprite.animation == "block"
+			and thug.health == hp - maxi(1 - thug.block_reduction, 0),
+			"winding up: guard up, a 1-damage hit does %d" % (hp - thug.health))
+	await _despawn()
+
+
+func _test_thug_pauses() -> void:
+	print("Thugs now and then stop patrolling for pause_time, then walk on")
+	await _spawn(CLIMB_SCENE)
+	var thug := await _lone_thug()
+	thug.patrol_time = Vector2(0.5, 0.5)
+	thug._patrol_left = 0.5
+	_player.visible = false
+	var paused_at := -1
+	var resumed_at := -1
+	var still := true
+	for i in 120:
+		await _frames(1)
+		if paused_at < 0 and thug._state == ThugEnemy.State.PAUSE:
+			paused_at = i
+		elif paused_at >= 0 and resumed_at < 0:
+			if thug._state == ThugEnemy.State.PATROL and absf(thug.velocity.x) > 1.0:
+				resumed_at = i
+			else:
+				still = still and absf(thug.velocity.x) < 1.0
+	_check(paused_at >= 0 and paused_at <= 40, "stopped after about patrol_time (frame %d)" % paused_at)
+	var paused_for := (resumed_at - paused_at) / 60.0
+	_check(resumed_at > 0 and still and absf(paused_for - thug.pause_time) < 0.1,
+			"stood still for %.2f s (pause_time %.2f), then walked on" % [paused_for, thug.pause_time])
 	await _despawn()
 
 
@@ -776,19 +843,19 @@ func _wait_for_hit(max_frames: int) -> int:
 
 
 func _test_enemies_set_their_own_damage() -> void:
-	print("Each enemy sets its own damage: crawler 1 heart, knight 4 hearts, Warden body 1 heart")
+	print("Each enemy hits for its own damage: a crawler, a thug, the Warden's body")
 	await _spawn()
 	var crawler: CrawlerEnemy = get_tree().get_nodes_in_group("enemy")[0]
 	_player.global_position = crawler.global_position + Vector2(0, -6)
-	_check(await _wait_for_hit(30) == crawler.damage and crawler.damage == 2, "crawler hit for %d half-hearts" % crawler.damage)
+	_check(await _wait_for_hit(30) == crawler.damage, "crawler hit for %d half-hearts" % crawler.damage)
 	await _despawn()
 
 	await _spawn(CLIMB_SCENE)
-	var knight := await _lone_knight()
-	_player.global_position = knight.global_position + Vector2(-50, 0)
+	var thug := await _lone_thug()
+	_player.global_position = thug.global_position + Vector2(-50, 0)
 	_player.velocity = Vector2.ZERO
 	var lost := await _wait_for_hit(180)
-	_check(lost == knight.damage, "knight hit for %d half-hearts (its damage: %d)" % [lost, knight.damage])
+	_check(lost == thug.damage, "thug hit for %d half-hearts (its damage: %d)" % [lost, thug.damage])
 	await _despawn()
 
 	var boss := await _start_boss_fight()
@@ -2115,7 +2182,7 @@ func _build_editor_room() -> Room:
 
 const CRAWLER_SCENE := preload("res://scenes/enemies/crawler_sewer.tscn")
 const PINK_CRAWLER_SCENE := preload("res://scenes/enemies/crawler_pink.tscn")
-const KNIGHT_SCENE := preload("res://scenes/enemies/knight.tscn")
+const THUG_SCENE := preload("res://scenes/enemies/thug.tscn")
 
 
 func _test_editor_room_plays() -> void:
@@ -2265,15 +2332,15 @@ func _test_enemy_inspector_settings() -> void:
 	var floor_y := 18 * TILE - CrawlerEnemy.SIZE.y * 0.5
 	var pink: CrawlerEnemy = _place_enemy(PINK_CRAWLER_SCENE, {}, Vector2(9.5 * TILE, floor_y))
 	var tough: CrawlerEnemy = _place_enemy(CRAWLER_SCENE, {"heal_on_kill": 3, "max_health": 6}, Vector2(13.5 * TILE, floor_y))
-	var knight: KnightEnemy = _place_enemy(KNIGHT_SCENE, {"heal_on_kill": 1}, Vector2(20.5 * TILE, 18 * TILE - KnightEnemy.SIZE.y * 0.5))
+	var thug: ThugEnemy = _place_enemy(THUG_SCENE, {"heal_on_kill": 1}, Vector2(20.5 * TILE, 18 * TILE - ThugEnemy.SIZE.y * 0.5))
 	await _frames(2)
 	_check(pink.sprite == pink.get_node("Sprite") and pink.sprite.sprite_frames.resource_path.ends_with("crawler_pink_frames.tres"),
 			"the sprite comes with the scene, with its saved frames")
 	_check(pink is PinkCrawler and pink.kill_heal() == PinkCrawler.KILL_HEAL, "pink heals by default")
 	_check(tough.health == 6 and tough.kill_heal() == 3, "a sewer crawler set to heal 3, with 6 health")
-	var stock: KnightEnemy = KNIGHT_SCENE.instantiate()   # the type's defaults, from its scene
-	_check(knight.health == stock.max_health and knight.damage == stock.damage and knight.kill_heal() == 1,
-			"a knight keeps its scene's defaults (%d health, %d damage), set to heal 1" % [stock.max_health, stock.damage])
+	var stock: ThugEnemy = THUG_SCENE.instantiate()   # the type's defaults, from its scene
+	_check(thug.health == stock.max_health and thug.damage == stock.damage and thug.kill_heal() == 1,
+			"a thug keeps its scene's defaults (%d health, %d damage), set to heal 1" % [stock.max_health, stock.damage])
 	stock.free()
 	var deaths := []
 	tough.died.connect(func() -> void: deaths.append(tough))
@@ -2707,30 +2774,30 @@ func _swing_at(scene: PackedScene, size_y: float, direction: String, offset: Vec
 
 
 func _test_hit_recoil() -> void:
-	print("Hits push you away from the enemy, by its hit_recoil: crawlers hard, knights and the Warden barely")
+	print("Hits push you away from the enemy, by its hit_recoil: crawlers hard, thugs and the Warden barely")
 	# Each type's default comes from its scene, as placed in a room (and shown in the Inspector).
 	var crawler: EnemyBase = CRAWLER_SCENE.instantiate()
-	var knight: EnemyBase = KNIGHT_SCENE.instantiate()
+	var thug: EnemyBase = THUG_SCENE.instantiate()
 	var warden: BossBase = load("res://scenes/bosses/warden.tscn").instantiate()
 	var harrier: BossBase = load("res://scenes/bosses/harrier.tscn").instantiate()
 	var crawler_recoil := crawler.hit_recoil
-	var knight_recoil := knight.hit_recoil
-	_check(crawler_recoil > knight_recoil and crawler_recoil > warden.hit_recoil,
-			"crawlers (%.0f) push harder than knights (%.0f) and the Warden (%.0f); the Harrier %.0f"
-			% [crawler_recoil, knight_recoil, warden.hit_recoil, harrier.hit_recoil])
-	for n in [crawler, knight, warden, harrier]:
+	var thug_recoil := thug.hit_recoil
+	_check(crawler_recoil > thug_recoil and crawler_recoil > warden.hit_recoil,
+			"crawlers (%.0f) push harder than thugs (%.0f) and the Warden (%.0f); the Harrier %.0f"
+			% [crawler_recoil, thug_recoil, warden.hit_recoil, harrier.hit_recoil])
+	for n in [crawler, thug, warden, harrier]:
 		n.free()
 	await _spawn_node(_build_platform_room())
 	await _frames(5)
 	var above_crawler := Vector2(0, -CrawlerEnemy.SIZE.y * 0.5 - 50)
-	var above_knight := Vector2(0, -KnightEnemy.SIZE.y * 0.5 - 50)
+	var above_thug := Vector2(0, -ThugEnemy.SIZE.y * 0.5 - 50)
 	var floor_level := func(size_y: float) -> Vector2: return Vector2(-52, size_y * 0.5 - Player.BODY_SIZE.y * 0.5)
 	for case in [
 			["a down-strike on a crawler bounces you straight up, high", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "down", above_crawler, crawler_recoil],
 			["off its left edge, up and to the left", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "down", above_crawler + Vector2(-26, 0), crawler_recoil],
-			["on a knight, a small hop", KNIGHT_SCENE, KnightEnemy.SIZE.y, "down", above_knight, knight_recoil],
+			["on a thug, a small hop", THUG_SCENE, ThugEnemy.SIZE.y, "down", above_thug, thug_recoil],
 			["a side swing at a crawler shoves you back hard", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "side", floor_level.call(CrawlerEnemy.SIZE.y), crawler_recoil],
-			["at a knight, a little", KNIGHT_SCENE, KnightEnemy.SIZE.y, "side", floor_level.call(KnightEnemy.SIZE.y), knight_recoil]]:
+			["at a thug, a little", THUG_SCENE, ThugEnemy.SIZE.y, "side", floor_level.call(ThugEnemy.SIZE.y), thug_recoil]]:
 		var hit: Array = await _swing_at(case[1], case[2], case[3], case[4])
 		var pushed: Vector2 = hit[0]
 		var away: Vector2 = hit[1]

@@ -7,11 +7,21 @@ extends SceneTree
 ##   row 1  walk    4 frames  (walk_0..3, PixelLab walking-4-frames)
 ##   row 2  attack  3 frames  (attack_0..2, PixelLab lead-jab)
 ## The source frames sit on a 68x68 canvas with the feet's last row at y 59.
-## Run from the project folder:
+## It also saves the sprite's animations, art/sprites/thug_frames.tres, which
+## scenes/enemies/thug.tscn uses (ANIMATIONS: the first attack frame, his guard,
+## is the block pose; the other two are the punch). Run from the project folder:
 ##   godot --headless --path . --script res://tools/make_thug_sheet.gd
 
 const SOURCE := "res://art/sprites/source/thug/%s.png"
 const SHEET_PATH := "res://art/sprites/thug.png"
+const FRAMES_PATH := "res://art/sprites/thug_frames.tres"
+## Animation: [sheet row, first column, frame count, fps, loops].
+const ANIMATIONS := {
+	"idle": [0, 0, 1, 1.0, false],
+	"walk": [1, 0, 4, 6.0, true],
+	"block": [2, 0, 1, 1.0, false],
+	"punch": [2, 1, 2, 14.0, false],
+}
 const PREVIEW_PATH := "res://art/sprites/source/thug_preview.png"
 const FRAME := Vector2i(64, 64)
 const ROWS := [
@@ -44,7 +54,27 @@ func _init() -> void:
 	sheet.save_png(ProjectSettings.globalize_path(SHEET_PATH))
 	_save_preview(sheet)
 	print("Wrote %s (%d x %d frames) and %s" % [SHEET_PATH, columns, ROWS.size(), PREVIEW_PATH])
+	_save_frames(sheet)
 	quit()
+
+
+## The animations, cut from the sheet as written (loaded from the image, so
+## this works on the first run before Godot has imported the new sheet).
+func _save_frames(sheet: Image) -> void:
+	var texture: Texture2D = load(SHEET_PATH) if ResourceLoader.exists(SHEET_PATH) else ImageTexture.create_from_image(sheet)
+	var frames := SpriteFrames.new()
+	frames.remove_animation("default")
+	for anim in ANIMATIONS:
+		var a: Array = ANIMATIONS[anim]
+		frames.add_animation(anim)
+		frames.set_animation_speed(anim, a[3])
+		frames.set_animation_loop(anim, a[4])
+		for i in a[2]:
+			var atlas := AtlasTexture.new()
+			atlas.atlas = texture
+			atlas.region = Rect2(Vector2(a[1] + i, a[0]) * Vector2(FRAME), Vector2(FRAME))
+			frames.add_frame(anim, atlas)
+	print("Wrote %s (%s)" % [FRAMES_PATH, error_string(ResourceSaver.save(frames, FRAMES_PATH))])
 
 
 ## The sheet over the brick wall, scaled up, so each frame can be checked.

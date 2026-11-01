@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_thug.gd" id="1"]
+[ext_resource type="SpriteFrames" path="res://art/sprites/thug_frames.tres" id="2"]
+
+[node name="Thug" type="CharacterBody2D"]
+script = ExtResource("1")
+max_health = 5
+damage = 8
+hit_recoil = 180.0
+
+[node name="Sprite" type="AnimatedSprite2D" parent="."]
+texture_filter = 1
+position = Vector2(0, -10)
+sprite_frames = ExtResource("2")
+animation = &"walk"
+flip_h = true
