@@ -3,25 +3,19 @@ class_name Room
 extends Node2D
 ## A room: builds collisions, hazards, gates and doors from its layout, sets up
 ## its boss fight, and runs it (HUD, pause menu, death, the boss intro and
-## camera). The layout comes from one of two places while the overhaul is under
-## way:
-##  - Made in the editor (start from scenes/rooms/room_template.tscn):
-##      Skyline     the far city, behind everything
-##      Background  the wall behind the room (background_tileset.tres)
-##      Terrain     what you stand on and what hurts (foreground_tileset.tres)
-##      Gates       arena gates, shut during a boss fight (foreground_tileset.tres)
-##      Entities    placed enemies and bosses, a PlayerStart, RoomDoors, Arenas
-##    Paint from the room's top-left (0, 0). What each tile does comes from its
-##    custom data `kind` (see tools/make_tilesets.gd).
-##  - ASCII rows in LevelData (the rooms not converted yet): leave the layers
-##    empty and set `room`; the art is built from the rows.
-## Both become the same grid of layout characters ("#" solid, "=" platform,
-## "^" spikes, "~" sewer water, "|" gate, ">" door), so the rest of the room
-## doesn't care where it came from. Does nothing while editing.
+## camera). Made in the editor (see "Making rooms" in art/README.md; start from
+## scenes/rooms/room_template.tscn):
+##   Skyline     the far city, behind everything
+##   Background  the wall behind the room (background_tileset.tres)
+##   Terrain     what you stand on and what hurts (foreground_tileset.tres)
+##   Gates       arena gates, shut during a boss fight (foreground_tileset.tres)
+##   Entities    placed enemies and bosses, a PlayerStart, RoomDoors, Arenas
+## Paint from the room's top-left (0, 0). What each tile does comes from its
+## custom data `kind` (see tools/make_tilesets.gd); the room reads the tiles
+## into a grid of layout characters ("#" solid, "=" platform, "^" spikes,
+## "~" sewer water, "|" gate, ">" door). Does nothing while editing.
 
 const TILE := 32
-const CRAWLER_SCENE := preload("res://scenes/enemies/crawler.tscn")
-const KNIGHT_SCENE := preload("res://scenes/enemies/knight.tscn")
 const LAYER_WORLD := 1
 const LAYER_PLATFORMS := 32
 const SPIKE_HEIGHT := 24.0   # damage area: the bottom of the tile, up to the spike tips
@@ -48,7 +42,6 @@ const KIND_CHARS := {"solid": "#", "platform": "=", "spikes": "^", "acid": "~", 
 @export_tool_button("Decorate wall", "TileMapLayer") var decorate_wall_action: Callable = decorate_wall
 
 var _grid := {}   # Vector2i -> layout character
-var _from_ascii := false   # built from LevelData rows (decided before the art adds its layers)
 var _art: RoomArt
 var _w := 0
 var _h := 0
@@ -80,11 +73,6 @@ func entities() -> Node2D:
 	return get_node_or_null("Entities")
 
 
-## Made in the editor (painted layers), as opposed to built from ASCII rows.
-func is_painted() -> bool:
-	return terrain() != null and not terrain().get_used_cells().is_empty()
-
-
 ## Every node under Entities that is a `type` (a script class, e.g. RoomDoor).
 func entities_of(type: Variant) -> Array:
 	if entities() == null:
@@ -96,11 +84,7 @@ func _ready() -> void:
 	if Engine.is_editor_hint():
 		return
 	Engine.time_scale = 1.0
-	_from_ascii = not is_painted() and LevelData.ROOMS.has(room) and LevelData.ROOMS[room].has("rows")
-	if not _from_ascii:
-		_load_painted()
-	else:
-		_load_ascii()
+	_load_room()
 	_build_solids()
 	_spawn_player()
 	_hud = HUD.new()
@@ -175,9 +159,9 @@ func _read_painted_grid() -> void:
 				_grid[cell] = KIND_CHARS[kind]
 
 
-## A room made in the editor: the grid comes from the painted tiles' kinds, and
-## doors, the player start and bosses from the nodes under Entities.
-func _load_painted() -> void:
+## The grid comes from the painted tiles' kinds, and doors and bosses from the
+## nodes under Entities.
+func _load_room() -> void:
 	_read_painted_grid()
 	_art = RoomArt.new(_ch, _w, _h)
 	_art.dress(self, room, background(), terrain(), gates(), auto_decorate)
@@ -189,83 +173,6 @@ func _load_painted() -> void:
 		var boss: BossBase = arena.get_node_or_null(arena.boss)
 		if boss != null:
 			_set_up_boss(boss, Rect2(to_local(arena.global_position), Vector2(arena.size_tiles * TILE)))
-
-
-## A room from LevelData's ASCII rows: the grid is the rows; art, enemies,
-## bosses and doors come from their characters.
-func _load_ascii() -> void:
-	var rows: Array = LevelData.ROOMS[room].rows
-	for row in rows:
-		_w = maxi(_w, row.length())
-	_h = rows.size()
-	for y in _h:
-		var row: String = rows[y]
-		for x in row.length():
-			if row[x] != " ":
-				_grid[Vector2i(x, y)] = row[x]
-	_art = RoomArt.new(_ch, _w, _h)
-	_art.build(self, room, LevelData.ROOMS[room].get("background", []))
-	_spawn_ascii_entities()
-	# Each column of ">" is a door, leading to the room on its wall's side.
-	for x in _w:
-		var y := 0
-		while y < _h:
-			if _ch(x, y) == ">":
-				var top := y
-				while _ch(x, y) == ">":
-					y += 1
-				var side := "left" if x * 2 < _w else "right"
-				_doors.append({"rect": Rect2i(x, top, 1, y - top), "target": LevelData.ROOMS[room].doors[side],
-						"arrive_at": "", "name": side})
-			y += 1
-
-
-func _spawn_ascii_entities() -> void:
-	for y in _h:
-		for x in _w:
-			var tile_origin := Vector2(x * TILE, y * TILE)
-			match _ch(x, y):
-				"E":
-					var enemy: CrawlerEnemy = CRAWLER_SCENE.instantiate()
-					enemy.position = tile_origin + Vector2(TILE * 0.5, TILE - CrawlerEnemy.SIZE.y * 0.5)
-					add_child(enemy)
-				"c":
-					var hanger: CrawlerEnemy = CRAWLER_SCENE.instantiate()
-					hanger.on_ceiling = true
-					hanger.position = tile_origin + Vector2(TILE * 0.5, CrawlerEnemy.SIZE.y * 0.5)
-					add_child(hanger)
-				"K":
-					var knight: KnightEnemy = KNIGHT_SCENE.instantiate()
-					knight.position = tile_origin + Vector2(TILE * 0.5, TILE - KnightEnemy.SIZE.y * 0.5)
-					add_child(knight)
-				"B":
-					var warden := WardenBoss.new()
-					warden.position = tile_origin + Vector2(TILE * 0.5, TILE - WardenBoss.SIZE.y * 0.5)
-					add_child(warden)
-					_set_up_boss(warden, _ascii_arena(x, y))
-				"F":
-					var harrier := HarrierBoss.new()
-					harrier.position = tile_origin + Vector2(TILE * 0.5, TILE * 0.5)
-					add_child(harrier)
-					_set_up_boss(harrier, _ascii_arena(x, y))
-
-
-## An ASCII boss's arena: out to the nearest wall or gate on each side of its
-## row, and up and down to the nearest solid tile (platforms don't count).
-func _ascii_arena(x: int, y: int) -> Rect2:
-	var left := x
-	while not _ch(left - 1, y) in ["#", "|"]:
-		left -= 1
-	var right := x
-	while not _ch(right + 1, y) in ["#", "|"]:
-		right += 1
-	var top := y
-	while _ch(x, top - 1) != "#":
-		top -= 1
-	var bottom := y
-	while _ch(x, bottom + 1) != "#":
-		bottom += 1
-	return Rect2(left * TILE, top * TILE, (right - left + 1) * TILE, (bottom - top + 1) * TILE)
 
 
 func _build_solids() -> void:
@@ -422,12 +329,6 @@ func _spawn_player() -> void:
 	if marker != null:
 		start = to_local(marker.global_position) - Vector2(0, Player.BODY_SIZE.y * 0.5)
 		has_start = true
-	elif _from_ascii:
-		for y in _h:
-			for x in _w:
-				if _ch(x, y) == "P":
-					start = Vector2(x * TILE + TILE * 0.5, (y + 1) * TILE - Player.BODY_SIZE.y * 0.5)
-					has_start = true
 	# Arriving through a door (or a room with no start, e.g. run directly with F6).
 	if GameState.arrived_from != "" or not has_start:
 		var door: Variant = _arrival_door()

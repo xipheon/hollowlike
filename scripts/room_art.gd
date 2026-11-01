@@ -1,16 +1,13 @@
 class_name RoomArt
 extends RefCounted
-## A room's tile art. For an ASCII room, build() lays every layer from the
-## layout: solid terrain, one-way platforms, spikes, doors, arena gates and
-## acid, the warehouse wall behind (with windows the skyline shows through),
-## and the far skyline. For a room made in the editor, dress() adds what the
-## painted layers don't hold: light glows, the gates' open/shut state, and the
+## A room's tile art, for a room made in the editor: dress() adds what the
+## painted layers don't hold (light glows, the gates' open/shut state) and the
 ## automatic wall decoration where the wall is unpainted. Art only: collisions
-## and hazards are the room's (room.gd).
+## and hazards are the room's (room.gd). The tile constants here are where each
+## tile sits in its sheet; tools/make_tilesets.gd builds the tilesets from them.
 ##
 ## Automatic decoration (windows, lights, posters, graffiti) is seeded by the
-## room name so it looks the same every visit. An ASCII room can instead give
-## its own `background` rows in LevelData, using BACKGROUND_LEGEND.
+## room name so it looks the same every visit.
 
 const TILE := 32
 ## Built by tools/make_tilesets.gd; every tile says what it is in its custom data.
@@ -73,17 +70,6 @@ const LIGHT_DEAD := Vector2i(7, 2)
 # at EDGE_ORIGIN + (n % 8, n / 8). See tools/make_background_tiles.gd.
 const EDGE_ORIGIN := Vector2i(0, 4)
 
-## For hand-made `background` rows. A piece's letter marks its top-left cell;
-## the rest of its cells can be anything. "." knocks the wall out so the
-## skyline shows (the wall around it gets a crumbled edge); any other
-## character is plain wall.
-const BACKGROUND_LEGEND := {
-	"W": WINDOW_SMALL, "L": WINDOW_LARGE, "P": POSTERS, "G": GRAFFITI,
-	"V": [LIGHT_LIT, Vector2i.ONE], "v": [LIGHT_DEAD, Vector2i.ONE],
-	"-": [PIPE_H, Vector2i.ONE], "|": [PIPE_V, Vector2i.ONE], "+": [PIPE_JUNCTION, Vector2i.ONE],
-	"s": [HAZARD, Vector2i.ONE], "g": [GIRDER, Vector2i.ONE],
-}
-
 # Automatic decoration spacing, in tiles.
 const WINDOW_ROW_STEP := 9       # rows between window bands
 const WINDOW_GAP := 10           # at least this much wall between windows in a band
@@ -97,7 +83,6 @@ var _cell: Callable
 var _w := 0
 var _h := 0
 var _rng := RandomNumberGenerator.new()
-var _terrain_by_sides := {}
 var _gates: TileMapLayer
 
 
@@ -108,9 +93,6 @@ func _init(cell: Callable, width: int, height: int) -> void:
 	_cell = cell
 	_w = width
 	_h = height
-	for r in TERRAIN.size():
-		for c in TERRAIN[r].size():
-			_terrain_by_sides[TERRAIN[r][c]] = Vector2i(c, r)
 
 
 ## For a room made in the editor, whose tile layers are already painted: adds
@@ -139,23 +121,6 @@ func decorate_unpainted(room: String, background: TileMapLayer) -> void:
 	_decorate(cells)
 	for c in cells:
 		background.set_cell(c, 0, cells[c])
-
-
-## For an ASCII room: builds every layer and adds it under `parent`, behind
-## anything added later. `background_rows` is the room's hand-made background,
-## or empty for the automatic one.
-func build(parent: Node2D, room: String, background_rows: Array) -> void:
-	_rng.seed = hash(room)
-	parent.add_child(_make_skyline())
-	var background := _make_background(background_rows)
-	parent.add_child(background)
-	var foreground := _make_foreground()
-	parent.add_child(foreground)
-	_gates = _layer(FOREGROUND_TILES, 0)
-	_gates.name = "Gates"
-	parent.add_child(_gates)
-	set_gates_closed(false)
-	_add_lights(parent, background, foreground)
 
 
 ## Glows for every tile whose `light` data says it has one: lit bulbs, dead
@@ -233,68 +198,6 @@ func _ch(x: int, y: int) -> String:
 	return _cell.call(x, y)
 
 
-func _layer(tiles: TileSet, z: int) -> TileMapLayer:
-	var layer := TileMapLayer.new()
-	layer.tile_set = tiles
-	layer.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	layer.z_index = z
-	return layer
-
-
-# --------------------------------------------------- Terrain and acid ----
-
-func _make_foreground() -> TileMapLayer:
-	var layer := _layer(FOREGROUND_TILES, 0)
-	layer.name = "Terrain"
-	var last_spike := -1   # variant of the spike just to the left, so neighbours differ
-	for y in _h:
-		for x in _w:
-			match _ch(x, y):
-				"#":
-					var sides := ""
-					for d in [["N", Vector2i.UP], ["E", Vector2i.RIGHT], ["S", Vector2i.DOWN], ["W", Vector2i.LEFT]]:
-						if _ch(x + d[1].x, y + d[1].y) == "#":
-							sides += d[0]
-					layer.set_cell(Vector2i(x, y), 0, _terrain_by_sides[sides])
-				"~":
-					layer.set_cell(Vector2i(x, y), 0, ACID_FILL if _ch(x, y - 1) == "~" else ACID_TOP)
-				"=":
-					var left := _ch(x - 1, y) == "="
-					var right := _ch(x + 1, y) == "="
-					var plat := PLAT_MID if left and right else PLAT_R if left else PLAT_L if right else PLAT_ONE
-					layer.set_cell(Vector2i(x, y), 0, plat)
-				"^":
-					var variant := absi(hash(Vector2i(x, y))) % SPIKES.size()
-					if _ch(x - 1, y) == "^" and variant == last_spike:
-						variant = (variant + 1) % SPIKES.size()
-					last_spike = variant
-					layer.set_cell(Vector2i(x, y), 0, SPIKES[variant])
-				">":
-					layer.set_cell(Vector2i(x, y), 0, DOOR_TOP if _ch(x, y - 1) == "#" else DOOR)
-	return layer
-
-
-# ---------------------------------------------------------- Background ----
-
-func _make_background(hand_rows: Array) -> TileMapLayer:
-	var layer := _layer(BACKGROUND_TILES, -1)
-	layer.name = "Background"
-	# cell -> background sheet cell; cells left out stay open to the skyline.
-	# Solid cells get wall too, so the terrain's ragged edges have brick behind them.
-	var cells := {}
-	for y in _h:
-		for x in _w:
-			cells[Vector2i(x, y)] = _pick_wall()
-	if hand_rows.is_empty():
-		_decorate(cells)
-	else:
-		_apply_hand_rows(cells, hand_rows)
-		_break_edges(cells)
-	for cell in cells:
-		layer.set_cell(cell, 0, cells[cell])
-	return layer
-
-
 func _pick_wall() -> Vector2i:
 	var roll := _rng.randf()
 	for i in WALLS.size():
@@ -368,40 +271,3 @@ func _decorate(cells: Dictionary) -> void:
 				_mark(used, Vector2i(x, y), piece[1])
 				x += WALL_ART_GAP
 			x += 1
-
-
-func _apply_hand_rows(cells: Dictionary, hand_rows: Array) -> void:
-	for y in hand_rows.size():
-		var row: String = hand_rows[y]
-		for x in row.length():
-			var c := Vector2i(x, y)
-			var ch := row[x]
-			if ch == ".":
-				cells.erase(c)
-			elif BACKGROUND_LEGEND.has(ch):
-				_put(cells, c, BACKGROUND_LEGEND[ch])
-
-
-## Plain wall next to an opening gets a crumbled edge on each open side.
-func _break_edges(cells: Dictionary) -> void:
-	var sides := [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
-	var edges := {}
-	for cell in cells:
-		if not cells[cell] in WALLS:
-			continue
-		var open := 0
-		for i in sides.size():
-			var n: Vector2i = cell + sides[i]
-			if n.x >= 0 and n.y >= 0 and n.x < _w and n.y < _h and not cells.has(n):
-				open |= 1 << i
-		if open != 0:
-			edges[cell] = EDGE_ORIGIN + Vector2i(open % 8, open / 8)
-	cells.merge(edges, true)
-
-
-# ------------------------------------------------------------- Skyline ----
-
-func _make_skyline() -> Parallax2D:
-	var skyline := Skyline.new()
-	skyline.name = "Skyline"
-	return skyline

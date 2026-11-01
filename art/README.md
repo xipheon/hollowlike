@@ -42,9 +42,35 @@ You don't have to finish a sheet in one go. Placeholder frames are fine: a few r
 Tell Claude when a sheet is in place, and it will be wired in:
 
 - **Characters.** An `AnimatedSprite2D` replaces the `_draw()` placeholder. It is built straight from the sheet using the layout in SHEETS.md, and each state plays the matching row. Flashes and tints (damage, the phase-two colour, telegraph colours) stay in code as `modulate`.
-- **Tiles.** A `TileSet` with a *Match Sides* terrain for solid ground, and a `TileMapLayer` that is still filled from the ASCII rows in `level_data.gd`. Rooms keep being edited as text. Collisions keep coming from code.
+- **Tiles.** `tiles/foreground_tileset.tres` and `tiles/background_tileset.tres`, built by `tools/make_tilesets.gd`, with *Match Sides* terrain brushes. Rooms are painted with them in the editor (see Making rooms below). Collisions come from code, from each tile's `kind`.
 
 The layouts are fixed, so a sheet can be swapped or redrawn later without touching the game code. Only resizing a frame or adding a row needs a code change. To do that, edit `SHEETS` in `tools/make_art_templates.gd`, rerun it, and update your drawing to match.
+
+
+## Making rooms
+
+Rooms are scenes made in the Godot editor. Each tile you paint says what it is (its `kind` custom data: solid, platform, spikes, acid, door, gate), and the room builds its collisions and hazards from that when it loads.
+
+1. **Start from the template.** Duplicate `scenes/rooms/room_template.tscn` (right-click it in the FileSystem dock, then *Duplicate*). Rename the root node, and set its `room` to the new room's id.
+2. **Add it to the game.** Add the id and scene path to `ROOMS` in `scripts/level_data.gd`. Doors can then lead to it, and the level select lists it.
+3. **Paint the Terrain layer** with `art/tiles/foreground_tileset.tres`. The room's top-left corner is cell (0, 0). Use the *Terrains* tab for brushes that pick the right edge tiles on their own: **concrete** for solid ground, **catwalk** for one-way platforms, **spikes**, and **sewer** for acid water. To place one exact tile, pick it from the *Tiles* tab instead. Door tiles go here too.
+4. **Paint the Gates layer** where a boss arena's gates go, with the shut gate tiles. They show raised until a fight starts, then drop shut.
+5. **Decorate the wall (Background layer)** in one of three ways:
+   - Leave it empty with `auto_decorate` on. Brick, windows, lights, posters and graffiti are filled in each time the room loads, and look the same every time.
+   - Press **Decorate wall** in the root's Inspector to paint that decoration into the layer now. Then edit it by hand and save the scene.
+   - Paint it all by hand and turn `auto_decorate` off. Unpainted cells stay open, so the skyline shows through.
+
+   With `auto_decorate` on, wall you painted by hand is always kept. Only the empty cells are filled.
+6. **Place things under Entities** by dragging scenes onto it from the FileSystem dock:
+   - **Enemies:** `scenes/enemies/crawler.tscn` and `knight.tscn`. Set each one in the Inspector: health, damage and heal on kill for any enemy, and palette and on-ceiling for a crawler.
+   - **Bosses:** `scenes/bosses/warden.tscn` and `harrier.tscn`. Each needs an **Arena** node (`scripts/arena.gd`). Its origin is the arena's top-left corner, and `size_tiles` is its size. Point its `boss` at the boss node. The fight starts a few tiles past a gate, and the camera frames the arena.
+   - **PlayerStart** (`scripts/player_start.gd`): where a fresh game starts, at the player's feet. Players coming through a door arrive at the door instead.
+   - **RoomDoor** (`scripts/room_door.gd`): put it over the door tiles, with its origin at the doorway's top-left corner. Set its `height` in tiles, and choose `target_room` from the list. `arrive_at` names the door to arrive at in that room. Leave it empty to arrive at the door there that leads back.
+
+   PlayerStart, RoomDoor and Arena show labels in the editor and are hidden in the game.
+7. **Play it.** Press F6 to run just this scene. Without a PlayerStart, the player appears at a door. Run the tests too (see `tests/gameplay_test.gd`).
+
+To add a new enemy, make a scene whose script extends `EnemyBase`. It shows up with the same Inspector settings, and can be placed in any room.
 
 ## Suggested order
 

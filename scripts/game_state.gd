@@ -22,7 +22,7 @@ var abilities := STARTING_ABILITIES.duplicate()
 ## On when run from the editor or a debug export, off in release exports.
 var debug_mode := OS.is_debug_build()
 
-## Room the player last came from through a door ("" = fresh start, use P).
+## Room the player last came from through a door ("" = fresh start, at the PlayerStart).
 var arrived_from := ""
 ## Name of the door to arrive at in the next room ("" = the one leading back).
 var arrive_at := ""

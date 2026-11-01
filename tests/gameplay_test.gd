@@ -30,16 +30,12 @@ const SEGMENTS := {
 	"tilesets": [
 		"_test_terrain_brushes_match_room_art", "_test_tiles_say_what_they_are", "_test_room_template",
 	],
-	# One-off: the converted room scenes match their ASCII rows (tools/convert_ascii_rooms.gd).
-	"conversion": [
-		"_test_converted_rooms_match_ascii",
-	],
 	# Rooms made in the editor: painted layers, helper nodes, decoration (room.gd, room_art.gd).
 	"editor_rooms": [
 		"_test_editor_room_plays", "_test_editor_room_door", "_test_editor_room_arena",
 		"_test_decorate_wall_button", "_test_auto_decorate_off",
 	],
-	# Every ceiling crawler placed in any room ("c" markers, enemy_crawler.gd ceiling code).
+	# Every ceiling crawler placed in any room, and placed enemies' Inspector settings (enemy_crawler.gd, enemy_base.gd).
 	"crawlers": [
 		"_test_placed_ceiling_crawlers_stay_up", "_test_enemy_inspector_settings",
 	],
@@ -1647,7 +1643,7 @@ func _test_debug_kill_boss_off_outside_debug_mode() -> void:
 
 
 func _test_level_select_loads_each_room() -> void:
-	print("Main menu: Level Select lists every room and starts at its P; debug mode only")
+	print("Main menu: Level Select lists every room and starts at its PlayerStart; debug mode only")
 	# Outside debug mode (release exports) there's no Level Select.
 	GameState.debug_mode = false
 	var release_menu := MENU_SCENE.instantiate()
@@ -1673,9 +1669,9 @@ func _test_level_select_loads_each_room() -> void:
 		_check(loaded != null, "%s loaded" % room)
 		if loaded != null:
 			var p: Player = loaded._player
-			var start := _find_tile(LevelData.ROOMS[room].rows, "P")
-			_check(absf(p.global_position.x - (start.x + 0.5) * TILE) < 2.0 and not GameState.has_ability("dash"),
-					"%s: fresh progress, starting at P (col %.1f)" % [room, p.global_position.x / TILE])
+			var start: PlayerStart = loaded.entities_of(PlayerStart)[0]
+			_check(absf(p.global_position.x - start.global_position.x) < 2.0 and not GameState.has_ability("dash"),
+					"%s: fresh progress, starting at its PlayerStart (col %.1f)" % [room, p.global_position.x / TILE])
 		await _frames(30)   # let the fade finish
 		await _despawn()
 	var menu := MENU_SCENE.instantiate()
@@ -1686,14 +1682,6 @@ func _test_level_select_loads_each_room() -> void:
 	menu.back_button.pressed.emit()
 	_check(menu._main_box.visible and not menu._level_box.visible and menu.level_select_button.has_focus(), "Back returns to the main menu")
 	await _despawn()
-
-
-func _find_tile(rows: Array, tile: String) -> Vector2i:
-	for y in rows.size():
-		var x: int = rows[y].find(tile)
-		if x >= 0:
-			return Vector2i(x, y)
-	return Vector2i(-1, -1)
 
 
 func _test_main_menu_starts_game() -> void:
@@ -1710,7 +1698,7 @@ func _test_main_menu_starts_game() -> void:
 	_check(not GameState.has_ability("dash"), "progress reset")
 	if room != null:
 		var p: Player = room._player
-		_check(p.global_position.x < 5 * TILE, "starting at P (col %.1f)" % (p.global_position.x / TILE))
+		_check(p.global_position.x < 5 * TILE, "starting at its PlayerStart (col %.1f)" % (p.global_position.x / TILE))
 	await _frames(30)   # let the fade finish
 	await _despawn()
 
@@ -2067,6 +2055,7 @@ func _build_editor_room() -> Room:
 
 
 const CRAWLER_SCENE := preload("res://scenes/enemies/crawler.tscn")
+const KNIGHT_SCENE := preload("res://scenes/enemies/knight.tscn")
 
 
 func _test_editor_room_plays() -> void:
@@ -2149,96 +2138,6 @@ func _test_auto_decorate_off() -> void:
 	await _despawn()
 
 
-## For each room, plays the converted scene and compares it with what its
-## ASCII rows build: size, layout grid, every Terrain and Background tile (the
-## automatic decoration included), doors, the player start, and every enemy
-## and boss by kind and position.
-func _test_converted_rooms_match_ascii() -> void:
-	print("Converted rooms match their ASCII versions: layout, tiles, wall, doors, start, enemies")
-	var layout_chars := "#=^~|>"
-	for id in LevelData.ROOMS:
-		var data: Dictionary = LevelData.ROOMS[id]
-		if not data.has("rows"):
-			continue
-		var rows: Array = data.rows
-		var ascii := {}
-		var w := 0
-		for row in rows:
-			w = maxi(w, row.length())
-		var h := rows.size()
-		for y in h:
-			for x in rows[y].length():
-				if rows[y][x] != " ":
-					ascii[Vector2i(x, y)] = rows[y][x]
-		var ch := func(x: int, y: int) -> String:
-			return "#" if x < 0 or y < 0 or x >= w or y >= h else ascii.get(Vector2i(x, y), " ")
-		var art := Node2D.new()
-		RoomArt.new(ch, w, h).build(art, id, data.get("background", []))
-
-		await _spawn(load(data.scene))
-		_check(_main.is_painted() and _main._w == w and _main._h == h, "%s: painted, %d x %d tiles (%d x %d)" % [id, w, h, _main._w, _main._h])
-		var grid_wrong := 0
-		for y in h:
-			for x in w:
-				var want: String = ascii.get(Vector2i(x, y), " ")
-				if not want in layout_chars:
-					want = " "
-				if _main._ch(x, y) != want:
-					grid_wrong += 1
-		_check(grid_wrong == 0, "%s: layout grid matches (%d cells differ)" % [id, grid_wrong])
-		for layer_name in ["Terrain", "Background"]:
-			var want_layer: TileMapLayer = art.get_node(layer_name)
-			var got: TileMapLayer = _layer_named(layer_name)
-			var differ := 0
-			for cell in want_layer.get_used_cells():
-				if got.get_cell_atlas_coords(cell) != want_layer.get_cell_atlas_coords(cell):
-					differ += 1
-			_check(differ == 0 and got.get_used_cells().size() == want_layer.get_used_cells().size(),
-					"%s: %s tiles match (%d of %d differ)" % [id, layer_name, differ, want_layer.get_used_cells().size()])
-		art.free()
-
-		# Enemies and bosses: kind and position, as the ASCII spawner placed them.
-		var want_things := []
-		for cell in ascii:
-			var o := Vector2(cell * TILE)
-			match ascii[cell]:
-				"E": want_things.append(["crawler", o + Vector2(TILE * 0.5, TILE - 12)])
-				"c": want_things.append(["ceiling", o + Vector2(TILE * 0.5, 12)])
-				"K": want_things.append(["knight", o + Vector2(TILE * 0.5, TILE - 22)])
-				"B": want_things.append(["warden", o + Vector2(TILE * 0.5, TILE - 36)])
-				"F": want_things.append(["harrier", o + Vector2(TILE * 0.5, TILE * 0.5)])
-		var got_things := []
-		var unplayed: Room = load(data.scene).instantiate()   # positions as placed, before anything moves
-		for e in unplayed.entities().get_children():
-			var kind := "crawler" if e is CrawlerEnemy else "knight" if e is KnightEnemy else "warden" if e is WardenBoss else "harrier" if e is HarrierBoss else ""
-			if kind == "crawler" and e.on_ceiling:
-				kind = "ceiling"
-			if kind != "":
-				got_things.append([kind, e.position])
-		unplayed.free()
-		var sort := func(a, b): return str(a) < str(b)
-		want_things.sort_custom(sort)
-		got_things.sort_custom(sort)
-		_check(str(want_things) == str(got_things), "%s: %d enemies and bosses in place" % [id, want_things.size()])
-		# Doors and the player start.
-		var doors: Array = _main._doors.map(func(d): return [d.rect, d.target])
-		var want_doors := []
-		for x in w:
-			var y := 0
-			while y < h:
-				if ch.call(x, y) == ">":
-					var top := y
-					while ch.call(x, y) == ">":
-						y += 1
-					want_doors.append([Rect2i(x, top, 1, y - top), data.doors["left" if x * 2 < w else "right"]])
-				y += 1
-		_check(str(doors) == str(want_doors), "%s: doors %s" % [id, doors])
-		var p := _find_tile(rows, "P")
-		var starts: Array = _main.entities_of(PlayerStart)
-		_check(starts.size() == 1 and starts[0].position == Vector2(p.x * TILE + TILE * 0.5, (p.y + 1) * TILE), "%s: PlayerStart on the P" % id)
-		await _despawn()
-
-
 func _test_room_template() -> void:
 	print("Room template: layers with the right tilesets, skyline, entities, helper nodes")
 	var room: Room = load("res://scenes/rooms/room_template.tscn").instantiate()
@@ -2305,11 +2204,11 @@ func _test_enemy_inspector_settings() -> void:
 	await _spawn()
 	await _remove_enemies()
 	var floor_y := 18 * TILE - CrawlerEnemy.SIZE.y * 0.5
-	var random_one: CrawlerEnemy = _place_enemy(_main.CRAWLER_SCENE, {}, Vector2(5.5 * TILE, floor_y))
-	var pink: CrawlerEnemy = _place_enemy(_main.CRAWLER_SCENE, {"palette": "pink"}, Vector2(9.5 * TILE, floor_y))
-	var tough: CrawlerEnemy = _place_enemy(_main.CRAWLER_SCENE,
+	var random_one: CrawlerEnemy = _place_enemy(CRAWLER_SCENE, {}, Vector2(5.5 * TILE, floor_y))
+	var pink: CrawlerEnemy = _place_enemy(CRAWLER_SCENE, {"palette": "pink"}, Vector2(9.5 * TILE, floor_y))
+	var tough: CrawlerEnemy = _place_enemy(CRAWLER_SCENE,
 			{"palette": "sewer", "heal_on_kill": 3, "max_health": 6}, Vector2(13.5 * TILE, floor_y))
-	var knight: KnightEnemy = _place_enemy(_main.KNIGHT_SCENE, {"heal_on_kill": 1}, Vector2(20.5 * TILE, 18 * TILE - KnightEnemy.SIZE.y * 0.5))
+	var knight: KnightEnemy = _place_enemy(KNIGHT_SCENE, {"heal_on_kill": 1}, Vector2(20.5 * TILE, 18 * TILE - KnightEnemy.SIZE.y * 0.5))
 	await _frames(2)
 	_check(random_one.palette in CrawlerEnemy.PALETTES, "left on random, it picked %s" % random_one.palette)
 	_check(pink.palette == "pink" and pink.kill_heal() == CrawlerEnemy.KILL_HEAL, "set to pink: stays pink, heals by default")
