@@ -1,7 +1,7 @@
 class_name RoomArt
 extends RefCounted
 ## Builds a room's tile art from its ASCII rows: solid terrain, one-way
-## platforms, spikes, arena gates and acid on the
+## platforms, spikes, doors, arena gates and acid on the
 ## main tile sheet, the warehouse wall behind (with windows the skyline shows
 ## through), and the far skyline as a parallax layer. Art only: collisions and
 ## hazards stay in main.gd.
@@ -33,6 +33,8 @@ const SPIKES := [Vector2i(4, 4), Vector2i(5, 4), Vector2i(3, 6), Vector2i(4, 6)]
 const GATE := Vector2i(6, 4)       # shut: the shutter, repeating down the column
 const GATE_END := Vector2i(7, 4)   # shut: its bottom tile, with the teeth
 const GATE_UP := Vector2i(0, 6)    # raised: just the teeth under the lintel
+const DOOR := Vector2i(1, 6)
+const DOOR_TOP := Vector2i(2, 6)   # under solid ground: lintel and EXIT sign
 const ACID_FRAMES := 4
 const ACID_FRAME_TIME := 0.24
 
@@ -157,7 +159,7 @@ func _ensure_tile(layer: TileMapLayer, coords: Vector2i) -> void:
 func _make_foreground() -> TileMapLayer:
 	var layer := _layer(TILESET, 0)
 	layer.name = "Terrain"
-	for coords in _terrain_by_sides.values() + [PLAT_L, PLAT_MID, PLAT_R, PLAT_ONE] + SPIKES:
+	for coords in _terrain_by_sides.values() + [PLAT_L, PLAT_MID, PLAT_R, PLAT_ONE, DOOR, DOOR_TOP] + SPIKES:
 		_ensure_tile(layer, coords)
 	var last_spike := -1   # variant of the spike just to the left, so neighbours differ
 	for coords in [ACID_TOP, ACID_FILL]:
@@ -188,6 +190,8 @@ func _make_foreground() -> TileMapLayer:
 						variant = (variant + 1) % SPIKES.size()
 					last_spike = variant
 					layer.set_cell(Vector2i(x, y), 0, SPIKES[variant])
+				">":
+					layer.set_cell(Vector2i(x, y), 0, DOOR_TOP if _ch(x, y - 1) == "#" else DOOR)
 	return layer
 
 

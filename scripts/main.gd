@@ -1,13 +1,11 @@
 extends Node2D
 ## Builds a room from LevelData (ASCII): tile art (RoomArt), collisions and
-## hazards, entities. Doors are still placeholders drawn here.
+## hazards, entities.
 
 const TILE := 32
 const LAYER_WORLD := 1
 const LAYER_PLATFORMS := 32
 const SPIKE_HEIGHT := 24.0   # damage area: the bottom of the tile, up to the spike tips
-const DOOR_COLOR := Color(0.02, 0.02, 0.04)
-const DOOR_FRAME_COLOR := Color(0.5, 0.45, 0.35)
 const ARENA_TRIGGER_INSET := 3   # tiles past a gate before the boss fight starts
 const INTRO_ZOOM := 2.2
 const INTRO_ZOOM_IN_TIME := 0.7
@@ -438,17 +436,3 @@ func _spawn_pickup(ability: String, label: String, tile_origin: Vector2) -> void
 	pickup.label = label
 	pickup.position = tile_origin + Vector2(TILE * 0.5, TILE * 0.5)
 	add_child(pickup)
-
-
-# ------------------------------------------------- Placeholder tile art ----
-
-# Everything else is tile art (RoomArt). Doors still aren't.
-func _draw() -> void:
-	for y in _h:
-		for x in _w:
-			var r := Rect2(x * TILE, y * TILE, TILE, TILE)
-			match _ch(x, y):
-				">":
-					draw_rect(r, DOOR_COLOR)
-					if _ch(x, y - 1) == "#":
-						draw_rect(Rect2(r.position, Vector2(TILE, 6)), DOOR_FRAME_COLOR)
