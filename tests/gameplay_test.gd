@@ -67,7 +67,7 @@ const SEGMENTS := {
 		"_test_harrier_flies_and_swoops", "_test_harrier_shallow_swoop_hits_standing_player",
 		"_test_harrier_swoops_ignore_player_height", "_test_harrier_phase_two_cycle",
 		"_test_harrier_feathers", "_test_homing_feather_limits", "_test_harrier_pulls_up_after_hitting_you",
-		"_test_harrier_crashes_when_it_misses", "_test_harrier_armor_except_dazed",
+		"_test_harrier_crashes_when_it_misses", "_test_harrier_armor_except_dazed", "_test_harrier_dazed_recoil",
 		"_test_harrier_defeat_grants_wall_jump",
 	],
 	# Damage numbers and armor, sprint and stamina (player.gd, enemy damage settings).
@@ -788,7 +788,7 @@ func _test_enemies_set_their_own_damage() -> void:
 	_player.global_position = knight.global_position + Vector2(-50, 0)
 	_player.velocity = Vector2.ZERO
 	var lost := await _wait_for_hit(180)
-	_check(knight.damage == 8 and lost == 8, "knight hit for %d half-hearts" % lost)
+	_check(lost == knight.damage, "knight hit for %d half-hearts (its damage: %d)" % [lost, knight.damage])
 	await _despawn()
 
 	var boss := await _start_boss_fight()
@@ -1256,6 +1256,39 @@ func _test_harrier_armor_except_dazed() -> void:
 	boss.take_hit(1, Vector2.RIGHT)
 	_check(boss.health == hp - 2, "dazed: full damage (%d -> %d)" % [hp, boss.health])
 	_check(_main._hud._boss_bar.current == boss.health, "health bar follows")
+	await _despawn()
+
+
+func _test_harrier_dazed_recoil() -> void:
+	print("Harrier: hitting it while it lies dazed barely pushes you (dazed_hit_recoil)")
+	var boss := await _start_harrier_fight()
+	_check(boss.current_hit_recoil() == boss.hit_recoil and boss.dazed_hit_recoil < boss.hit_recoil,
+			"flying: %.0f; dazed it will be less, %.0f" % [boss.current_hit_recoil(), boss.dazed_hit_recoil])
+	boss._crash()
+	for i in 60:
+		await _frames(1)
+		if boss.is_on_floor():
+			break
+	_check(boss._state == HarrierBoss.State.DAZED and boss.current_hit_recoil() == boss.dazed_hit_recoil,
+			"dazed: %.0f" % boss.current_hit_recoil())
+	# A real side swing from beside it, standing on the floor.
+	_player._invuln_timer = 999.0
+	_player.facing = 1
+	_player.global_position = Vector2(boss.global_position.x - 50.0,
+			boss.global_position.y + HarrierBoss.SIZE.y * 0.5 - Player.BODY_SIZE.y * 0.5)
+	_player.velocity = Vector2.ZERO
+	_player._attack_cooldown_timer = 0.0
+	var hp := boss.health
+	Input.action_press("attack")
+	var pushed := Vector2.ZERO
+	for i in 6:
+		await _frames(1)
+		if boss.health < hp:
+			pushed = _player.velocity
+			break
+	_release_all()
+	_check(boss.health < hp and absf(pushed.length() - boss.dazed_hit_recoil) < 3.0,
+			"the swing landed and pushed you back %.0f px/s (dazed_hit_recoil %.0f)" % [pushed.length(), boss.dazed_hit_recoil])
 	await _despawn()
 
 
@@ -1816,9 +1849,12 @@ func _air_jump_press() -> bool:
 
 
 func _test_double_jump() -> void:
-	print("Double jump: one extra jump in the air, back on landing; you start with it")
+	print("Double jump: one extra jump in the air, back on landing; a new game has it if STARTING_ABILITIES says so")
 	await _spawn()
-	_check(GameState.has_ability("double_jump"), "a new game starts with double jump")
+	var starts_with: bool = GameState.STARTING_ABILITIES.get("double_jump", false)
+	_check(GameState.has_ability("double_jump") == starts_with,
+			"a new game starts %s double jump, as STARTING_ABILITIES says" % ("with" if starts_with else "without"))
+	GameState.abilities["double_jump"] = true
 	_place(5, 17)
 	await _frames(5)
 	Input.action_press("jump")
@@ -1878,11 +1914,12 @@ func _test_pink_crawler_kill_heals() -> void:
 
 
 func _test_crawler_sludge() -> void:
-	print("Crawlers: sewer ones in the first room, ooze with a slime trail, wobble when hit, melt when killed")
+	print("Crawlers: placed by colour, ooze with a slime trail, wobble when hit, melt when killed")
 	await _spawn()
 	var crawlers := get_tree().get_nodes_in_group("enemy").filter(func(e): return e is CrawlerEnemy)
-	_check(not crawlers.is_empty() and crawlers.all(func(c): return c.scene_file_path == CRAWLER_SCENE.resource_path),
-			"the room's crawlers are all sewer crawlers (%d)" % crawlers.size())
+	var colours := ["sewer", "sickly", "pink"].map(func(c): return "res://scenes/enemies/crawler_%s.tscn" % c)
+	_check(not crawlers.is_empty() and crawlers.all(func(c): return c.scene_file_path in colours),
+			"the room's crawlers are all colour scenes %s" % [crawlers.map(func(c): return c.scene_file_path.get_file())])
 	var crawler: CrawlerEnemy = crawlers[0]
 	await _frames(60)
 	_check(crawler.sprite.animation in ["walk", "turn"], "oozing along (%s)" % crawler.sprite.animation)
@@ -2234,7 +2271,10 @@ func _test_enemy_inspector_settings() -> void:
 			"the sprite comes with the scene, with its saved frames")
 	_check(pink is PinkCrawler and pink.kill_heal() == PinkCrawler.KILL_HEAL, "pink heals by default")
 	_check(tough.health == 6 and tough.kill_heal() == 3, "a sewer crawler set to heal 3, with 6 health")
-	_check(knight.health == 5 and knight.damage == 8 and knight.kill_heal() == 1, "a knight keeps its own defaults, set to heal 1")
+	var stock: KnightEnemy = KNIGHT_SCENE.instantiate()   # the type's defaults, from its scene
+	_check(knight.health == stock.max_health and knight.damage == stock.damage and knight.kill_heal() == 1,
+			"a knight keeps its scene's defaults (%d health, %d damage), set to heal 1" % [stock.max_health, stock.damage])
+	stock.free()
 	var deaths := []
 	tough.died.connect(func() -> void: deaths.append(tough))
 	_player.health = 2
@@ -2668,12 +2708,16 @@ func _swing_at(scene: PackedScene, size_y: float, direction: String, offset: Vec
 
 func _test_hit_recoil() -> void:
 	print("Hits push you away from the enemy, by its hit_recoil: crawlers hard, knights and the Warden barely")
+	# Each type's default comes from its scene, as placed in a room (and shown in the Inspector).
 	var crawler: EnemyBase = CRAWLER_SCENE.instantiate()
 	var knight: EnemyBase = KNIGHT_SCENE.instantiate()
-	var warden := WardenBoss.new()
-	var harrier := HarrierBoss.new()
-	_check(crawler.hit_recoil == 500.0 and knight.hit_recoil == 180.0, "crawlers 500, knights 180")
-	_check(warden.hit_recoil == 180.0 and harrier.hit_recoil == 300.0, "the Warden 180, the Harrier 300")
+	var warden: BossBase = load("res://scenes/bosses/warden.tscn").instantiate()
+	var harrier: BossBase = load("res://scenes/bosses/harrier.tscn").instantiate()
+	var crawler_recoil := crawler.hit_recoil
+	var knight_recoil := knight.hit_recoil
+	_check(crawler_recoil > knight_recoil and crawler_recoil > warden.hit_recoil,
+			"crawlers (%.0f) push harder than knights (%.0f) and the Warden (%.0f); the Harrier %.0f"
+			% [crawler_recoil, knight_recoil, warden.hit_recoil, harrier.hit_recoil])
 	for n in [crawler, knight, warden, harrier]:
 		n.free()
 	await _spawn_node(_build_platform_room())
@@ -2682,11 +2726,11 @@ func _test_hit_recoil() -> void:
 	var above_knight := Vector2(0, -KnightEnemy.SIZE.y * 0.5 - 50)
 	var floor_level := func(size_y: float) -> Vector2: return Vector2(-52, size_y * 0.5 - Player.BODY_SIZE.y * 0.5)
 	for case in [
-			["a down-strike on a crawler bounces you straight up, high", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "down", above_crawler, 500.0],
-			["off its left edge, up and to the left", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "down", above_crawler + Vector2(-26, 0), 500.0],
-			["on a knight, a small hop", KNIGHT_SCENE, KnightEnemy.SIZE.y, "down", above_knight, 180.0],
-			["a side swing at a crawler shoves you back hard", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "side", floor_level.call(CrawlerEnemy.SIZE.y), 500.0],
-			["at a knight, a little", KNIGHT_SCENE, KnightEnemy.SIZE.y, "side", floor_level.call(KnightEnemy.SIZE.y), 180.0]]:
+			["a down-strike on a crawler bounces you straight up, high", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "down", above_crawler, crawler_recoil],
+			["off its left edge, up and to the left", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "down", above_crawler + Vector2(-26, 0), crawler_recoil],
+			["on a knight, a small hop", KNIGHT_SCENE, KnightEnemy.SIZE.y, "down", above_knight, knight_recoil],
+			["a side swing at a crawler shoves you back hard", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "side", floor_level.call(CrawlerEnemy.SIZE.y), crawler_recoil],
+			["at a knight, a little", KNIGHT_SCENE, KnightEnemy.SIZE.y, "side", floor_level.call(KnightEnemy.SIZE.y), knight_recoil]]:
 		var hit: Array = await _swing_at(case[1], case[2], case[3], case[4])
 		var pushed: Vector2 = hit[0]
 		var away: Vector2 = hit[1]

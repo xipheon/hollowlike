@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://c4vssrnlyxf2w"]
 
-[ext_resource type="Script" path="res://scripts/boss_warden.gd" id="1"]
+[ext_resource type="Script" uid="uid://c0a7trvs3gpf5" path="res://scripts/boss_warden.gd" id="1"]
 
-[node name="Warden" type="CharacterBody2D"]
+[node name="Warden" type="CharacterBody2D" unique_id=1875136055]
 script = ExtResource("1")
+hit_recoil = 120.0

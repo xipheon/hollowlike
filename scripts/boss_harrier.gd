@@ -53,6 +53,7 @@ enum State { DORMANT, HOVER, SHOT_WINDUP, HOMING_WINDUP, WAIT_HOMING, SHALLOW_WI
 @export var windup_time := 0.45          ## full swoop
 @export var swoop_speed := 960.0
 @export var dazed_time := 1.8
+@export var dazed_hit_recoil := 50.0     ## hitting it while it lies dazed barely pushes you (else hit_recoil)
 @export var rise_speed := 320.0
 @export var gravity := 2000.0            ## only while dazed or dead
 @export var phase_two_speedup := 1.3
@@ -81,7 +82,6 @@ func _init() -> void:
 	boss_name = "THE HARRIER"
 	reward_ability = "wall_jump"
 	max_health = 32
-	hit_recoil = 300.0
 
 
 func _ready() -> void:
@@ -378,6 +378,10 @@ func _crash() -> void:
 func _set_hitbox_active(active: bool) -> void:
 	if is_instance_valid(_hit_shape):
 		_hit_shape.set_deferred("disabled", not active)
+
+
+func current_hit_recoil() -> float:
+	return dazed_hit_recoil if _state == State.DAZED else hit_recoil
 
 
 func take_hit(amount: int, _hit_dir: Vector2) -> void:

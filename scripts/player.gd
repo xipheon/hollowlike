@@ -517,10 +517,12 @@ func _on_attack_body_entered(body: Node) -> void:
 	if _hit_this_swing.has(body) or not body.has_method("take_hit"):
 		return
 	_hit_this_swing[body] = true
+	# Read before the hit lands: it can change the target's state (and so its recoil).
+	var recoil: Variant = body.current_hit_recoil() if body.has_method("current_hit_recoil") else body.get("hit_recoil")
 	body.take_hit(attack_damage, _attack_dir)
 	hit_stop(0.05)
 	shake(3.0, 0.1)
-	_recoil(body, body.get("hit_recoil"))
+	_recoil(body, recoil)
 
 
 func _on_attack_area_entered(area: Area2D) -> void:
@@ -535,8 +537,8 @@ func _on_attack_area_entered(area: Area2D) -> void:
 
 
 ## Pushes you away from what the swing hit, along the line from it to you, at
-## `speed` px/s (its hit_recoil; null if it has none, which uses
-## DEFAULT_HIT_RECOIL). Struck from above, that bounces you up and gives back
+## `speed` px/s (its current_hit_recoil() or hit_recoil; null if it has
+## neither, which uses DEFAULT_HIT_RECOIL). Struck from above, that bounces you up and gives back
 ## the air jump and dash, so a high recoil works like a pogo; struck from the
 ## side, it shoves you back and you can't steer for recoil_lock_time.
 func _recoil(target: Node2D, speed: Variant) -> void:

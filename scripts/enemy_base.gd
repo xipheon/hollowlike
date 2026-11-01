@@ -2,7 +2,9 @@ class_name EnemyBase
 extends CharacterBody2D
 ## What every regular enemy shares (bosses have BossBase): health, contact
 ## damage, the hit flash, healing the player on a kill, and dying. Each placed
-## enemy can override these in the Inspector.
+## enemy can override these in the Inspector. A type that wants different
+## defaults sets them on its scene's root (e.g. knight.tscn), not in code, so
+## the Inspector shows them; script-only instances (.new()) keep these.
 ## Subclasses hook in with _on_hit() (stagger, knockback...) and _on_death()
 ## (play a death animation, then queue_free; the default frees at once), and
 ## can give their type a default kill heal with default_kill_heal().

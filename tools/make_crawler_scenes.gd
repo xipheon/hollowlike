@@ -4,8 +4,8 @@ extends SceneTree
 ## game. For each colour it saves the sprite's animations as
 ## art/sprites/crawler_<colour>_frames.tres and a scene,
 ## scenes/enemies/crawler_<colour>.tscn: the colour's crawler script, its slime
-## colour, and a Sprite (scripts/crawler_sprite.gd) using those frames. Run
-## from the project folder after redrawing the sheets:
+## colour, its hit_recoil, and a Sprite (scripts/crawler_sprite.gd) using those
+## frames. Run from the project folder after redrawing the sheets:
 ##   godot --headless --path . --script res://tools/make_crawler_scenes.gd
 ## Untyped on purpose: the crawler scripts use autoloads, which a --script run
 ## can't compile against up front.
@@ -16,6 +16,7 @@ const SCENE_PATH := "res://scenes/enemies/crawler_%s.tscn"
 const SPRITE_SCRIPT := "res://scripts/crawler_sprite.gd"
 const FRAME := Vector2i(32, 32)
 const BODY_HEIGHT := 24   # CrawlerEnemy.SIZE.y
+const HIT_RECOIL := 500.0   # every crawler: soft and springy, a down-strike bounces you high
 ## Colour: [scene root name, script].
 const COLOURS := {
 	"sewer": ["SewerCrawler", "res://scripts/enemy_crawler.gd"],
@@ -39,6 +40,7 @@ func _init() -> void:
 		crawler.set_script(load(COLOURS[colour][1]))
 		# The trail matches the walk frame's body, low down.
 		crawler.set("slime_color", sheet.get_image().get_pixel(FRAME.x / 2, FRAME.y - 2))
+		crawler.set("hit_recoil", HIT_RECOIL)
 		_add_sprite(crawler, colour)
 		_save_scene(crawler, SCENE_PATH % colour)
 	quit()

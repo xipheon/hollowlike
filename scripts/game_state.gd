@@ -10,7 +10,7 @@ const MENU_SCENE := "res://scenes/main_menu.tscn"
 
 ## Abilities you begin a new game with; the rest are unlocked by bosses.
 const STARTING_ABILITIES := {
-	"double_jump": true,
+	"double_jump": false,
 	"sprint": false,
 	"dash": false,
 	"wall_jump": false,

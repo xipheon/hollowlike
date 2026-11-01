@@ -8,6 +8,7 @@
 [ext_resource type="Script" uid="uid://7l6ef5tfrino" path="res://scripts/player_start.gd" id="7_a8y0u"]
 [ext_resource type="Script" uid="uid://c0iiycufi7sln" path="res://scripts/room_door.gd" id="8_jkv2x"]
 [ext_resource type="PackedScene" path="res://scenes/props/moving_platform.tscn" id="8_tipki"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/crawler_sickly.tscn" id="9_ofw6u"]
 
 [node name="FirstTestRoom" type="Node2D" unique_id=2075219856]
 script = ExtResource("1_tipki")
@@ -51,10 +52,6 @@ position = Vector2(2288, 372)
 [node name="Crawler3" parent="Entities" unique_id=1342230864 instance=ExtResource("5_eb6dy")]
 position = Vector2(2672, 436)
 
-[node name="CeilingCrawler2" parent="Entities" unique_id=607568597 instance=ExtResource("5_eb6dy")]
-position = Vector2(2512, 492)
-on_ceiling = true
-
 [node name="PlayerStart" type="Node2D" parent="Entities" unique_id=1692050278]
 position = Vector2(112, 576)
 script = ExtResource("7_a8y0u")
@@ -75,3 +72,7 @@ texture_filter = 1
 position = Vector2(488, 353)
 width_tiles = 4
 speed = 150.0
+
+[node name="SicklyCrawler" parent="." unique_id=566546517 instance=ExtResource("9_ofw6u")]
+position = Vector2(2517, 488)
+on_ceiling = true

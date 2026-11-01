@@ -15,6 +15,7 @@ var boss_name := "BOSS"
 var reward_ability := ""
 var max_health := 20
 ## How hard hitting this pushes the player away, in px/s (see EnemyBase.hit_recoil).
+## Each boss sets its own on its scene's root (warden.tscn: 180).
 @export var hit_recoil := 300.0
 var health := 0
 ## Arena limits in pixels (set by the room before activate()). Also used to
@@ -35,6 +36,12 @@ func activate(target: Node2D) -> void:
 
 func take_hit(_amount: int, _hit_dir: Vector2) -> void:
 	pass
+
+
+## How hard hitting it pushes the player right now: hit_recoil, unless a boss
+## changes it with its state (the Harrier, dazed).
+func current_hit_recoil() -> float:
+	return hit_recoil
 
 
 ## Debug shortcut: dies on the spot, even before the fight has started.

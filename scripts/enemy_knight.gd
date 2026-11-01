@@ -3,7 +3,8 @@ extends EnemyBase
 ## Slow armoured swordsman, as tall as the player. Patrols, walks toward you
 ## when it sees you, and when you're in reach raises its sword (glows orange)
 ## then swings. The swing is slow to start: step back, or hit it first.
-## Place scenes/enemies/knight.tscn and set it up in the Inspector.
+## Place scenes/enemies/knight.tscn and set it up in the Inspector. Its type's
+## defaults (5 health, 8 damage, a light hit_recoil of 180) are set in that scene.
 
 const SIZE := Vector2(24, 44)
 const SWORD_SIZE := Vector2(46, 28)
@@ -27,12 +28,6 @@ var _flashing_now := false
 var _knockback := 0.0
 var _ledge_ray: RayCast2D
 var _sword_shape: CollisionShape2D
-
-
-func _init() -> void:
-	max_health = 5
-	damage = 8   # per hit (body or sword), in half-hearts: 4 hearts
-	hit_recoil = 180.0   # armoured: your swing barely bounces off
 
 
 func _ready() -> void:

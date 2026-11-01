@@ -35,10 +35,6 @@ var _trail_distance := 0.0
 var _ledge_ray: RayCast2D
 
 
-func _init() -> void:
-	hit_recoil = 500.0   # soft and springy: a down-strike bounces you high
-
-
 func _ready() -> void:
 	super._ready()
 	var shape := CollisionShape2D.new()
