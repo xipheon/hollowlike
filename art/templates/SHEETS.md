@@ -58,17 +58,23 @@ Guide colours:
 
 - Guide: `art/templates/crawler_guide.png`
 - Save the art as: `art/sprites/crawler.png`
-- Frame: 32 x 32 px; the sheet is 5 x 4 frames (160 x 128 px)
+- Frame: 32 x 32 px; the sheet is 5 x 10 frames (160 x 320 px)
 - Pivot: bottom centre (the feet)
 - Collision box: 28 x 24
-- Facing right.
+- Facing right. Drawn by tools/make_crawler_sheet.gd, one sheet per palette (crawler_<palette>.png). The ceiling_ rows hang upside down from the top of the frame (that's their pivot); drop and land are its fall and splat.
 
 | Row | Animation | Frames | FPS | Loops |
 |---|---|---|---|---|
 | 0 | walk | 4 | 8 | yes |
 | 1 | turn | 2 | 10 | no |
 | 2 | hurt | 2 | 10 | no |
-| 3 | death | 5 | 12 | no |
+| 3 | death | 5 | 10 | no |
+| 4 | ceiling_walk | 4 | 8 | yes |
+| 5 | ceiling_turn | 2 | 10 | no |
+| 6 | ceiling_hurt | 2 | 10 | no |
+| 7 | ceiling_death | 5 | 10 | no |
+| 8 | drop | 2 | 8 | yes |
+| 9 | land | 2 | 10 | no |
 
 ## knight
 

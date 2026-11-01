@@ -24,7 +24,7 @@ const SEGMENTS := {
 		"_test_acid_route_jumps", "_test_acid_enemies_stay_on_platforms", "_test_crawler_turns_at_wall",
 		"_test_door_to_boss_room_and_back", "_test_coin_counts_and_stays_collected",
 		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
-		"_test_crawler_kill_heals_half_heart", "_test_health_pickup", "_test_room_lights_flicker",
+		"_test_pink_crawler_kill_heals", "_test_crawler_sludge", "_test_ceiling_crawler", "_test_health_pickup", "_test_room_lights_flicker",
 	],
 	# Boss room layout around the arena: shafts, the drop, the acid gap, the climb door.
 	"boss_room": [
@@ -361,9 +361,9 @@ func _test_acid_route_jumps() -> void:
 func _test_boss_room_shafts_climbable() -> void:
 	print("The left boss-room shaft can be climbed with plain jumps")
 	await _spawn(BOSS_SCENE, true)
-	var crawlers := get_tree().get_nodes_in_group("enemy").filter(func(e): return e is CrawlerEnemy)
+	var crawlers := get_tree().get_nodes_in_group("enemy").filter(func(e): return e is CrawlerEnemy and not e.on_ceiling)
 	_check(crawlers.size() == 1 and crawlers[0].global_position.x < 11 * TILE and crawlers[0].global_position.y > 16 * TILE,
-			"one crawler, in the left shaft")
+			"one floor crawler, in the left shaft")
 	await _remove_enemies()
 	await _check_route(BOSS_LEFT_SHAFT)
 	await _despawn()
@@ -728,7 +728,7 @@ func _test_knight_swing_can_be_dodged() -> void:
 
 
 func _test_knight_kill_doesnt_heal() -> void:
-	print("Killing a knight doesn't heal (only crawlers do)")
+	print("Killing a knight doesn't heal (only pink crawlers do)")
 	await _spawn(CLIMB_SCENE)
 	_player.health = 5
 	var knight: KnightEnemy = _knights()[0]
@@ -1860,17 +1860,93 @@ func _test_double_jump() -> void:
 	await _despawn()
 
 
-func _test_crawler_kill_heals_half_heart() -> void:
-	print("Killing a crawler heals half a heart")
+func _test_pink_crawler_kill_heals() -> void:
+	print("Killing a pink crawler heals a heart; other colours don't heal")
 	await _spawn()
+	var crawlers := get_tree().get_nodes_in_group("enemy").filter(func(e): return e is CrawlerEnemy)
+	for c in crawlers:
+		c.palette = "pink" if c == crawlers[0] else "sewer"
 	_player.health = 5
-	var crawler: CrawlerEnemy = get_tree().get_nodes_in_group("enemy")[0]
-	crawler.take_hit(crawler.max_health, Vector2.RIGHT)
-	_check(_player.health == 6, "health 5 -> %d half-hearts" % _player.health)
-	_check(_main._hud._health_bar.current == 6, "HUD updated")
+	crawlers[0].take_hit(99, Vector2.RIGHT)
+	_check(_player.health == 5 + CrawlerEnemy.KILL_HEAL, "pink: health 5 -> %d half-hearts" % _player.health)
+	_check(_main._hud._health_bar.current == _player.health, "HUD updated")
+	crawlers[1].take_hit(99, Vector2.RIGHT)
+	_check(_player.health == 5 + CrawlerEnemy.KILL_HEAL, "sewer: no healing (%d)" % _player.health)
 	_player.health = _player.max_health
-	get_tree().get_nodes_in_group("enemy")[1].take_hit(99, Vector2.RIGHT)
+	crawlers[2].palette = "pink"
+	crawlers[2].take_hit(99, Vector2.RIGHT)
 	_check(_player.health == _player.max_health, "no overheal")
+	await _despawn()
+
+
+func _test_crawler_sludge() -> void:
+	print("Crawlers: random palette, ooze with a slime trail, wobble when hit, melt when killed")
+	await _spawn()
+	var crawlers := get_tree().get_nodes_in_group("enemy").filter(func(e): return e is CrawlerEnemy)
+	_check(not crawlers.is_empty() and crawlers.all(func(c): return c.palette in CrawlerEnemy.PALETTES),
+			"each spawned with a palette %s" % [crawlers.map(func(c): return c.palette)])
+	var crawler: CrawlerEnemy = crawlers[0]
+	await _frames(60)
+	_check(crawler.sprite.animation in ["walk", "turn"], "oozing along (%s)" % crawler.sprite.animation)
+	_check(crawler.sprite.flip_h == (crawler._dir < 0), "faces the way it's going")
+	_check(_main.get_children().any(func(c): return c is SlimeDrip), "leaves a slime trail")
+	crawler.take_hit(1, Vector2.RIGHT)
+	await _frames(1)
+	_check(crawler.sprite.animation == "hurt", "wobbles when hit (%s)" % crawler.sprite.animation)
+	crawler.take_hit(99, Vector2.RIGHT)
+	await _frames(1)
+	_check(is_instance_valid(crawler) and crawler.sprite.animation == "death", "melts instead of vanishing")
+	_check(not crawler.is_in_group("enemy") and crawler.collision_layer == 0, "harmless and can't be hit while melting")
+	await _frames(60)
+	_check(not is_instance_valid(crawler), "gone once it's melted")
+	await _despawn()
+
+
+func _test_ceiling_crawler() -> void:
+	print("Ceiling crawlers: ooze along upside down, drop when you pass beneath, then crawl the floor")
+	await _spawn()
+	await _remove_enemies()
+	_player._invuln_timer = 999.0
+	_player.global_position = Vector2(25 * TILE, 17 * TILE)   # well off to the side
+	var hanger := CrawlerEnemy.new()
+	hanger.on_ceiling = true
+	hanger.position = Vector2(8.5 * TILE, CrawlerEnemy.SIZE.y * 0.5)   # under the room's top edge
+	_main.add_child(hanger)
+	await _frames(30)
+	var x0 := hanger.global_position.x
+	await _frames(30)
+	_check(hanger.on_ceiling and hanger.is_on_floor() and hanger.global_position.y < TILE,
+			"stuck to the ceiling (y %.0f)" % hanger.global_position.y)
+	_check(absf(hanger.global_position.x - x0) > 10.0, "oozing along it")
+	_check(hanger.sprite.animation in ["ceiling_walk", "ceiling_turn"], "droopy ceiling animation (%s)" % hanger.sprite.animation)
+	# Walk underneath: hold the player in the air below it.
+	_player.process_mode = Node.PROCESS_MODE_DISABLED
+	_player.global_position = Vector2(hanger.global_position.x, 8 * TILE)
+	await _frames(2)
+	_check(not hanger.on_ceiling and hanger.sprite.animation == "drop", "drops when you're below (%s)" % hanger.sprite.animation)
+	var x_drop := hanger.global_position.x
+	var landed := false
+	for i in 120:
+		await _frames(1)
+		if hanger.sprite.animation == "land":
+			landed = true
+			break
+	_check(landed and absf(hanger.global_position.x - x_drop) < 1.0, "fell straight down and splatted")
+	await _frames(30)
+	_check(hanger.is_on_floor() and hanger.up_direction == Vector2.UP and hanger.sprite.animation in ["walk", "turn"],
+			"crawls the floor afterwards (%s)" % hanger.sprite.animation)
+	_player.process_mode = Node.PROCESS_MODE_INHERIT
+	hanger.queue_free()
+
+	# Hitting one on the ceiling knocks it down.
+	var knocked := CrawlerEnemy.new()
+	knocked.on_ceiling = true
+	knocked.position = Vector2(5.5 * TILE, CrawlerEnemy.SIZE.y * 0.5)
+	_main.add_child(knocked)
+	await _frames(10)
+	knocked.take_hit(1, Vector2.UP)
+	await _frames(1)
+	_check(not knocked.on_ceiling and knocked.sprite.animation == "drop", "a hit knocks it off the ceiling")
 	await _despawn()
 
 
@@ -1973,7 +2049,7 @@ func _test_acid_enemies_stay_on_platforms() -> void:
 	_player.process_mode = Node.PROCESS_MODE_DISABLED
 	var start_y := {}
 	for e in get_tree().get_nodes_in_group("enemy"):
-		if e.global_position.x > 60 * TILE:
+		if e.global_position.x > 60 * TILE and not (e is CrawlerEnemy and e.on_ceiling):
 			start_y[e] = e.global_position.y
 	await _frames(300)
 	for e in start_y:

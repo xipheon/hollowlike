@@ -38,7 +38,7 @@ const SKINS := [
 	{"id": "classic", "name": "Brown Jacket", "sheet": "res://art/sprites/player.png"},
 	{"id": "pink", "name": "Pink Jacket", "sheet": "res://art/sprites/player_pink.png"},
 ]
-const DEFAULT_SKIN := "pink"
+const DEFAULT_SKIN := "classic"
 
 var skin_id := ""
 

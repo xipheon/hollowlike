@@ -380,8 +380,15 @@ func _spawn_entities() -> void:
 					has_start = true
 				"E":
 					var enemy := CrawlerEnemy.new()
+					enemy.palette = CrawlerEnemy.PALETTES.pick_random()
 					enemy.position = tile_origin + Vector2(TILE * 0.5, TILE - CrawlerEnemy.SIZE.y * 0.5)
 					add_child(enemy)
+				"c":
+					var hanger := CrawlerEnemy.new()
+					hanger.palette = CrawlerEnemy.PALETTES.pick_random()
+					hanger.on_ceiling = true
+					hanger.position = tile_origin + Vector2(TILE * 0.5, CrawlerEnemy.SIZE.y * 0.5)
+					add_child(hanger)
 				"K":
 					var knight := KnightEnemy.new()
 					knight.position = tile_origin + Vector2(TILE * 0.5, TILE - KnightEnemy.SIZE.y * 0.5)
