@@ -26,14 +26,14 @@ const SEGMENTS := {
 		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
 		"_test_pink_crawler_kill_heals", "_test_crawler_sludge", "_test_ceiling_crawler", "_test_room_lights_flicker",
 	],
-	# The tilesets' terrain brushes and tile data (tools/make_tilesets.gd, room_art.gd).
+	# The tilesets' terrain brushes and tile data (tools/make_tilesets.gd, room_art.gd), the room template.
 	"tilesets": [
-		"_test_terrain_brushes_match_room_art", "_test_tiles_say_what_they_are", "_test_room_template",
+		"_test_terrain_brushes", "_test_tiles_say_what_they_are", "_test_room_template",
 	],
 	# Rooms made in the editor: painted layers, helper nodes, decoration (room.gd, room_art.gd).
 	"editor_rooms": [
 		"_test_editor_room_plays", "_test_editor_room_door", "_test_editor_room_arena",
-		"_test_decorate_wall_button", "_test_auto_decorate_off",
+		"_test_decorate_wall_button", "_test_unpainted_wall_stays_open",
 	],
 	# Moving platforms and their track tiles (moving_platform.gd, tools/make_track_tiles.gd).
 	"platforms": [
@@ -1954,50 +1954,51 @@ func _layer_named(layer_name: String) -> TileMapLayer:
 # editor's terrain brush (set_cells_terrain_connect) and checks it picks the
 # same tile the room art did. Cells just outside the room count as concrete,
 # like the room's solid border.
-func _test_terrain_brushes_match_room_art() -> void:
-	print("Terrain brushes paint the same tiles as the room art: concrete, catwalk, spikes, sewer")
-	var terrains := {"solid": 0, "platform": 1, "spikes": 2, "acid": 3}
-	var concrete_sides := {}   # atlas coords -> the sides it connects on ("NESW" letters)
-	for r in RoomArt.TERRAIN.size():
-		for c in RoomArt.TERRAIN[r].size():
-			concrete_sides[Vector2i(c, r)] = RoomArt.TERRAIN[r][c]
+func _test_terrain_brushes() -> void:
+	print("Terrain brushes pick tiles by their neighbours: concrete, catwalk, spikes, sewer")
+	var layer := TileMapLayer.new()
+	layer.tile_set = RoomArt.FOREGROUND_TILES
+	# Concrete: a 4 x 3 block, a 1-wide column, a 1-tall strip and a lone block.
+	# Each tile should connect on exactly the sides with concrete next to it.
+	var concrete: Array[Vector2i] = []
+	for x in 4:
+		for y in 3:
+			concrete.append(Vector2i(x, y))
+	for y in 3:
+		concrete.append(Vector2i(6, y))
+	for x in range(8, 11):
+		concrete.append(Vector2i(x, 0))
+	concrete.append(Vector2i(12, 0))
+	layer.set_cells_terrain_connect(concrete, 0, 0)
 	var steps := {"N": Vector2i.UP, "E": Vector2i.RIGHT, "S": Vector2i.DOWN, "W": Vector2i.LEFT}
-	for room in LevelData.ROOMS:
-		await _spawn(load(LevelData.ROOMS[room].scene), true)
-		var art := _layer_named("Terrain")
-		var rect := art.get_used_rect().grow(1)
-		for kind in terrains:
-			var cells: Array[Vector2i] = []
-			for cell in art.get_used_cells():
-				if art.get_cell_tile_data(cell).get_custom_data("kind") == kind:
-					cells.append(cell)
-			if kind == "solid":   # the room's border is solid too
-				for x in range(rect.position.x, rect.end.x):
-					for y in range(rect.position.y, rect.end.y):
-						var c := Vector2i(x, y)
-						if not art.get_used_rect().has_point(c):
-							cells.append(c)
-			var brush := TileMapLayer.new()
-			brush.tile_set = RoomArt.FOREGROUND_TILES
-			brush.set_cells_terrain_connect(cells, 0, terrains[kind])
-			# Concrete at the room's edge may join the solid outside or not (the
-			# brush gives it an edge, as there's nothing painted there): only the
-			# sides facing into the room have to match.
-			var inward := func(c: Vector2i, coords: Vector2i) -> String:
-				var sides := ""
-				for s in concrete_sides.get(coords, "?"):
-					if s == "?" or art.get_used_rect().has_point(c + steps[s]):
-						sides += s
-				return sides
-			# Spikes come in random variants: any spike tile will do.
-			var wrong := cells.filter(func(c): return art.get_used_rect().has_point(c) and (
-					brush.get_cell_source_id(c) == -1 if kind == "spikes"
-					else inward.call(c, brush.get_cell_atlas_coords(c)) != inward.call(c, art.get_cell_atlas_coords(c)) if kind == "solid"
-					else brush.get_cell_atlas_coords(c) != art.get_cell_atlas_coords(c)))
-			_check(wrong.is_empty(), "%s %s: %d cells match%s" % [room, kind, cells.size() - wrong.size(),
-					"" if wrong.is_empty() else ", wrong at %s" % [wrong.slice(0, 5).map(func(c): return [c, brush.get_cell_atlas_coords(c), art.get_cell_atlas_coords(c)])]])
-			brush.free()
-		await _despawn()
+	var wrong := concrete.filter(func(c):
+		var sides := ""
+		for s in "NESW":
+			if concrete.has(c + steps[s]):
+				sides += s
+		var at := layer.get_cell_atlas_coords(c)
+		return at.y < 0 or at.y >= RoomArt.TERRAIN.size() or at.x >= RoomArt.TERRAIN[at.y].size() or RoomArt.TERRAIN[at.y][at.x] != sides)
+	_check(wrong.is_empty(), "concrete: every tile joins its neighbours%s" % ("" if wrong.is_empty() else ", wrong at %s" % [wrong]))
+	# Catwalk: a run of four (end, middle, middle, end) and a single one.
+	layer.set_cells_terrain_connect([Vector2i(0, 5), Vector2i(1, 5), Vector2i(2, 5), Vector2i(3, 5)], 0, 1)
+	layer.set_cells_terrain_connect([Vector2i(6, 5)], 0, 1)
+	var catwalk := [0, 1, 2, 3, 6].map(func(x): return layer.get_cell_atlas_coords(Vector2i(x, 5)))
+	_check(catwalk == [RoomArt.PLAT_L, RoomArt.PLAT_MID, RoomArt.PLAT_MID, RoomArt.PLAT_R, RoomArt.PLAT_ONE], "catwalk: %s" % [catwalk])
+	# Spikes: any of the variants, against a wall or more spikes on either side.
+	layer.set_cells_terrain_connect([Vector2i(0, 7), Vector2i(1, 7), Vector2i(2, 7)], 0, 2)
+	var spikes := [0, 1, 2].map(func(x): return layer.get_cell_atlas_coords(Vector2i(x, 7)))
+	_check(spikes.all(func(s): return s in RoomArt.SPIKES), "spikes: %s" % [spikes])
+	# Sewer: surface on top, fill below.
+	var pool: Array[Vector2i] = []
+	for x in 3:
+		for y in range(9, 11):
+			pool.append(Vector2i(x, y))
+	layer.set_cells_terrain_connect(pool, 0, 3)
+	var surface := [0, 1, 2].map(func(x): return layer.get_cell_atlas_coords(Vector2i(x, 9)))
+	var fill := [0, 1, 2].map(func(x): return layer.get_cell_atlas_coords(Vector2i(x, 10)))
+	_check(surface.all(func(s): return s == RoomArt.ACID_TOP) and fill.all(func(s): return s == RoomArt.ACID_FILL),
+			"sewer: surface %s, fill %s" % [surface, fill])
+	layer.free()
 
 	# The wall brush: plain brick in the open, crumbled edges around a hole.
 	var wall := TileMapLayer.new()
@@ -2078,14 +2079,13 @@ const KNIGHT_SCENE := preload("res://scenes/enemies/knight.tscn")
 
 
 func _test_editor_room_plays() -> void:
-	print("An editor-made room plays: floor, start, auto-decorated wall, raised gate, crawler, spikes")
+	print("An editor-made room plays: floor, start, raised gate, crawler, spikes")
 	await _spawn_node(_build_editor_room())
 	await _frames(30)
 	_check(_player.is_on_floor() and absf(_player.global_position.x - 4.5 * TILE) < 2.0,
 			"player starts at the PlayerStart, on the painted floor (col %.1f)" % (_player.global_position.x / TILE))
 	_check(_main._grid.get(Vector2i(6, 11)) == "^" and _main._grid.get(Vector2i(10, 9)) == "|" and _main._grid.get(Vector2i(0, 10)) == ">",
 			"spikes, gate and door read from the tiles' kinds")
-	_check(_main.background().get_used_cells().size() >= 30 * 14, "auto-decoration filled the unpainted wall")
 	_check(not _main._gate_closed and _main.gates().get_used_cells().size() == 1, "the gate starts raised (teeth only)")
 	var crawler: CrawlerEnemy = _main.entities().get_node("Crawler")
 	var x0 := crawler.global_position.x
@@ -2126,31 +2126,32 @@ func _test_editor_room_arena() -> void:
 
 
 func _test_decorate_wall_button() -> void:
-	print("Decorate wall: paints the same decoration auto-decorate would, keeping hand-painted wall")
+	print("Decorate wall: fills every unpainted wall cell, keeps hand-painted ones, the same each time; the room shows it as baked")
 	var hand_cell := Vector2i(3, 3)
-	# What auto-decoration shows at load, with one cell hand-painted.
-	var auto_room := _build_editor_room()
-	auto_room.background().set_cell(hand_cell, 0, RoomArt.HAZARD)
-	await _spawn_node(auto_room)
-	var shown := {}
-	for c in _main.background().get_used_cells():
-		shown[c] = _main.background().get_cell_atlas_coords(c)
-	await _despawn()
-	# The button, pressed on an unloaded room: same tiles, baked into the layer.
 	var baked := _build_editor_room()
 	baked.background().set_cell(hand_cell, 0, RoomArt.HAZARD)
 	baked.decorate_wall_action.call()
 	_check(baked.background().get_cell_atlas_coords(hand_cell) == RoomArt.HAZARD, "the hand-painted cell is kept")
-	var differ := shown.keys().filter(func(c): return baked.background().get_cell_atlas_coords(c) != shown[c])
-	_check(baked.background().get_used_cells().size() == shown.size() and differ.is_empty(),
-			"baked the same %d tiles auto-decorate shows (%d differ)" % [shown.size(), differ.size()])
-	baked.free()
+	_check(baked.background().get_used_cells().size() == 30 * 14, "every cell of the 30 x 14 room is wall (%d)" % baked.background().get_used_cells().size())
+	var tiles := {}
+	for c in baked.background().get_used_cells():
+		tiles[c] = baked.background().get_cell_atlas_coords(c)
+	_check(tiles.values().any(func(t): return t in [RoomArt.WINDOW_SMALL[0], RoomArt.WINDOW_LARGE[0]]), "with windows in it")
+	var again := _build_editor_room()
+	again.background().set_cell(hand_cell, 0, RoomArt.HAZARD)
+	again.decorate_wall_action.call()
+	var differ := tiles.keys().filter(func(c): return again.background().get_cell_atlas_coords(c) != tiles[c])
+	_check(differ.is_empty(), "pressing it again on the same room gives the same wall (%d differ)" % differ.size())
+	again.free()
+	await _spawn_node(baked)
+	differ = tiles.keys().filter(func(c): return _main.background().get_cell_atlas_coords(c) != tiles[c])
+	_check(_main.background().get_used_cells().size() == tiles.size() and differ.is_empty(), "in game the wall is exactly what was baked")
+	await _despawn()
 
 
-func _test_auto_decorate_off() -> void:
-	print("With auto-decorate off, unpainted wall stays open to the skyline")
+func _test_unpainted_wall_stays_open() -> void:
+	print("Unpainted wall stays open to the skyline: nothing is added when the room loads")
 	var room := _build_editor_room()
-	room.auto_decorate = false
 	room.background().set_cell(Vector2i(3, 3), 0, RoomArt.WALLS[0])
 	await _spawn_node(room)
 	_check(_main.background().get_used_cells().size() == 1, "only the painted wall cell (%d)" % _main.background().get_used_cells().size())
@@ -2162,10 +2163,18 @@ func _test_room_template() -> void:
 	var room: Room = load("res://scenes/rooms/room_template.tscn").instantiate()
 	add_child(room)
 	await _frames(1)
-	_check(room.auto_decorate, "auto-decorates the wall by default")
 	_check(room.background().tile_set == RoomArt.BACKGROUND_TILES and room.background().z_index == -1, "Background: wall tiles, behind")
 	_check(room.terrain().tile_set == RoomArt.FOREGROUND_TILES and room.gates().tile_set == RoomArt.FOREGROUND_TILES,
 			"Terrain and Gates: foreground tiles")
+	_check(room.tracks().tile_set == RoomArt.FOREGROUND_TILES and room.tracks().get_index() == room.background().get_index() + 1
+			and room.tracks().get_index() < room.terrain().get_index(), "Tracks: foreground tiles, between the wall and Terrain")
+	# A room saved before tracks existed gets the layer, in the same place.
+	var old_room: Room = load("res://scenes/rooms/room_template.tscn").instantiate()
+	old_room.tracks().free()
+	old_room.add_tracks_layer()
+	_check(old_room.tracks() != null and old_room.tracks().get_index() == old_room.background().get_index() + 1
+			and old_room.tracks().owner == old_room, "an older room gets a Tracks layer, saved with it")
+	old_room.free()
 	var skyline: Skyline = room.get_node("Skyline")
 	_check(skyline.get_children().any(func(c): return c is Sprite2D and c.texture == Skyline.TEXTURE), "the skyline builds itself")
 	var start: PlayerStart = room.entities().get_node("PlayerStart")
@@ -2415,9 +2424,11 @@ func _test_door_to_boss_room_and_back() -> void:
 const MOVING_PLATFORM_SCENE := preload("res://scenes/props/moving_platform.tscn")
 
 
-## An open 40 x 16 room with two tracks: side to side on row 8 (cols 4-15), and
-## up and down in col 25 (rows 3-12), each with a 3-wide platform on it. A
-## third platform sits off any track.
+## An open 40 x 16 room with two tracks on the Tracks layer: side to side on
+## row 8 (cols 4-15), and up and down in col 25 (rows 3-12), each with 3 tiles
+## of catwalk painted over it (cols 6-8 and cols 24-26 of row 12). A catwalk
+## off the track (cols 30-32, row 11) and a placed platform scene off any track
+## ("Loose") stay put.
 func _build_platform_room() -> Room:
 	var room: Room = load("res://scenes/rooms/room_template.tscn").instantiate()
 	room.room = "test"
@@ -2432,17 +2443,21 @@ func _build_platform_room() -> Room:
 	var across: Array[Vector2i] = []
 	for x in range(4, 16):
 		across.append(Vector2i(x, 8))
-	room.terrain().set_cells_terrain_connect(across, 0, 4)
+	room.tracks().set_cells_terrain_connect(across, 0, 4)
 	var upright: Array[Vector2i] = []
 	for y in range(3, 13):
 		upright.append(Vector2i(25, y))
-	room.terrain().set_cells_terrain_connect(upright, 0, 4)
+	room.tracks().set_cells_terrain_connect(upright, 0, 4)
+	for run in [[6, 8, 8], [24, 26, 12], [30, 32, 11]]:
+		var cells: Array[Vector2i] = []
+		for x in range(run[0], run[1] + 1):
+			cells.append(Vector2i(x, run[2]))
+		room.terrain().set_cells_terrain_connect(cells, 0, 1)
 	room.entities().get_node("PlayerStart").position = Vector2(2.5 * TILE, 15 * TILE)
-	for p in [["Across", Vector2(7.5, 8)], ["Upright", Vector2(25.5, 12)], ["Loose", Vector2(33.5, 10)]]:
-		var platform: MovingPlatform = MOVING_PLATFORM_SCENE.instantiate()
-		platform.name = p[0]
-		platform.position = p[1] * TILE
-		room.entities().add_child(platform)
+	var loose: MovingPlatform = MOVING_PLATFORM_SCENE.instantiate()
+	loose.name = "Loose"
+	loose.position = Vector2(36.5, 3) * TILE   # clear of the dash test's paths
+	room.entities().add_child(loose)
 	return room
 
 
@@ -2464,11 +2479,18 @@ func _test_track_brush() -> void:
 
 
 func _test_moving_platform_travel() -> void:
-	print("Moving platforms: find their track, go end to end and back, stay put off a track")
+	print("Moving platforms: catwalk over track becomes one, goes end to end and back; off a track things stay put")
 	await _spawn_node(_build_platform_room())
-	var across: MovingPlatform = _main.entities().get_node("Across")
-	var upright: MovingPlatform = _main.entities().get_node("Upright")
+	var across: MovingPlatform = _main.entities().get_node_or_null("MovingPlatform_6_8")
+	var upright: MovingPlatform = _main.entities().get_node_or_null("MovingPlatform_24_12")
 	var loose: MovingPlatform = _main.entities().get_node("Loose")
+	_check(across != null and upright != null and _main.entities_of(MovingPlatform).size() == 3,
+			"the two catwalks over track became platforms, the one off it didn't")
+	_check(across.width_tiles == 3 and across.position.y == 8 * TILE,
+			"as wide as the painted catwalk, on its row")
+	_check(_main.terrain().get_cell_source_id(Vector2i(7, 8)) == -1 and not _main._grid.has(Vector2i(7, 8)),
+			"its catwalk tiles came off Terrain (not a fixed platform too)")
+	_check(_main._grid.get(Vector2i(31, 11)) == "=", "catwalk off the track stays a fixed platform")
 	_check(across.on_track() and across.travel() == [Vector2(5.5 * TILE, 8 * TILE), Vector2(14.5 * TILE, 8 * TILE)],
 			"side to side: the deck stays between the track's ends %s" % [across.travel()])
 	_check(upright.on_track() and upright.travel() == [Vector2(25.5 * TILE, 3 * TILE), Vector2(25.5 * TILE, 12 * TILE)],
@@ -2499,7 +2521,7 @@ func _test_moving_platform_carries_player() -> void:
 	await _spawn_node(_build_platform_room())
 	await _frames(20)
 	var safe := _player.last_safe_position
-	for platform_name in ["Across", "Upright"]:
+	for platform_name in ["MovingPlatform_6_8", "MovingPlatform_24_12"]:
 		var platform: MovingPlatform = _main.entities().get_node(platform_name)
 		_player.global_position = platform.global_position + Vector2(0, -Player.BODY_SIZE.y * 0.5 - 2)
 		_player.velocity = Vector2.ZERO
@@ -2517,7 +2539,7 @@ func _test_moving_platform_carries_player() -> void:
 	Input.action_press("jump")
 	await _frames(3)
 	_release_all()
-	var upright: MovingPlatform = _main.entities().get_node("Upright")
+	var upright: MovingPlatform = _main.entities().get_node("MovingPlatform_24_12")
 	await _frames(20)
 	_check(_player.global_position.y > upright.global_position.y + TILE, "down + jump drops through it")
 	await _despawn()

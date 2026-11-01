@@ -1,13 +1,16 @@
 @tool
 class_name MovingPlatform
 extends AnimatableBody2D
-## A one-way catwalk platform that rides a track. Paint a straight line of
-## track on the Terrain layer (the "track" terrain brush), then place this on
-## it: its origin is the middle of the deck's top edge. On a side-to-side track
-## the whole deck stays between the buffer stops; on an up-and-down track the
-## deck's middle follows the rail, its top level with a track tile's top at
-## each end. It goes back and forth, waiting a moment at each end, and carries
-## whatever stands on it. Off a track it stays put.
+## A one-way catwalk platform that rides a track on the room's Tracks layer.
+## Usually made by the room: paint a straight line of track on Tracks (the
+## "track" terrain brush) and catwalk over it on Terrain, and the room turns
+## that catwalk into one of these as it loads. To give one its own speed or
+## pause, place this scene under Entities instead, its origin (the middle of
+## the deck's top edge) on the track. On a side-to-side track the whole deck
+## stays between the buffer stops; on an up-and-down track the deck's middle
+## follows the rail, its top level with a track tile's top at each end. It
+## goes back and forth, waiting a moment at each end, and carries whatever
+## stands on it. Off a track it stays put.
 
 const TILE := 32
 const LAYER_PLATFORMS := 32
@@ -18,6 +21,7 @@ const SHEET := preload("res://art/tiles/tileset.png")
 @export_range(1, 8) var width_tiles := 3:
 	set(value):
 		width_tiles = value
+		_fit_deck()
 		queue_redraw()
 ## Pixels per second.
 @export var speed := 90.0
@@ -36,18 +40,22 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	_fit_deck()
 	if Engine.is_editor_hint():
 		return
 	collision_layer = LAYER_PLATFORMS
 	collision_mask = 0
-	var shape := CollisionShape2D.new()
-	var rect := RectangleShape2D.new()
-	rect.size = Vector2(width_tiles * TILE, DECK_HEIGHT)
-	shape.shape = rect
-	shape.position = Vector2(0, DECK_HEIGHT * 0.5)
-	shape.one_way_collision = true
-	add_child(shape)
 	_find_track()
+
+
+## Sizes the scene's one-way Deck shape to the deck's width.
+func _fit_deck() -> void:
+	var deck := get_node_or_null("Deck") as CollisionShape2D
+	if deck == null:
+		return
+	deck.shape.size = Vector2(width_tiles * TILE, DECK_HEIGHT)
+	deck.position = Vector2(0, DECK_HEIGHT * 0.5)
+	deck.one_way_collision = true
 
 
 func _physics_process(delta: float) -> void:
@@ -78,7 +86,7 @@ func travel() -> Array[Vector2]:
 ## puts the deck on the track where it was placed.
 func _find_track() -> void:
 	var room := _room()
-	var layer: TileMapLayer = room.terrain() if room != null else null
+	var layer: TileMapLayer = room.tracks() if room != null else null
 	if layer == null:
 		return
 	# A track cell under the deck, nearest its middle first.
@@ -89,17 +97,17 @@ func _find_track() -> void:
 	cells.sort_custom(func(a, b): return absf(a.x - middle) < absf(b.x - middle))
 	var cell = null
 	for c in cells:
-		if _is_track(layer, c):
+		if Room._is_track(layer, c):
 			cell = c
 			break
 	if cell == null:
 		return
-	var step := Vector2i.RIGHT if _is_track(layer, cell + Vector2i.RIGHT) or _is_track(layer, cell + Vector2i.LEFT) else Vector2i.DOWN
+	var step := Vector2i.RIGHT if Room._is_track(layer, cell + Vector2i.RIGHT) or Room._is_track(layer, cell + Vector2i.LEFT) else Vector2i.DOWN
 	var a: Vector2i = cell
-	while _is_track(layer, a - step):
+	while Room._is_track(layer, a - step):
 		a -= step
 	var b: Vector2i = cell
-	while _is_track(layer, b + step):
+	while Room._is_track(layer, b + step):
 		b += step
 	var from: Vector2
 	var to: Vector2
@@ -122,11 +130,6 @@ func _find_track() -> void:
 	var along := _to - _from
 	_progress = clampf((position - _from).dot(along) / along.length_squared(), 0.0, 1.0)
 	position = _from.lerp(_to, _progress)
-
-
-func _is_track(layer: TileMapLayer, cell: Vector2i) -> bool:
-	var data := layer.get_cell_tile_data(cell)
-	return data != null and data.get_custom_data("kind") == "track"
 
 
 func _room() -> Room:

@@ -53,23 +53,28 @@ Rooms are scenes made in the Godot editor. Each tile you paint says what it is (
 
 1. **Start from the template.** Duplicate `scenes/rooms/room_template.tscn` (right-click it in the FileSystem dock, then *Duplicate*). Rename the root node, and set its `room` to the new room's id.
 2. **Add it to the game.** Add the id and scene path to `ROOMS` in `scripts/level_data.gd`. Doors can then lead to it, and the level select lists it.
-3. **Paint the Terrain layer** with `art/tiles/foreground_tileset.tres`. The room's top-left corner is cell (0, 0). Use the *Terrains* tab for brushes that pick the right edge tiles on their own: **concrete** for solid ground, **catwalk** for one-way platforms, **spikes**, **sewer** for acid water, and **track** for moving platforms (straight lines only). To place one exact tile, pick it from the *Tiles* tab instead. Door tiles go here too.
-4. **Paint the Gates layer** where a boss arena's gates go, with the shut gate tiles. They show raised until a fight starts, then drop shut.
-5. **Decorate the wall (Background layer)** in one of three ways:
-   - Leave it empty with `auto_decorate` on. Brick, windows, lights, posters and graffiti are filled in each time the room loads, and look the same every time.
-   - Press **Decorate wall** in the root's Inspector to paint that decoration into the layer now. Then edit it by hand and save the scene.
-   - Paint it all by hand and turn `auto_decorate` off. Unpainted cells stay open, so the skyline shows through.
+3. **Paint the Terrain layer** with `art/tiles/foreground_tileset.tres`. The room's top-left corner is cell (0, 0). Use the *Terrains* tab for brushes that pick the right edge tiles on their own: **concrete** for solid ground, **catwalk** for one-way platforms, **spikes**, and **sewer** for acid water. To place one exact tile, pick it from the *Tiles* tab instead. Door tiles go here too.
+4. **Moving platforms (Tracks layer).** Select the Tracks layer and paint a track with the **track** brush. A track is a straight line, either side to side or up and down. Then select Terrain and paint catwalk over the track. When the room loads, each catwalk run that touches a track becomes a moving platform, as wide as the run.
+   - **Side to side:** the whole deck stays between the track's end stops.
+   - **Up and down:** paint the catwalk across the rail. The deck stays centred on the rail.
 
-   With `auto_decorate` on, wall you painted by hand is always kept. Only the empty cells are filled.
-6. **Place things under Entities** by dragging scenes onto it from the FileSystem dock:
+   Platforms go back and forth and pause at each end. To give one its own `speed` or `end_pause`, place `scenes/props/moving_platform.tscn` under Entities instead of painting it. Put its origin, the middle of the deck's top edge, on the track. Older rooms get a Tracks layer the first time you open them. Save the scene to keep it.
+5. **Paint the Gates layer** where a boss arena's gates go, with the shut gate tiles. They show raised until a fight starts, then drop shut.
+6. **Paint the wall (Background layer).** The game shows exactly what you paint here. Any cell left empty is open, and the skyline shows through it.
+   - Press **Decorate wall** in the root's Inspector to fill every empty cell with brick, windows, lights, posters and graffiti. Cells you've already painted are kept. Then edit the result by hand.
+   - Or paint the wall yourself. Use the **wall** brush (Terrains tab) for brick: it gives a crumbled edge wherever brick meets an empty cell.
+   - Props come from the **Tiles** tab. Each one is a whole tile with its own brick behind it, so it takes the place of a brick cell. For a prop more than one tile big (graffiti, windows), drag across all of its tiles in the picker, then click once in the room.
+   - Window glass is see-through. In the editor the skyline is repeated down the whole room so every window shows the city. In game the skyline stays at screen height.
+
+   Save the scene to keep the wall.
+7. **Place things under Entities** by dragging scenes onto it from the FileSystem dock:
    - **Enemies:** `scenes/enemies/crawler.tscn` and `knight.tscn`. Set each one in the Inspector: health, damage and heal on kill for any enemy, and palette and on-ceiling for a crawler.
    - **Bosses:** `scenes/bosses/warden.tscn` and `harrier.tscn`. Each needs an **Arena** node (`scripts/arena.gd`). Its origin is the arena's top-left corner, and `size_tiles` is its size. Point its `boss` at the boss node. The fight starts a few tiles past a gate, and the camera frames the arena.
    - **PlayerStart** (`scripts/player_start.gd`): where a fresh game starts, at the player's feet. Players coming through a door arrive at the door instead.
    - **RoomDoor** (`scripts/room_door.gd`): put it over the door tiles, with its origin at the doorway's top-left corner. Set its `height` in tiles, and choose `target_room` from the list. `arrive_at` names the door to arrive at in that room. Leave it empty to arrive at the door there that leads back.
-   - **Moving platforms:** `scenes/props/moving_platform.tscn`. Paint a straight track first: side to side, or up and down. Then place the platform on the track, with its origin at the middle of the deck's top edge. A side-to-side platform keeps its whole deck between the track's end stops. An up-and-down one is centred on the rail. Set `width_tiles`, `speed` and `end_pause` in the Inspector. A platform placed off a track stays still.
 
    PlayerStart, RoomDoor and Arena show labels in the editor and are hidden in the game.
-7. **Play it.** Press F6 to run just this scene. Without a PlayerStart, the player appears at a door. Run the tests too (see `tests/gameplay_test.gd`).
+8. **Play it.** Press F6 to run just this scene. Without a PlayerStart, the player appears at a door. Run the tests too (see `tests/gameplay_test.gd`).
 
 To add a new enemy, make a scene whose script extends `EnemyBase`. It shows up with the same Inspector settings, and can be placed in any room.
 

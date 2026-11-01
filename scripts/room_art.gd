@@ -1,13 +1,14 @@
 class_name RoomArt
 extends RefCounted
 ## A room's tile art, for a room made in the editor: dress() adds what the
-## painted layers don't hold (light glows, the gates' open/shut state) and the
-## automatic wall decoration where the wall is unpainted. Art only: collisions
-## and hazards are the room's (room.gd). The tile constants here are where each
-## tile sits in its sheet; tools/make_tilesets.gd builds the tilesets from them.
+## painted layers don't hold (light glows, the gates' open/shut state), and
+## decorate_unpainted() is the Decorate wall button's generated wall. Art only:
+## collisions and hazards are the room's (room.gd). The tile constants here are
+## where each tile sits in its sheet; tools/make_tilesets.gd builds the
+## tilesets from them.
 ##
-## Automatic decoration (windows, lights, posters, graffiti) is seeded by the
-## room name so it looks the same every visit.
+## The generated wall (windows, lights, posters, graffiti) is seeded by the
+## room name, so a room decorates the same way every time.
 
 const TILE := 32
 ## Built by tools/make_tilesets.gd; every tile says what it is in its custom data.
@@ -98,15 +99,10 @@ func _init(cell: Callable, width: int, height: int) -> void:
 
 
 ## For a room made in the editor, whose tile layers are already painted: adds
-## the light glows, shows its gates raised, and (with `auto_decorate`) fills
-## the wall you haven't painted with brick, windows, lights and posters. Hand-
-## painted wall is kept as it is. Seeded by `room`, so it's the same every time.
-func dress(parent: Node2D, room: String, background: TileMapLayer, terrain: TileMapLayer,
-		gates: TileMapLayer, auto_decorate: bool) -> void:
+## the light glows and shows its gates raised.
+func dress(parent: Node2D, background: TileMapLayer, terrain: TileMapLayer, gates: TileMapLayer) -> void:
 	_gates = gates
 	set_gates_closed(false)
-	if auto_decorate:
-		decorate_unpainted(room, background)
 	_add_lights(parent, background, terrain)
 
 
