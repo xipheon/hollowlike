@@ -393,10 +393,6 @@ func _spawn_entities() -> void:
 					var knight := KnightEnemy.new()
 					knight.position = tile_origin + Vector2(TILE * 0.5, TILE - KnightEnemy.SIZE.y * 0.5)
 					add_child(knight)
-				"D":
-					_spawn_pickup("dash", "DASH", tile_origin)
-				"W":
-					_spawn_pickup("wall_jump", "WALL JUMP", tile_origin)
 				"B":
 					var warden := WardenBoss.new()
 					warden.position = tile_origin + Vector2(TILE * 0.5, TILE - WardenBoss.SIZE.y * 0.5)
@@ -405,12 +401,6 @@ func _spawn_entities() -> void:
 					var harrier := HarrierBoss.new()
 					harrier.position = tile_origin + Vector2(TILE * 0.5, TILE * 0.5)
 					_spawn_boss(harrier, x, y)
-				"o":
-					var coin_id := "%s:%d,%d" % [room, x, y]
-					if not GameState.collected_coins.has(coin_id):
-						_spawn_item("coin", tile_origin, coin_id)
-				"h":
-					_spawn_item("health", tile_origin)
 
 	# Arriving through a door (or a room with no P, e.g. run directly with F6).
 	if GameState.arrived_from != "" or not has_start:
@@ -425,21 +415,3 @@ func _spawn_entities() -> void:
 	_player.camera.limit_top = 0
 	_player.camera.limit_right = _w * TILE
 	_player.camera.limit_bottom = _h * TILE
-
-
-func _spawn_item(kind: String, tile_origin: Vector2, coin_id := "") -> void:
-	var item := ItemPickup.new()
-	item.kind = kind
-	item.coin_id = coin_id
-	item.position = tile_origin + Vector2(TILE * 0.5, TILE * 0.5)
-	add_child(item)
-
-
-func _spawn_pickup(ability: String, label: String, tile_origin: Vector2) -> void:
-	if GameState.has_ability(ability):
-		return
-	var pickup := AbilityPickup.new()
-	pickup.ability = ability
-	pickup.label = label
-	pickup.position = tile_origin + Vector2(TILE * 0.5, TILE * 0.5)
-	add_child(pickup)

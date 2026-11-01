@@ -43,7 +43,6 @@ var _health_bar: HealthBar
 var _stamina_bar: StaminaBar
 var _boss_bar: BossBar
 var _boss_label: Label
-var _coins_label: Label
 var _abilities_label: Label
 var _message_label: Label
 var _message_timer := 0.0
@@ -65,11 +64,6 @@ func _ready() -> void:
 	_message_label.size = Vector2(960, 40)
 	_message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message_label.modulate.a = 0.0
-
-	_coins_label = _make_label(Vector2(20, 88), 14)
-	_coins_label.modulate = Color(1.0, 0.85, 0.3)
-	GameState.coins_changed.connect(_on_coins_changed)
-	_on_coins_changed(GameState.coins)
 
 	# Boss title: drawn big, then scaled down to sit above the bar.
 	_boss_label = _make_label(Vector2.ZERO, BOSS_TITLE_FONT_SIZE)
@@ -178,10 +172,6 @@ func _on_stamina_changed(current: float, maximum: float) -> void:
 	_stamina_bar.current = current
 	_stamina_bar.maximum = maximum
 	_stamina_bar.queue_redraw()
-
-
-func _on_coins_changed(count: int) -> void:
-	_coins_label.text = "Coins: %d" % count
 
 
 func _on_ability_unlocked(ability: String) -> void:

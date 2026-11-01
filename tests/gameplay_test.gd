@@ -19,12 +19,12 @@ const SEGMENTS := {
 		"_test_safe_ground_needs_both_feet", "_test_tapped_down_strike_ends",
 		"_test_held_down_strike_ends", "_test_tapped_pogos_chain_on_spikes",
 	],
-	# First room: layout routes, crawlers, coins, pickups, one-way platforms, its door.
+	# First room: layout routes, crawlers, one-way platforms, its door.
 	"start_room": [
 		"_test_acid_route_jumps", "_test_acid_enemies_stay_on_platforms", "_test_crawler_turns_at_wall",
-		"_test_door_to_boss_room_and_back", "_test_coin_counts_and_stays_collected",
+		"_test_door_to_boss_room_and_back",
 		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
-		"_test_pink_crawler_kill_heals", "_test_crawler_sludge", "_test_ceiling_crawler", "_test_health_pickup", "_test_room_lights_flicker",
+		"_test_pink_crawler_kill_heals", "_test_crawler_sludge", "_test_ceiling_crawler", "_test_room_lights_flicker",
 	],
 	# Every ceiling crawler placed in any room ("c" markers, enemy_crawler.gd ceiling code).
 	"crawlers": [
@@ -171,8 +171,6 @@ func _chosen_segments() -> Array:
 func _spawn(scene: PackedScene = MAIN_SCENE, boss_beaten := false) -> void:
 	GameState.arrived_from = ""
 	GameState.bosses_defeated = {"boss": Vector2(49.5 * TILE, 15 * TILE - WardenBoss.SIZE.y * 0.5)} if boss_beaten else {}
-	GameState.collected_coins = {}
-	GameState.coins = 0
 	GameState.carried_health = -1
 	GameState.player_skin = PlayerSprite.DEFAULT_SKIN
 	GameState.abilities = GameState.STARTING_ABILITIES.duplicate()
@@ -1637,7 +1635,7 @@ func _test_level_select_loads_each_room() -> void:
 	await _despawn()
 	GameState.debug_mode = true
 	for room in LevelData.ROOMS:
-		GameState.coins = 7
+		GameState.unlock("dash")
 		var menu := MENU_SCENE.instantiate()
 		get_tree().root.add_child(menu)
 		get_tree().current_scene = menu
@@ -1651,7 +1649,7 @@ func _test_level_select_loads_each_room() -> void:
 		if loaded != null:
 			var p: Player = loaded._player
 			var start := _find_tile(LevelData.ROOMS[room].rows, "P")
-			_check(absf(p.global_position.x - (start.x + 0.5) * TILE) < 2.0 and GameState.coins == 0,
+			_check(absf(p.global_position.x - (start.x + 0.5) * TILE) < 2.0 and not GameState.has_ability("dash"),
 					"%s: fresh progress, starting at P (col %.1f)" % [room, p.global_position.x / TILE])
 		await _frames(30)   # let the fade finish
 		await _despawn()
@@ -1675,7 +1673,6 @@ func _find_tile(rows: Array, tile: String) -> Vector2i:
 
 func _test_main_menu_starts_game() -> void:
 	print("Main menu: Start loads the first room with fresh progress")
-	GameState.coins = 7
 	GameState.unlock("dash")
 	var menu := MENU_SCENE.instantiate()
 	get_tree().root.add_child(menu)
@@ -1685,7 +1682,7 @@ func _test_main_menu_starts_game() -> void:
 	await _press_pad_a()
 	var room := await _wait_for_room("start", 120)
 	_check(room != null, "first room loaded")
-	_check(GameState.coins == 0 and not GameState.has_ability("dash"), "progress reset")
+	_check(not GameState.has_ability("dash"), "progress reset")
 	if room != null:
 		var p: Player = room._player
 		_check(p.global_position.x < 5 * TILE, "starting at P (col %.1f)" % (p.global_position.x / TILE))
@@ -1713,11 +1710,6 @@ func _test_pause_menu_quits_to_main_menu() -> void:
 	_check(not get_tree().paused, "game unpaused")
 	await _frames(30)
 	await _despawn()
-
-
-func _items(kind: String) -> Array:
-	return get_tree().current_scene.get_children().filter(
-			func(c): return c is ItemPickup and c.kind == kind)
 
 
 func _test_room_lights_flicker() -> void:
@@ -1756,23 +1748,6 @@ func _test_room_lights_flicker() -> void:
 			"the sign blinks or sags but is fully on %.0f%% of the time" % (100.0 * sign.on / frames))
 	_check(broken.flashes >= 2 and float(broken.on) / frames < 0.35,
 			"a dead bulb sputters on (%d flashes) but is dark %.0f%% of the time" % [broken.flashes, 100.0 - 100.0 * broken.on / frames])
-	await _despawn()
-
-
-func _test_coin_counts_and_stays_collected() -> void:
-	print("Coins count on the HUD and don't respawn on reload")
-	await _spawn()
-	var before := _items("coin").size()
-	_place(10, 15)
-	await _frames(5)
-	_check(GameState.coins == 1, "coin counted (%d)" % GameState.coins)
-	_check(_main._hud._coins_label.text == "Coins: 1", "HUD shows it (%s)" % _main._hud._coins_label.text)
-	_check(_items("coin").size() == before - 1, "coin removed")
-	get_tree().reload_current_scene()
-	var room := await _wait_for_room("start", 30)
-	await _frames(2)
-	_check(room != null and _items("coin").size() == before - 1, "still gone after reload (%d of %d left)" % [_items("coin").size(), before])
-	_check(room != null and room._hud._coins_label.text == "Coins: 1", "count kept after reload")
 	await _despawn()
 
 
@@ -1984,19 +1959,6 @@ func _test_placed_ceiling_crawlers_stay_up() -> void:
 		total += watched.size()
 		await _despawn()
 	_check(total > 0, "found %d ceiling crawlers across the rooms" % total)
-
-
-func _test_health_pickup() -> void:
-	print("Health pickup restores a heart, but waits while you're at full health")
-	await _spawn()
-	_place(101, 11)
-	await _frames(5)
-	_check(_items("health").size() == 1 and _player.health == _player.max_health, "left alone at full health")
-	_player.health = 6
-	await _frames(3)
-	_check(_player.health == 8, "healed one heart (6 -> %d half-hearts)" % _player.health)
-	_check(_items("health").is_empty(), "pickup used up")
-	await _despawn()
 
 
 # Jumps from the near edge of each platform to the next one (left or right).

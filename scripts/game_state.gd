@@ -3,13 +3,12 @@ extends Node
 ## Later: save/load, checkpoints, map discovery, boss flags all live here.
 
 signal ability_unlocked(ability: String)
-signal coins_changed(count: int)
 signal player_skin_changed(skin_id: String)
 
 const FADE_TIME := 0.25
 const MENU_SCENE := "res://scenes/main_menu.tscn"
 
-## Abilities you begin a new game with; the rest are unlocked by bosses and pickups.
+## Abilities you begin a new game with; the rest are unlocked by bosses.
 const STARTING_ABILITIES := {
 	"double_jump": true,
 	"sprint": false,
@@ -27,9 +26,6 @@ var debug_mode := OS.is_debug_build()
 var arrived_from := ""
 ## Rooms whose boss has been beaten (room id -> where its corpse lies, Vector2).
 var bosses_defeated := {}
-var coins := 0
-## Coins already picked up, keyed "room:x,y", so they don't respawn.
-var collected_coins := {}
 ## Health carried through a door into the next room, in half-hearts (-1 = none,
 ## start full). Used once, so dying or restarting a room still refills it.
 var carried_health := -1
@@ -67,12 +63,6 @@ func set_player_skin(skin_id: String) -> void:
 	player_skin_changed.emit(skin_id)
 
 
-func collect_coin(coin_id: String) -> void:
-	collected_coins[coin_id] = true
-	coins += 1
-	coins_changed.emit(coins)
-
-
 ## Fade out, load the target room's scene, fade back in. The player arrives
 ## with the health they left with.
 func go_through_door(from_room: String, to_room: String, health: int) -> void:
@@ -98,8 +88,6 @@ func start_new_game() -> void:
 func start_at_room(room: String) -> void:
 	abilities = STARTING_ABILITIES.duplicate()
 	bosses_defeated = {}
-	coins = 0
-	collected_coins = {}
 	carried_health = -1
 	_fade_to_scene(LevelData.ROOMS[room].scene, "")
 
