@@ -1,5 +1,7 @@
 extends Control
 ## Title screen: Start a new game, pick a level, or Quit. Built in code like the HUD.
+## Level Select is a debug tool: it only shows in debug mode (the editor, debug
+## exports), not in release exports.
 
 var start_button: Button
 var level_select_button: Button
@@ -26,6 +28,7 @@ func _ready() -> void:
 	_main_box = _add_box(center, "HOLLOWLIKE", 52)
 	start_button = _add_button(_main_box, "Start", func() -> void: GameState.start_new_game())
 	level_select_button = _add_button(_main_box, "Level Select", show_level_select)
+	level_select_button.visible = GameState.debug_mode
 	_add_button(_main_box, "Quit", func() -> void: get_tree().quit())
 
 	_level_box = _add_box(center, "LEVEL SELECT", 40)
@@ -79,6 +82,8 @@ func show_main() -> void:
 
 
 func show_level_select() -> void:
+	if not GameState.debug_mode:
+		return
 	_main_box.visible = false
 	_level_box.visible = true
 	level_buttons["start"].grab_focus()

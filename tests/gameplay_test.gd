@@ -1472,7 +1472,18 @@ func _test_debug_kill_boss_off_outside_debug_mode() -> void:
 
 
 func _test_level_select_loads_each_room() -> void:
-	print("Main menu: Level Select lists every room and starts at its P")
+	print("Main menu: Level Select lists every room and starts at its P; debug mode only")
+	# Outside debug mode (release exports) there's no Level Select.
+	GameState.debug_mode = false
+	var release_menu := MENU_SCENE.instantiate()
+	get_tree().root.add_child(release_menu)
+	get_tree().current_scene = release_menu
+	await _frames(2)
+	release_menu.show_level_select()
+	_check(not release_menu.level_select_button.visible and release_menu._main_box.visible and not release_menu._level_box.visible,
+			"hidden outside debug mode")
+	await _despawn()
+	GameState.debug_mode = true
 	for room in LevelData.ROOMS:
 		GameState.coins = 7
 		var menu := MENU_SCENE.instantiate()
