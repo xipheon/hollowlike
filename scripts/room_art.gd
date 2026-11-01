@@ -35,6 +35,18 @@ const GATE_END := Vector2i(7, 4)   # shut: its bottom tile, with the teeth
 const GATE_UP := Vector2i(0, 6)    # raised: just the teeth under the lintel
 const DOOR := Vector2i(1, 6)
 const DOOR_TOP := Vector2i(2, 6)   # under solid ground: lintel and EXIT sign
+
+# Light glows (see FlickerLight). Positions are within the light's tile.
+const BULB_GLOW := Color(0.78, 1.0, 0.9)
+const BULB_GLOW_CENTRE := Vector2(16, 22)
+const BULB_GLOW_SIZE := Vector2i(56, 56)
+const BULB_GLOW_STRENGTH := 0.22
+const SIGN_GLOW := Color(1.0, 0.25, 0.25)
+const SIGN_GLOW_CENTRE := Vector2(16, 12)
+const SIGN_GLOW_SIZE := Vector2i(40, 24)
+const SIGN_GLOW_STRENGTH := 0.3
+const SIGN_LETTERS := Rect2(8, 9, 16, 7)   # inside the sign's frame (tools/make_door_tiles.gd)
+const SIGN_OFF := Color8(52, 10, 14)        # the sign box's colour, covering the letters when it's out
 const ACID_FRAMES := 4
 const ACID_FRAME_TIME := 0.24
 
@@ -102,14 +114,63 @@ func _init(rows: Array, width: int, height: int) -> void:
 func build(parent: Node2D, room: String, background_rows: Array) -> void:
 	_rng.seed = hash(room)
 	parent.add_child(_make_skyline())
-	parent.add_child(_make_background(background_rows))
-	parent.add_child(_make_foreground())
+	var background := _make_background(background_rows)
+	parent.add_child(background)
+	var foreground := _make_foreground()
+	parent.add_child(foreground)
 	_gates = _layer(TILESET, 0)
 	_gates.name = "Gates"
 	for coords in [GATE, GATE_END, GATE_UP]:
 		_ensure_tile(_gates, coords)
 	parent.add_child(_gates)
 	set_gates_closed(false)
+	_add_lights(parent, background, foreground)
+
+
+## Glows for the lit bulbs, the dead bulbs (which sputter, showing the lit
+## bulb over the dead one while they're on) and the EXIT signs (which blink,
+## darkening their letters while they're out).
+func _add_lights(parent: Node2D, background: TileMapLayer, foreground: TileMapLayer) -> void:
+	for cell in background.get_used_cells_by_id(0, LIGHT_LIT):
+		_add_light(parent, cell, FlickerLight.Kind.STEADY, null, null)
+	for cell in background.get_used_cells_by_id(0, LIGHT_DEAD):
+		var lit := Sprite2D.new()
+		lit.texture = BACKGROUND
+		lit.region_enabled = true
+		lit.region_rect = Rect2(LIGHT_LIT * TILE, Vector2(TILE, TILE))
+		lit.centered = false
+		lit.position = Vector2(cell * TILE)
+		lit.z_index = -1
+		lit.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		parent.add_child(lit)
+		_add_light(parent, cell, FlickerLight.Kind.BROKEN, lit, null)
+	for cell in foreground.get_used_cells_by_id(0, DOOR_TOP):
+		var dark := ColorRect.new()
+		dark.color = SIGN_OFF
+		dark.position = Vector2(cell * TILE) + SIGN_LETTERS.position
+		dark.size = SIGN_LETTERS.size
+		dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		parent.add_child(dark)
+		_add_light(parent, cell, FlickerLight.Kind.SIGN, null, dark)
+
+
+func _add_light(parent: Node2D, cell: Vector2i, kind: FlickerLight.Kind, lit: CanvasItem, dark: CanvasItem) -> void:
+	var light := FlickerLight.new()
+	light.kind = kind
+	light.lit_overlay = lit
+	light.dim_overlay = dark
+	if kind == FlickerLight.Kind.SIGN:
+		light.position = Vector2(cell * TILE) + SIGN_GLOW_CENTRE
+		light.glow_size = SIGN_GLOW_SIZE
+		light.glow_color = SIGN_GLOW
+		light.glow_strength = SIGN_GLOW_STRENGTH
+	else:
+		light.position = Vector2(cell * TILE) + BULB_GLOW_CENTRE
+		light.glow_size = BULB_GLOW_SIZE
+		light.glow_color = BULB_GLOW
+		light.glow_strength = BULB_GLOW_STRENGTH
+		light.z_index = -1
+	parent.add_child(light)
 
 
 ## Shows the arena gates (`|`) shut, or raised with only their teeth showing.

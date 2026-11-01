@@ -24,7 +24,7 @@ const SEGMENTS := {
 		"_test_acid_route_jumps", "_test_acid_enemies_stay_on_platforms", "_test_crawler_turns_at_wall",
 		"_test_door_to_boss_room_and_back", "_test_coin_counts_and_stays_collected",
 		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
-		"_test_crawler_kill_heals_half_heart", "_test_health_pickup",
+		"_test_crawler_kill_heals_half_heart", "_test_health_pickup", "_test_room_lights_flicker",
 	],
 	# Boss room layout around the arena: shafts, the drop, the acid gap, the climb door.
 	"boss_room": [
@@ -1553,6 +1553,45 @@ func _test_pause_menu_quits_to_main_menu() -> void:
 func _items(kind: String) -> Array:
 	return get_tree().current_scene.get_children().filter(
 			func(c): return c is ItemPickup and c.kind == kind)
+
+
+func _test_room_lights_flicker() -> void:
+	print("Room lights: bulbs glow steadily, dead bulbs sputter now and then, EXIT signs blink but stay mostly on")
+	await _spawn()
+	var lights := _main.get_children().filter(func(c): return c is FlickerLight)
+	var signs := lights.filter(func(l): return l.kind == FlickerLight.Kind.SIGN)
+	_check(not signs.is_empty(), "the door has a glowing EXIT sign (%d)" % signs.size())
+	_check(lights.any(func(l): return l.kind != FlickerLight.Kind.SIGN), "the ceiling bulbs glow")
+
+	# One of each kind, watched for 20 seconds.
+	var watched := {}
+	for kind in [FlickerLight.Kind.STEADY, FlickerLight.Kind.SIGN, FlickerLight.Kind.BROKEN]:
+		var light := FlickerLight.new()
+		light.kind = kind
+		light.position = Vector2(200 + kind * 100, 200)
+		_main.add_child(light)
+		watched[kind] = {"light": light, "on": 0, "lowest": 1.0, "flashes": 0, "was_on": false}
+	var frames := 20 * 60
+	for i in frames:
+		await _frames(1)
+		for kind in watched:
+			var w: Dictionary = watched[kind]
+			var b: float = w.light.brightness
+			var on := b > 0.0
+			w.on += int(b >= 0.99) if kind == FlickerLight.Kind.SIGN else int(on)
+			w.lowest = minf(w.lowest, b)
+			if on and not w.was_on:
+				w.flashes += 1
+			w.was_on = on
+	var steady: Dictionary = watched[FlickerLight.Kind.STEADY]
+	var sign: Dictionary = watched[FlickerLight.Kind.SIGN]
+	var broken: Dictionary = watched[FlickerLight.Kind.BROKEN]
+	_check(steady.lowest > 0.85, "a working bulb never dips much (lowest %.2f)" % steady.lowest)
+	_check(sign.lowest < 0.6 and float(sign.on) / frames > 0.8,
+			"the sign blinks or sags but is fully on %.0f%% of the time" % (100.0 * sign.on / frames))
+	_check(broken.flashes >= 2 and float(broken.on) / frames < 0.35,
+			"a dead bulb sputters on (%d flashes) but is dark %.0f%% of the time" % [broken.flashes, 100.0 - 100.0 * broken.on / frames])
+	await _despawn()
 
 
 func _test_coin_counts_and_stays_collected() -> void:
