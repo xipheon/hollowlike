@@ -54,7 +54,7 @@ const SEGMENTS := {
 	],
 	# Damage numbers and armor, sprint and stamina (player.gd, enemy damage settings).
 	"player": [
-		"_test_double_jump", "_test_player_animations", "_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
+		"_test_double_jump", "_test_player_animations", "_test_attack_buffer", "_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
 		"_test_sprint_is_faster_and_drains_stamina", "_test_stamina_refills_only_on_ground",
 		"_test_dash_needs_stamina", "_test_wall_jump_needs_stamina",
 	],
@@ -1417,6 +1417,53 @@ func _test_pause_menu_skins() -> void:
 			break
 	_main = get_tree().current_scene
 	_check(_main._player.sprite.skin_id == other, "kept after reloading the room")
+	await _despawn()
+
+
+# Taps `action` once, then again `at_frame` frames later, standing on the
+# floor. Returns how many times `active` (attack swinging, dash dashing...)
+# switched on over the next second.
+func _starts_after_two_taps(action: String, at_frame: int, active: Callable) -> int:
+	_place(5, 17)
+	await _frames(40)   # cooldowns from any earlier taps run out
+	_player.stamina = _player.max_stamina
+	var starts := 0
+	var was_active := false
+	for i in 60 + at_frame:
+		if i == 0 or i == at_frame:
+			Input.action_press(action)
+		elif i == 1 or i == at_frame + 1:
+			Input.action_release(action)
+		await _frames(1)
+		var now: bool = active.call()
+		if now and not was_active:
+			starts += 1
+		was_active = now
+	return starts
+
+
+# Checks a buffered action: a second press inside the buffer window before the
+# lockout ends goes off, one earlier is dropped. Timings come from the player's
+# own settings.
+func _check_buffer(action: String, lockout: float, buffer: float, active: Callable) -> void:
+	var lockout_frames := roundi(lockout * 60)
+	var buffer_frames := roundi(buffer * 60)
+	var late := lockout_frames - buffer_frames + 3   # inside the window
+	_check(await _starts_after_two_taps(action, late, active) == 2,
+			"%s pressed %d frames before it's allowed again: it goes off" % [action, lockout_frames - late])
+	var early := lockout_frames - buffer_frames - 4   # too early
+	_check(await _starts_after_two_taps(action, early, active) == 1,
+			"%s pressed %d frames before: dropped" % [action, lockout_frames - early])
+
+
+func _test_attack_buffer() -> void:
+	print("Attack and dash buffers: a press shortly before they're allowed again still goes off")
+	await _spawn()
+	await _check_buffer("attack", _player.attack_cooldown, _player.attack_buffer_time,
+			func() -> bool: return _player._attack_timer > 0.0)
+	GameState.unlock("dash")
+	await _check_buffer("dash", _player.dash_duration + _player.dash_cooldown, _player.dash_buffer_time,
+			func() -> bool: return _player._dash_timer > 0.0)
 	await _despawn()
 
 

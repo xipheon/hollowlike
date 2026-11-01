@@ -52,6 +52,7 @@ const PLATFORM_DROP_TIME := 0.25
 @export var dash_speed := 820.0
 @export var dash_duration := 0.17
 @export var dash_cooldown := 0.3
+@export var dash_buffer_time := 0.15   ## a dash pressed this soon before it's allowed again still happens
 
 @export_group("Wall Jump (ability)")
 @export var wall_slide_speed := 140.0
@@ -63,6 +64,7 @@ const PLATFORM_DROP_TIME := 0.25
 @export var attack_damage := 1
 @export var attack_duration := 0.12
 @export var attack_cooldown := 0.26
+@export var attack_buffer_time := 0.15   ## an attack pressed this soon before the cooldown ends still swings
 @export var pogo_velocity := -500.0
 @export var invulnerability_time := 0.5
 @export var knockback := Vector2(500, -300)
@@ -96,6 +98,8 @@ var _wall_normal_x := 0.0
 var _wall_lock_timer := 0.0
 var _attack_timer := 0.0
 var _attack_cooldown_timer := 0.0
+var _attack_buffer_timer := 0.0
+var _dash_buffer_timer := 0.0
 var _invuln_timer := 0.0
 var _stun_timer := 0.0
 var _shake_timer := 0.0
@@ -202,10 +206,14 @@ func _physics_process(delta: float) -> void:
 			_air_jump_available = true
 	_wall_sliding = wall_sliding
 
-	# Dash
+	# Dash (buffered: a press during the cooldown, a stun, or just before landing
+	# with the air dash used goes off as soon as dashing is allowed)
+	if Input.is_action_just_pressed("dash"):
+		_dash_buffer_timer = dash_buffer_time
 	if not stunned and _dash_timer <= 0.0 and _dash_cooldown_timer <= 0.0 \
-			and Input.is_action_just_pressed("dash") and GameState.has_ability("dash") \
+			and _dash_buffer_timer > 0.0 and GameState.has_ability("dash") \
 			and (on_floor or _air_dash_available) and stamina >= dash_stamina_cost:
+		_dash_buffer_timer = 0.0
 		_start_dash(input_x, on_floor)
 
 	if _dash_timer > 0.0:
@@ -254,8 +262,12 @@ func _physics_process(delta: float) -> void:
 			var top_speed := sprint_speed if sprinting else run_speed
 			velocity.x = move_toward(velocity.x, input_x * top_speed, accel * delta)
 
-	# Attack
-	if not stunned and Input.is_action_just_pressed("attack") and _attack_cooldown_timer <= 0.0:
+	# Attack (buffered: a press during the cooldown or a stun swings once it's over,
+	# aimed by whatever direction is held then)
+	if Input.is_action_just_pressed("attack"):
+		_attack_buffer_timer = attack_buffer_time
+	if not stunned and _attack_buffer_timer > 0.0 and _attack_cooldown_timer <= 0.0:
+		_attack_buffer_timer = 0.0
 		_start_attack(input_y, on_floor)
 
 	move_and_slide()
@@ -336,8 +348,10 @@ func _update_timers(delta: float) -> void:
 	_coyote_timer = maxf(_coyote_timer - delta, 0.0)
 	_jump_buffer_timer = maxf(_jump_buffer_timer - delta, 0.0)
 	_dash_cooldown_timer = maxf(_dash_cooldown_timer - delta, 0.0)
+	_dash_buffer_timer = maxf(_dash_buffer_timer - delta, 0.0)
 	_wall_lock_timer = maxf(_wall_lock_timer - delta, 0.0)
 	_attack_cooldown_timer = maxf(_attack_cooldown_timer - delta, 0.0)
+	_attack_buffer_timer = maxf(_attack_buffer_timer - delta, 0.0)
 	_invuln_timer = maxf(_invuln_timer - delta, 0.0)
 	_stun_timer = maxf(_stun_timer - delta, 0.0)
 	if _platform_drop_timer > 0.0:
