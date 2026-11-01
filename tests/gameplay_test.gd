@@ -26,6 +26,10 @@ const SEGMENTS := {
 		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
 		"_test_pink_crawler_kill_heals", "_test_crawler_sludge", "_test_ceiling_crawler", "_test_health_pickup", "_test_room_lights_flicker",
 	],
+	# Every ceiling crawler placed in any room ("c" markers, enemy_crawler.gd ceiling code).
+	"crawlers": [
+		"_test_placed_ceiling_crawlers_stay_up",
+	],
 	# Boss room layout around the arena: shafts, the drop, the acid gap, the climb door.
 	"boss_room": [
 		"_test_boss_room_shafts_climbable", "_test_right_hallway_drops_to_far_side",
@@ -1948,6 +1952,38 @@ func _test_ceiling_crawler() -> void:
 	await _frames(1)
 	_check(not knocked.on_ceiling and knocked.sprite.animation == "drop", "a hit knocks it off the ceiling")
 	await _despawn()
+
+
+func _test_placed_ceiling_crawlers_stay_up() -> void:
+	print("Ceiling crawlers placed in the rooms patrol their ceilings without falling (player hidden)")
+	var total := 0
+	for room in LevelData.ROOMS:
+		await _spawn(load(LevelData.ROOMS[room].scene), true)
+		# Hidden, so none of them drops on purpose; frozen where it spawned.
+		_player.visible = false
+		_player.process_mode = Node.PROCESS_MODE_DISABLED
+		var watched := {}
+		for e in get_tree().get_nodes_in_group("enemy"):
+			if e is CrawlerEnemy and e.on_ceiling:
+				watched[e] = {"start": e.global_position, "min_x": e.global_position.x, "max_x": e.global_position.x}
+		for i in 600:   # 10 seconds: long enough to reach the ends of their ceilings and turn
+			await _frames(1)
+			for e in watched:
+				if is_instance_valid(e):
+					watched[e].min_x = minf(watched[e].min_x, e.global_position.x)
+					watched[e].max_x = maxf(watched[e].max_x, e.global_position.x)
+		for e in watched:
+			var w: Dictionary = watched[e]
+			var where := "%s col %.1f row %.1f" % [room, w.start.x / TILE, w.start.y / TILE]
+			if not is_instance_valid(e):
+				_check(false, "%s: gone" % where)
+				continue
+			_check(e.on_ceiling and absf(e.global_position.y - w.start.y) < 2.0,
+					"%s: still on its ceiling (row %.1f)" % [where, e.global_position.y / TILE])
+			_check(w.max_x - w.min_x > TILE, "%s: patrolled %.1f tiles of it" % [where, (w.max_x - w.min_x) / TILE])
+		total += watched.size()
+		await _despawn()
+	_check(total > 0, "found %d ceiling crawlers across the rooms" % total)
 
 
 func _test_health_pickup() -> void:
