@@ -8,8 +8,9 @@ signal coins_changed(count: int)
 const FADE_TIME := 0.25
 const MENU_SCENE := "res://scenes/main_menu.tscn"
 
-## Abilities you begin a new game with (all locked for now).
+## Abilities you begin a new game with; the rest are unlocked by bosses and pickups.
 const STARTING_ABILITIES := {
+	"double_jump": true,
 	"sprint": false,
 	"dash": false,
 	"wall_jump": false,

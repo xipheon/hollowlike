@@ -54,7 +54,7 @@ const SEGMENTS := {
 	],
 	# Damage numbers and armor, sprint and stamina (player.gd, enemy damage settings).
 	"player": [
-		"_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
+		"_test_double_jump", "_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
 		"_test_sprint_is_faster_and_drains_stamina", "_test_stamina_refills_only_on_ground",
 		"_test_dash_needs_stamina", "_test_wall_jump_needs_stamina",
 	],
@@ -375,7 +375,9 @@ func _test_right_hallway_drops_to_far_side() -> void:
 
 # Runs at the acid gap from `from_col` toward `dir`, jumps at the edge and
 # dashes at the top of the jump. Returns true if it lands safely across.
-func _try_acid_dash_crossing(from_col: float, dir: int, edge_col: float, far_col: float, floor_row := 29) -> bool:
+# Jumps off the edge and, near the top of the jump, dashes, or with
+# `air_jump` double-jumps instead.
+func _try_acid_dash_crossing(from_col: float, dir: int, edge_col: float, far_col: float, floor_row := 29, air_jump := false) -> bool:
 	_player.global_position = Vector2(from_col * TILE, floor_row * TILE - Player.BODY_SIZE.y * 0.5)
 	_player.velocity = Vector2.ZERO
 	await _frames(5)
@@ -392,9 +394,15 @@ func _try_acid_dash_crossing(from_col: float, dir: int, edge_col: float, far_col
 			Input.action_press("jump")
 			jumped = true
 		elif airborne and not dashed and _player.velocity.y > -150.0:
-			Input.action_press("dash")   # near the top of the jump
+			# Near the top of the jump.
+			if air_jump:
+				Input.action_release("jump")
+				await _frames(1)
+				Input.action_press("jump")
+			else:
+				Input.action_press("dash")
 			dashed = true
-		elif dashed:
+		elif dashed and not air_jump:
 			Input.action_release("dash")
 		if _player._dead or (airborne and _player.is_on_floor()):
 			break
@@ -409,6 +417,10 @@ func _test_acid_gap_needs_dash() -> void:
 	await _remove_enemies()
 	_check(not await _try_acid_dash_crossing(27, 1, 34, 42), "no crossing without dash")
 	_check(_player._dead, "fell in the acid")
+	await _despawn()
+	await _spawn(BOSS_SCENE, true)
+	await _remove_enemies()
+	_check(not await _try_acid_dash_crossing(27, 1, 34, 42, 29, true), "no crossing with a double jump either")
 	await _despawn()
 	await _spawn(BOSS_SCENE, true)
 	await _remove_enemies()
@@ -1658,6 +1670,55 @@ func _test_down_jump_on_solid_ground_still_jumps() -> void:
 		rose = rose or _player.velocity.y < -100.0
 	_release_all()
 	_check(rose, "jumped")
+	await _despawn()
+
+
+# Presses jump fresh (release, then press) and reports whether it launched upward.
+func _air_jump_press() -> bool:
+	Input.action_release("jump")
+	await _frames(1)
+	Input.action_press("jump")
+	await _frames(2)
+	return _player.velocity.y < -400.0
+
+
+func _test_double_jump() -> void:
+	print("Double jump: one extra jump in the air, back on landing; you start with it")
+	await _spawn()
+	_check(GameState.has_ability("double_jump"), "a new game starts with double jump")
+	_place(5, 17)
+	await _frames(5)
+	Input.action_press("jump")
+	for i in 60:   # up to the top of the first jump
+		await _frames(1)
+		if _player.velocity.y > -50.0:
+			break
+	_check(await _air_jump_press(), "second jump in the air")
+	for i in 20:
+		await _frames(1)
+	_check(not await _air_jump_press(), "no third jump")
+	_release_all()
+	for i in 120:
+		await _frames(1)
+		if _player.is_on_floor():
+			break
+	await _frames(2)
+	Input.action_press("jump")
+	for i in 30:
+		await _frames(1)
+	_check(await _air_jump_press(), "back after landing")
+	_release_all()
+	await _despawn()
+
+	await _spawn()
+	GameState.abilities["double_jump"] = false
+	_place(5, 17)
+	await _frames(5)
+	Input.action_press("jump")
+	for i in 30:
+		await _frames(1)
+	_check(not await _air_jump_press(), "no double jump without the ability")
+	_release_all()
 	await _despawn()
 
 

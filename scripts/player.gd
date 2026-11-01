@@ -45,6 +45,9 @@ const PLATFORM_DROP_TIME := 0.25
 @export var coyote_time := 0.1
 @export var jump_buffer_time := 0.12
 
+@export_group("Double Jump (ability)")
+@export var double_jump_velocity := -560.0   ## one extra jump in the air; back on landing, wall sliding or a pogo
+
 @export_group("Dash (ability)")
 @export var dash_speed := 820.0
 @export var dash_duration := 0.17
@@ -88,6 +91,7 @@ var _dash_timer := 0.0
 var _dash_cooldown_timer := 0.0
 var _dash_dir := 1
 var _air_dash_available := true
+var _air_jump_available := true
 var _wall_normal_x := 0.0
 var _wall_lock_timer := 0.0
 var _attack_timer := 0.0
@@ -162,6 +166,7 @@ func _physics_process(delta: float) -> void:
 	if on_floor:
 		_coyote_timer = coyote_time
 		_air_dash_available = true
+		_air_jump_available = true
 	_update_safe_ground(on_floor, delta)
 	var sprinting := _update_stamina(input_x, on_floor and not stunned, delta)
 	if Input.is_action_just_pressed("jump"):
@@ -174,6 +179,7 @@ func _physics_process(delta: float) -> void:
 		if input_x != 0.0 and signf(input_x) == -signf(normal.x):
 			wall_sliding = true
 			_wall_normal_x = normal.x
+			_air_jump_available = true
 
 	# Dash
 	if not stunned and _dash_timer <= 0.0 and _dash_cooldown_timer <= 0.0 \
@@ -205,6 +211,11 @@ func _physics_process(delta: float) -> void:
 				velocity = Vector2(_wall_normal_x * wall_jump_velocity.x, wall_jump_velocity.y)
 				facing = int(signf(_wall_normal_x))
 				_wall_lock_timer = wall_jump_lock_time
+				_jump_buffer_timer = 0.0
+			# Only on a fresh press: a buffered press just before landing is a ground jump.
+			elif Input.is_action_just_pressed("jump") and _air_jump_available and GameState.has_ability("double_jump"):
+				velocity.y = double_jump_velocity
+				_air_jump_available = false
 				_jump_buffer_timer = 0.0
 		# Variable jump height
 		if Input.is_action_just_released("jump") and velocity.y < 0.0:
@@ -414,6 +425,7 @@ func _on_attack_area_entered(area: Area2D) -> void:
 func _pogo() -> void:
 	velocity.y = pogo_velocity
 	_air_dash_available = true
+	_air_jump_available = true
 	# Targets can be bounced on again once they leave and re-enter a held strike.
 	_hit_this_swing.clear()
 
