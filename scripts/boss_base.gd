@@ -14,6 +14,8 @@ signal defeated
 var boss_name := "BOSS"
 var reward_ability := ""
 var max_health := 20
+## How hard hitting this pushes the player away, in px/s (see EnemyBase.hit_recoil).
+@export var hit_recoil := 300.0
 var health := 0
 ## Arena limits in pixels (set by the room before activate()). Also used to
 ## detect when to start the fight.

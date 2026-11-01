@@ -12,15 +12,15 @@ extends Node
 # Tests grouped by what they cover, so a change only needs its segments run.
 # Each test spawns its own room, so segments run fine alone or in any order.
 const SEGMENTS := {
-	# Acid, spikes, safe-ground respawn, down-strikes and pogo (player.gd, room.gd hazards).
+	# Acid, spikes, safe-ground respawn, down-strikes (player.gd, room.gd hazards).
 	"hazards": [
 		"_test_acid_kills", "_test_acid_kills_through_invulnerability",
 		"_test_spikes_hurt_and_respawn", "_test_spikes_respect_invulnerability",
 		"_test_safe_ground_needs_both_feet", "_test_tapped_down_strike_ends",
-		"_test_held_down_strike_ends", "_test_tapped_pogos_chain_on_spikes",
+		"_test_held_down_strike_ends", "_test_down_strike_doesnt_bounce_on_spikes",
 	],
 	# First room: layout routes, crawlers, one-way platforms, its door.
-	"start_room": [
+	"first_test_room": [
 		"_test_acid_route_jumps", "_test_acid_enemies_stay_on_platforms", "_test_crawler_turns_at_wall",
 		"_test_door_to_boss_room_and_back",
 		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
@@ -38,6 +38,7 @@ const SEGMENTS := {
 	# Moving platforms and their track tiles (moving_platform.gd, tools/make_track_tiles.gd).
 	"platforms": [
 		"_test_track_brush", "_test_moving_platform_travel", "_test_moving_platform_carries_player",
+		"_test_moving_platform_momentum",
 	],
 	# Every ceiling crawler placed in any room, and placed enemies' Inspector settings (enemy_crawler.gd, enemy_base.gd).
 	"crawlers": [
@@ -74,6 +75,7 @@ const SEGMENTS := {
 		"_test_double_jump", "_test_player_animations", "_test_attack_buffer", "_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
 		"_test_sprint_is_faster_and_drains_stamina", "_test_stamina_refills_only_on_ground",
 		"_test_dash_needs_stamina", "_test_dash_eight_directions", "_test_wall_jump_needs_stamina",
+		"_test_hit_recoil",
 	],
 	# Pause menu, main menu, level select, debug tools.
 	"menus": [
@@ -85,7 +87,7 @@ const SEGMENTS := {
 }
 
 const TILE := 32
-const MAIN_SCENE := preload("res://scenes/main.tscn")
+const FIRST_TEST_ROOM_SCENE := preload("res://scenes/first_test_room.tscn")
 const BOSS_SCENE := preload("res://scenes/boss_room.tscn")
 const CLIMB_SCENE := preload("res://scenes/climb_room.tscn")
 const AERIE_SCENE := preload("res://scenes/aerie_room.tscn")
@@ -181,7 +183,7 @@ func _chosen_segments() -> Array:
 
 # Rooms run as the tree's current scene (beside this test node, not under it),
 # so door transitions and death reloads replace the room, not the test.
-func _spawn(scene: PackedScene = MAIN_SCENE, boss_beaten := false) -> void:
+func _spawn(scene: PackedScene = FIRST_TEST_ROOM_SCENE, boss_beaten := false) -> void:
 	await _spawn_node(scene.instantiate(), boss_beaten)
 
 
@@ -349,31 +351,28 @@ func _test_held_down_strike_ends() -> void:
 	await _despawn()
 
 
-func _test_tapped_pogos_chain_on_spikes() -> void:
-	print("Tapping the down-strike on each fall chains pogos on spikes")
+func _test_down_strike_doesnt_bounce_on_spikes() -> void:
+	print("A down-strike on spikes doesn't bounce you: you land on them and get hurt")
 	await _spawn()
 	_place(32, 9)
 	Input.action_press("move_down")
 	var spike_top: float = 19 * TILE + TILE - _main.SPIKE_HEIGHT
-	var bounces := 0
-	var prev_vy := 0.0
-	var tapped := false
-	for i in 240:
-		# Swing once each time you drop to within reach of the spikes.
-		var near := _player.velocity.y > 0.0 and _player.global_position.y > spike_top - 70.0
-		if near and not tapped:
+	var swung := false
+	var rose := false
+	for i in 120:
+		# Swing as you drop to within reach of the spikes.
+		if not swung and _player.velocity.y > 0.0 and _player.global_position.y > spike_top - 70.0:
 			Input.action_press("attack")
-			tapped = true
-		else:
-			Input.action_release("attack")
+			swung = true
 		await _frames(1)
-		if _player.velocity.y < -400.0 and prev_vy >= 0.0:
-			bounces += 1
-			tapped = false
-		prev_vy = _player.velocity.y
+		Input.action_release("attack")
+		if swung and _player.velocity.y < -100.0 and _player.health == _player.max_health:
+			rose = true
+		if _player.health < _player.max_health:
+			break
 	_release_all()
-	_check(bounces >= 3, "bounced %d times in 4s" % bounces)
-	_check(_player.health == _player.max_health, "never touched the spikes")
+	_check(swung and not rose, "the strike didn't bounce you up")
+	_check(_player.health < _player.max_health, "the spikes hurt (%d of %d)" % [_player.health, _player.max_health])
 	await _despawn()
 
 
@@ -1667,7 +1666,7 @@ func _test_level_select_loads_each_room() -> void:
 		await _frames(2)
 		menu.level_select_button.pressed.emit()
 		_check(menu.level_buttons.size() == LevelData.ROOMS.size(), "%d level buttons" % menu.level_buttons.size())
-		_check(menu.level_buttons["start"].has_focus(), "first level focused")
+		_check(menu.level_buttons["first_test_room"].has_focus(), "first level focused")
 		menu.level_buttons[room].pressed.emit()
 		var loaded := await _wait_for_room(room, 120)
 		_check(loaded != null, "%s loaded" % room)
@@ -1697,7 +1696,7 @@ func _test_main_menu_starts_game() -> void:
 	await _frames(2)
 	_check(menu.start_button.has_focus(), "Start focused")
 	await _press_pad_a()
-	var room := await _wait_for_room("start", 120)
+	var room := await _wait_for_room("first_test_room", 120)
 	_check(room != null, "first room loaded")
 	_check(not GameState.has_ability("dash"), "progress reset")
 	if room != null:
@@ -2060,7 +2059,7 @@ func _build_editor_room() -> Room:
 	var door := RoomDoor.new()
 	door.name = "WestDoor"
 	door.position = Vector2(0, 9 * TILE)
-	door.target_room = "start"
+	door.target_room = "first_test_room"
 	room.entities().add_child(door)
 	var warden: WardenBoss = load("res://scenes/bosses/warden.tscn").instantiate()
 	warden.name = "Warden"
@@ -2106,9 +2105,9 @@ func _test_editor_room_door() -> void:
 	_place(2, 11)
 	await _frames(5)
 	Input.action_press("move_left")
-	var room := await _wait_for_room("start", 120)
+	var room := await _wait_for_room("first_test_room", 120)
 	Input.action_release("move_left")
-	_check(room != null, "walking into the door loaded the start room")
+	_check(room != null, "walking into the door loaded the first test room")
 	await _frames(10)
 	await _despawn()
 
@@ -2197,7 +2196,7 @@ func _test_tiles_say_what_they_are() -> void:
 			counts[kind] = counts.get(kind, 0) + 1
 	_check(not counts.has(""), "no tile without a kind %s" % [counts])
 	for kind in ["solid", "platform", "spikes", "acid", "door", "wall", "window", "light"]:
-		_check(counts.get(kind, 0) > 0, "start room has %s tiles (%d)" % [kind, counts.get(kind, 0)])
+		_check(counts.get(kind, 0) > 0, "first test room has %s tiles (%d)" % [kind, counts.get(kind, 0)])
 	var lights := _main.get_children().filter(func(c): return c is FlickerLight)
 	_check(lights.size() == counts.get("light", 0) + 1, "a glow per light tile, plus the door's EXIT sign (%d)" % lights.size())
 	await _despawn()
@@ -2385,15 +2384,15 @@ func _test_door_to_boss_room_and_back() -> void:
 		return
 	await _frames(20)
 	var p: Player = room._player
-	_check(GameState.arrived_from == "start", "arrival recorded from start")
+	_check(GameState.arrived_from == "first_test_room", "arrival recorded from the first test room")
 	_check(p.health == 6, "health carried through the door (%d)" % p.health)
 	_check(p.is_on_floor() and p.global_position.x < 5 * TILE and absf(p.global_position.y - (29 * TILE - Player.BODY_SIZE.y * 0.5)) < 4.0,
 			"arrived inside the lower corridor's door (col %.1f, row %.1f)" % [p.global_position.x / TILE, p.global_position.y / TILE])
 	p.health = 5
 	Input.action_press("move_left")
-	room = await _wait_for_room("start", 300)
+	room = await _wait_for_room("first_test_room", 300)
 	Input.action_release("move_left")
-	_check(room != null, "returned to the start room")
+	_check(room != null, "returned to the first test room")
 	if room != null:
 		await _frames(20)
 		p = room._player
@@ -2598,4 +2597,96 @@ func _test_dash_eight_directions() -> void:
 	await _frames(6)
 	_check(dashing and _player.is_on_floor() and _player._dash_timer <= 0.0 and _player.velocity.y <= 1.0,
 			"down into the floor: lands and the dash ends there")
+	await _despawn()
+
+
+func _test_moving_platform_momentum() -> void:
+	print("Jumping off a moving platform carries its speed, fading out over platform_carry_time")
+	await _spawn_node(_build_platform_room())
+	var across: MovingPlatform = _main.entities().get_node("Across")
+	_player.global_position = across.global_position + Vector2(0, -Player.BODY_SIZE.y * 0.5 - 2)
+	_player.velocity = Vector2.ZERO
+	await _frames(10)
+	var riding := _player.get_platform_velocity().x
+	Input.action_press("jump")   # held: a full jump, straight up, no steering
+	for i in 10:   # lift off
+		await _frames(1)
+		if not _player.is_on_floor():
+			break
+	var speeds: Array[float] = []
+	var fade_frames := int(_player.platform_carry_time * 60.0)
+	for i in fade_frames + 5:
+		speeds.append(_player.velocity.x)
+		await _frames(1)
+	_release_all()
+	_check(absf(riding - across.speed) < 1.0 and speeds[1] > riding * 0.9,
+			"leaving, you have the platform's speed (%.0f px/s, platform %.0f)" % [speeds[1], riding])
+	var halfway := speeds[fade_frames / 2]
+	_check(absf(halfway - riding * 0.5) < riding * 0.12, "halfway through it's about half (%.0f px/s)" % halfway)
+	_check(absf(speeds[fade_frames + 1]) < 2.0, "after %.1f s it's gone (%.0f px/s)" % [_player.platform_carry_time, speeds[fade_frames + 1]])
+	for i in 120:
+		await _frames(1)
+		if _player.is_on_floor():
+			break
+	await _frames(2)
+	_check(_player.is_on_floor() and _player._carried_x == 0.0, "landed, with nothing carried")
+	await _despawn()
+
+
+## Places an enemy of `scene` on the platform room's floor, puts the player at
+## `offset` from its middle, swings ("down" or "side", facing right), and
+## returns [the player's velocity right after the hit, the direction from the
+## enemy to the player at that moment].
+func _swing_at(scene: PackedScene, size_y: float, direction: String, offset: Vector2) -> Array:
+	var floor_y := 15 * TILE
+	var enemy := _place_enemy(scene, {}, Vector2(18.5 * TILE, floor_y - size_y * 0.5))
+	enemy.set_physics_process(false)   # hold still to be hit
+	_player._invuln_timer = 999.0
+	_player.facing = 1
+	_player.global_position = enemy.global_position + offset
+	_player.velocity = Vector2.ZERO
+	_player._attack_cooldown_timer = 0.0
+	if direction == "down":
+		Input.action_press("move_down")
+	Input.action_press("attack")
+	var result := [Vector2.ZERO, Vector2.ZERO]
+	for i in 6:
+		var away := (_player.global_position - enemy.global_position).normalized()
+		await _frames(1)
+		if enemy.health < enemy.max_health:
+			result = [_player.velocity, away]
+			break
+	_release_all()
+	enemy.queue_free()
+	await _frames(20)
+	_player._invuln_timer = 0.0
+	return result
+
+
+func _test_hit_recoil() -> void:
+	print("Hits push you away from the enemy, by its hit_recoil: crawlers hard, knights and the Warden barely")
+	var crawler: EnemyBase = CRAWLER_SCENE.instantiate()
+	var knight: EnemyBase = KNIGHT_SCENE.instantiate()
+	var warden := WardenBoss.new()
+	var harrier := HarrierBoss.new()
+	_check(crawler.hit_recoil == 500.0 and knight.hit_recoil == 180.0, "crawlers 500, knights 180")
+	_check(warden.hit_recoil == 180.0 and harrier.hit_recoil == 300.0, "the Warden 180, the Harrier 300")
+	for n in [crawler, knight, warden, harrier]:
+		n.free()
+	await _spawn_node(_build_platform_room())
+	await _frames(5)
+	var above_crawler := Vector2(0, -CrawlerEnemy.SIZE.y * 0.5 - 50)
+	var above_knight := Vector2(0, -KnightEnemy.SIZE.y * 0.5 - 50)
+	var floor_level := func(size_y: float) -> Vector2: return Vector2(-52, size_y * 0.5 - Player.BODY_SIZE.y * 0.5)
+	for case in [
+			["a down-strike on a crawler bounces you straight up, high", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "down", above_crawler, 500.0],
+			["off its left edge, up and to the left", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "down", above_crawler + Vector2(-26, 0), 500.0],
+			["on a knight, a small hop", KNIGHT_SCENE, KnightEnemy.SIZE.y, "down", above_knight, 180.0],
+			["a side swing at a crawler shoves you back hard", CRAWLER_SCENE, CrawlerEnemy.SIZE.y, "side", floor_level.call(CrawlerEnemy.SIZE.y), 500.0],
+			["at a knight, a little", KNIGHT_SCENE, KnightEnemy.SIZE.y, "side", floor_level.call(KnightEnemy.SIZE.y), 180.0]]:
+		var hit: Array = await _swing_at(case[1], case[2], case[3], case[4])
+		var pushed: Vector2 = hit[0]
+		var away: Vector2 = hit[1]
+		_check(away != Vector2.ZERO and absf(pushed.length() - case[5]) < 5.0 and absf(pushed.angle_to(away)) < deg_to_rad(4.0),
+				"%s: %s, along enemy to player %s" % [case[0], pushed.round(), (away * 100).round() / 100])
 	await _despawn()

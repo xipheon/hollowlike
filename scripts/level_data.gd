@@ -7,7 +7,7 @@ extends RefCounted
 ## ascii-to-editor-overhaul in git has the last version of them.
 
 const ROOMS := {
-	"start": {"scene": "res://scenes/main.tscn"},
+	"first_test_room": {"scene": "res://scenes/first_test_room.tscn"},
 	"boss": {"scene": "res://scenes/boss_room.tscn"},
 	"climb": {"scene": "res://scenes/climb_room.tscn"},
 	"aerie": {"scene": "res://scenes/aerie_room.tscn"},

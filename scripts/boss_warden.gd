@@ -35,6 +35,7 @@ func _init() -> void:
 	boss_name = "THE WARDEN"
 	reward_ability = "dash"
 	max_health = 40
+	hit_recoil = 180.0   # heavy: your swing barely bounces off
 
 
 func _ready() -> void:

@@ -86,7 +86,7 @@ func show_level_select() -> void:
 		return
 	_main_box.visible = false
 	_level_box.visible = true
-	level_buttons["start"].grab_focus()
+	level_buttons["first_test_room"].grab_focus()
 
 
 func _back_to_main() -> void:

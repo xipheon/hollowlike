@@ -63,7 +63,7 @@ script = ExtResource("10_v502q")
 [node name="LeftDoor" type="Node2D" parent="Entities" unique_id=1756722463]
 position = Vector2(0, 832)
 script = ExtResource("11_d53cq")
-target_room = "start"
+target_room = "first_test_room"
 
 [node name="RightDoor" type="Node2D" parent="Entities" unique_id=1097302652]
 position = Vector2(2848, 832)

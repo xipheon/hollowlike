@@ -21,6 +21,8 @@ const SAFE_GROUND_DELAY := 0.1
 const DEFAULT_HIT_DAMAGE := 2   # one full heart, in half-hearts, for hitboxes with no "damage" meta
 const PLATFORM_DROP_TIME := 0.25
 const DASH_STICK_THRESHOLD := 0.4   # how far a stick must lean on an axis to dash along it
+const DEFAULT_HIT_RECOIL := 300.0   # px/s, for things you hit that set no hit_recoil
+const RECOIL_MOSTLY := 0.5   # a recoil pointing this far up refreshes air moves; this far sideways locks steering
 
 @export_group("Run")
 @export var run_speed := 320.0
@@ -47,7 +49,7 @@ const DASH_STICK_THRESHOLD := 0.4   # how far a stick must lean on an axis to da
 @export var jump_buffer_time := 0.12
 
 @export_group("Double Jump (ability)")
-@export var double_jump_velocity := -560.0   ## one extra jump in the air; back on landing, wall sliding or a pogo
+@export var double_jump_velocity := -560.0   ## one extra jump in the air; back on landing, wall sliding or a down-strike bounce
 
 @export_group("Dash (ability)")
 @export var dash_speed := 820.0
@@ -66,7 +68,8 @@ const DASH_STICK_THRESHOLD := 0.4   # how far a stick must lean on an axis to da
 @export var attack_duration := 0.12
 @export var attack_cooldown := 0.26
 @export var attack_buffer_time := 0.15   ## an attack pressed this soon before the cooldown ends still swings
-@export var pogo_velocity := -500.0
+@export var recoil_lock_time := 0.12   ## after a side swing's recoil shoves you back, how long before you steer again
+@export var platform_carry_time := 0.5   ## leaving a moving platform, its sideways speed fades out over this many seconds
 @export var invulnerability_time := 0.5
 @export var knockback := Vector2(500, -300)
 @export var stun_time := 0.22
@@ -96,6 +99,10 @@ var _air_dash_available := true
 var _air_jump_available := true
 var _wall_normal_x := 0.0
 var _wall_lock_timer := 0.0
+var _recoil_timer := 0.0
+var _platform_velocity := Vector2.ZERO   # the moving platform's, while you stand on one
+var _carried_x := 0.0   # sideways speed kept from a moving platform you left, on top of your own
+var _carry_bleed := 0.0   # px/s per second it fades by
 var _attack_timer := 0.0
 var _attack_cooldown_timer := 0.0
 var _attack_buffer_timer := 0.0
@@ -132,7 +139,8 @@ func _ready() -> void:
 	collision_layer = 2
 	collision_mask = LAYER_GROUND
 	floor_snap_length = 6.0
-	health = GameState.take_carried_health(max_health)
+	platform_on_leave = PLATFORM_ON_LEAVE_DO_NOTHING   # _carry_platform_momentum() does it
+	health =GameState.take_carried_health(max_health)
 	stamina = max_stamina
 	last_safe_position = global_position
 
@@ -196,6 +204,7 @@ func _physics_process(delta: float) -> void:
 		_coyote_timer = coyote_time
 		_air_dash_available = true
 		_air_jump_available = true
+	_carry_platform_momentum(on_floor, delta)
 	_update_safe_ground(on_floor, delta)
 	var sprinting := _update_stamina(input_x, on_floor and not stunned, delta)
 	_sprinting = sprinting
@@ -264,12 +273,13 @@ func _physics_process(delta: float) -> void:
 		# Horizontal movement
 		if stunned:
 			velocity.x = move_toward(velocity.x, 0.0, ground_friction * 0.3 * delta)
-		elif _wall_lock_timer <= 0.0:
+		elif _wall_lock_timer <= 0.0 and _recoil_timer <= 0.0:
 			var accel := ground_accel if on_floor else air_accel
 			if input_x == 0.0:
 				accel = ground_friction if on_floor else air_friction
 			var top_speed := sprint_speed if sprinting else run_speed
-			velocity.x = move_toward(velocity.x, input_x * top_speed, accel * delta)
+			# Steering and air friction work on your own speed; a platform's carried speed rides on top.
+			velocity.x = _carried_x + move_toward(velocity.x - _carried_x, input_x * top_speed, accel * delta)
 
 	# Attack (buffered: a press during the cooldown or a stun swings once it's over,
 	# aimed by whatever direction is held then)
@@ -280,6 +290,8 @@ func _physics_process(delta: float) -> void:
 		_start_attack(input_y, on_floor)
 
 	move_and_slide()
+	if is_on_wall():
+		_carried_x = 0.0
 
 	if input_x != 0.0 and not stunned and _wall_lock_timer <= 0.0 and _dash_timer <= 0.0:
 		facing = int(signf(input_x))
@@ -315,6 +327,26 @@ func _update_safe_ground(on_floor: bool, delta: float) -> void:
 	_safe_ground_timer += delta
 	if _safe_ground_timer >= SAFE_GROUND_DELAY:
 		last_safe_position = global_position
+
+
+# Standing on a moving platform, remembers its velocity (move_and_slide carries
+# you with it). Leaving it, by jumping or walking off, keeps its sideways speed
+# on top of your own, bleeding away over platform_carry_time (sooner if you
+# land, hit a wall, dash or get hit), and its upward speed as a boost.
+func _carry_platform_momentum(on_floor: bool, delta: float) -> void:
+	if on_floor:
+		_platform_velocity = get_platform_velocity()
+		_carried_x = 0.0
+	elif _platform_velocity != Vector2.ZERO:
+		_carried_x = _platform_velocity.x
+		_carry_bleed = absf(_carried_x) / platform_carry_time
+		velocity.x += _carried_x
+		velocity.y += minf(_platform_velocity.y, 0.0)
+		_platform_velocity = Vector2.ZERO
+	elif _carried_x != 0.0:
+		var bled := move_toward(_carried_x, 0.0, _carry_bleed * delta)
+		velocity.x += bled - _carried_x
+		_carried_x = bled
 
 
 # A moving platform under either foot.
@@ -370,6 +402,7 @@ func _update_timers(delta: float) -> void:
 	_dash_cooldown_timer = maxf(_dash_cooldown_timer - delta, 0.0)
 	_dash_buffer_timer = maxf(_dash_buffer_timer - delta, 0.0)
 	_wall_lock_timer = maxf(_wall_lock_timer - delta, 0.0)
+	_recoil_timer = maxf(_recoil_timer - delta, 0.0)
 	_attack_cooldown_timer = maxf(_attack_cooldown_timer - delta, 0.0)
 	_attack_buffer_timer = maxf(_attack_buffer_timer - delta, 0.0)
 	_invuln_timer = maxf(_invuln_timer - delta, 0.0)
@@ -421,7 +454,8 @@ func _set_stamina(value: float) -> void:
 ## along the floor.
 func _start_dash(input_x: float, input_y: float, on_floor: bool) -> void:
 	_set_stamina(stamina - dash_stamina_cost)
-	var dir := Vector2(_dash_axis(input_x), _dash_axis(input_y))
+	_carried_x = 0.0
+	var dir :=Vector2(_dash_axis(input_x), _dash_axis(input_y))
 	if on_floor and dir.y > 0.0:
 		dir.y = 0.0
 	if dir == Vector2.ZERO:
@@ -486,30 +520,40 @@ func _on_attack_body_entered(body: Node) -> void:
 	body.take_hit(attack_damage, _attack_dir)
 	hit_stop(0.05)
 	shake(3.0, 0.1)
-	if _attack_dir == Vector2.DOWN:
-		_pogo()
+	_recoil(body, body.get("hit_recoil"))
 
 
 func _on_attack_area_entered(area: Area2D) -> void:
-	# Breakable projectiles (the Harrier's homing feather); down-strikes bounce off them.
-	if area.is_in_group("breakable") and not _hit_this_swing.has(area):
+	if _hit_this_swing.has(area):
+		return
+	# Breakable projectiles (the Harrier's homing feather). Hazards like spikes push nothing.
+	if area.is_in_group("breakable"):
 		_hit_this_swing[area] = true
 		area.take_hit(attack_damage, _attack_dir)
 		hit_stop(0.03)
-		if _attack_dir == Vector2.DOWN:
-			_pogo()
+		_recoil(area, area.get("hit_recoil"))
+
+
+## Pushes you away from what the swing hit, along the line from it to you, at
+## `speed` px/s (its hit_recoil; null if it has none, which uses
+## DEFAULT_HIT_RECOIL). Struck from above, that bounces you up and gives back
+## the air jump and dash, so a high recoil works like a pogo; struck from the
+## side, it shoves you back and you can't steer for recoil_lock_time.
+func _recoil(target: Node2D, speed: Variant) -> void:
+	var push: float = DEFAULT_HIT_RECOIL if speed == null else speed
+	if push <= 0.0:
 		return
-	# Downward strike on spikes bounces you, like Hollow Knight.
-	if _attack_dir == Vector2.DOWN and area.is_in_group("pogo") and not _hit_this_swing.has(area):
-		_hit_this_swing[area] = true
-		_pogo()
-
-
-func _pogo() -> void:
-	velocity.y = pogo_velocity
-	_air_dash_available = true
-	_air_jump_available = true
-	_hit_this_swing.clear()
+	var away := (global_position - target.global_position).normalized()
+	if away == Vector2.ZERO:
+		away = -_attack_dir
+	velocity = away * push
+	_carried_x = 0.0
+	if away.y < -RECOIL_MOSTLY:
+		_air_dash_available = true
+		_air_jump_available = true
+		_hit_this_swing.clear()
+	if absf(away.x) > RECOIL_MOSTLY:
+		_recoil_timer = recoil_lock_time
 
 
 # -------------------------------------------------------------- Damage ----
@@ -595,6 +639,8 @@ func _apply_damage(amount: int, source_position: Vector2, is_hazard: bool) -> bo
 		died.emit()
 		return true
 
+	_carried_x = 0.0
+	_platform_velocity = Vector2.ZERO
 	if is_hazard:
 		# Hollow Knight-style: hazards hurt, then put you back on safe ground.
 		global_position = last_safe_position

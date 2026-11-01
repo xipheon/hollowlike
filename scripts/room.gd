@@ -229,7 +229,6 @@ func _add_shape(body: StaticBody2D, rect: Rect2, one_way: bool) -> void:
 func _add_spikes(x: int, y: int) -> void:
 	var area := Area2D.new()
 	area.add_to_group("hazard")
-	area.add_to_group("pogo")
 	area.collision_layer = 16
 	area.collision_mask = 0
 	area.monitoring = false
@@ -242,8 +241,8 @@ func _add_spikes(x: int, y: int) -> void:
 	add_child(area)
 
 
-# Acid kills outright and can't be pogoed off. Tiles under other acid fill the
-# whole tile, so deep pools are one continuous body.
+# Acid kills outright. Tiles under other acid fill the whole tile, so deep
+# pools are one continuous body.
 func _add_acid(x: int, y: int, submerged: bool) -> void:
 	var area := Area2D.new()
 	area.add_to_group("lethal_hazard")

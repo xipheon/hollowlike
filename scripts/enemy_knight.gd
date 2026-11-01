@@ -32,6 +32,7 @@ var _sword_shape: CollisionShape2D
 func _init() -> void:
 	max_health = 5
 	damage = 8   # per hit (body or sword), in half-hearts: 4 hearts
+	hit_recoil = 180.0   # armoured: your swing barely bounces off
 
 
 func _ready() -> void:

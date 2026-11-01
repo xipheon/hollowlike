@@ -7,7 +7,7 @@ Open this folder in Godot (Import -> project.godot) and press F5.
 |---|---|---|
 | Move | A/D or arrows | stick / d-pad |
 | Jump (hold for height) | Space / Z | A |
-| Attack | J / X (hold Up to aim up; Down in air = pogo) | X |
+| Attack | J / X (hold Up to aim up, Down in the air to strike down; hits push you back, so striking down on a crawler bounces you up) | X |
 | Sprint (uses stamina) | Shift | LT |
 | Dash (after beating the boss; uses stamina; hold a direction to dash any of 8 ways) | K / C | RB / B |
 | Pause | Esc / P | Start |

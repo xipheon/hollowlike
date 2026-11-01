@@ -81,6 +81,7 @@ func _init() -> void:
 	boss_name = "THE HARRIER"
 	reward_ability = "wall_jump"
 	max_health = 32
+	hit_recoil = 300.0
 
 
 func _ready() -> void:

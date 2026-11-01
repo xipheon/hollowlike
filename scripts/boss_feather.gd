@@ -2,7 +2,8 @@ class_name HarrierFeather
 extends Area2D
 ## The Harrier's ranged shot: flies until it hits a wall, the floor or you.
 ## A homing feather is slow, curves toward you, and can be struck down with an
-## attack (a down-strike bounces off it). It only ever heads downward, within
+## attack (striking it pushes you back by hit_recoil, like an enemy: a
+## down-strike bounces off it). It only ever heads downward, within
 ## MAX_TILT of straight down, and once it has seen you it can't turn tighter
 ## than min_turn_radius, so a quick sidestep dodges it. Damage comes from the
 ## "damage" meta the Harrier sets.
@@ -16,6 +17,7 @@ var homing := false
 var turn_rate := 2.2               ## radians per second, homing only
 var min_turn_radius := 150.0       ## px; homing, once it has seen the player
 var lifetime := 3.0
+var hit_recoil := 500.0             ## px/s the player is pushed back by striking it (see EnemyBase)
 
 var _age := 0.0
 var _seen_player := false

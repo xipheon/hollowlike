@@ -18,6 +18,10 @@ const LAYER_HAZARD := 16
 ## Half-hearts the player gets back for the kill. -1 uses this enemy type's
 ## default (see default_kill_heal()).
 @export var heal_on_kill := -1
+## How hard hitting this pushes the player away, in px/s, along the line from
+## this to them: struck from above, that bounces them up (a high value is a
+## pogo); from the side, it shoves them back. 0: no push.
+@export var hit_recoil := 300.0
 
 var health := 0
 var _flash_timer := 0.0

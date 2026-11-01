@@ -85,10 +85,10 @@ func take_carried_health(full: int) -> int:
 
 ## Wipe progress and load the first room (from the main menu).
 func start_new_game() -> void:
-	start_at_room("start")
+	start_at_room("first_test_room")
 
 
-## Wipe progress and load any room at its P marker (level select).
+## Wipe progress and load any room at its PlayerStart (level select).
 func start_at_room(room: String) -> void:
 	abilities = STARTING_ABILITIES.duplicate()
 	bosses_defeated = {}
