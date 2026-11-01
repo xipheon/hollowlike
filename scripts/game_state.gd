@@ -4,6 +4,7 @@ extends Node
 
 signal ability_unlocked(ability: String)
 signal coins_changed(count: int)
+signal player_skin_changed(skin_id: String)
 
 const FADE_TIME := 0.25
 const MENU_SCENE := "res://scenes/main_menu.tscn"
@@ -32,6 +33,8 @@ var collected_coins := {}
 ## Health carried through a door into the next room, in half-hearts (-1 = none,
 ## start full). Used once, so dying or restarting a room still refills it.
 var carried_health := -1
+## The player's look (PlayerSprite.SKINS). Cosmetic, so a new game keeps it.
+var player_skin := PlayerSprite.DEFAULT_SKIN
 
 var _fade: ColorRect
 var _transitioning := false
@@ -57,6 +60,11 @@ func has_ability(ability: String) -> bool:
 func unlock(ability: String) -> void:
 	abilities[ability] = true
 	ability_unlocked.emit(ability)
+
+
+func set_player_skin(skin_id: String) -> void:
+	player_skin = skin_id
+	player_skin_changed.emit(skin_id)
 
 
 func collect_coin(coin_id: String) -> void:

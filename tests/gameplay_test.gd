@@ -54,7 +54,7 @@ const SEGMENTS := {
 	],
 	# Damage numbers and armor, sprint and stamina (player.gd, enemy damage settings).
 	"player": [
-		"_test_double_jump", "_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
+		"_test_double_jump", "_test_player_animations", "_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
 		"_test_sprint_is_faster_and_drains_stamina", "_test_stamina_refills_only_on_ground",
 		"_test_dash_needs_stamina", "_test_wall_jump_needs_stamina",
 	],
@@ -63,7 +63,7 @@ const SEGMENTS := {
 		"_test_pause_menu_toggles", "_test_pause_ignored_during_boss_intro",
 		"_test_debug_kill_boss", "_test_debug_kill_boss_off_outside_debug_mode",
 		"_test_main_menu_starts_game", "_test_level_select_loads_each_room",
-		"_test_pause_menu_quits_to_main_menu",
+		"_test_pause_menu_quits_to_main_menu", "_test_pause_menu_skins",
 	],
 }
 
@@ -170,6 +170,7 @@ func _spawn(scene: PackedScene = MAIN_SCENE, boss_beaten := false) -> void:
 	GameState.collected_coins = {}
 	GameState.coins = 0
 	GameState.carried_health = -1
+	GameState.player_skin = PlayerSprite.DEFAULT_SKIN
 	GameState.abilities = GameState.STARTING_ABILITIES.duplicate()
 	GameState.debug_mode = true
 	_main = scene.instantiate()
@@ -1386,6 +1387,73 @@ func _press_pause() -> void:
 	await _frames(2)
 
 
+func _test_pause_menu_skins() -> void:
+	print("Pause menu: Skin lists every skin, marks the one worn, and swaps the player's look")
+	await _spawn()
+	_check(_player.sprite.skin_id == PlayerSprite.DEFAULT_SKIN, "starts in the default skin (%s)" % _player.sprite.skin_id)
+	await _press_pause()
+	var menu := _pause_menu()
+	menu._skin_button.pressed.emit()
+	_check(menu._skin_box.visible and not menu._main_box.visible, "Skin opens the skin list")
+	_check(menu._skin_buttons.size() == PlayerSprite.SKINS.size(), "%d skin buttons" % menu._skin_buttons.size())
+	_check(menu._skin_buttons[PlayerSprite.DEFAULT_SKIN].text.begins_with(menu.SKIN_MARK) and menu._skin_buttons[PlayerSprite.DEFAULT_SKIN].has_focus(),
+			"the worn skin is marked and focused")
+	var other: String = PlayerSprite.SKINS.filter(func(s): return s.id != PlayerSprite.DEFAULT_SKIN)[0].id
+	menu._skin_buttons[other].pressed.emit()
+	_check(GameState.player_skin == other and _player.sprite.skin_id == other, "picking %s swaps the player's look" % other)
+	_check(menu._skin_buttons[other].text.begins_with(menu.SKIN_MARK) and not menu._skin_buttons[PlayerSprite.DEFAULT_SKIN].text.begins_with(menu.SKIN_MARK),
+			"the mark moves")
+	var sheet: Texture2D = _player.sprite.sprite_frames.get_frame_texture("idle", 0).atlas
+	_check(sheet.resource_path == PlayerSprite.skin(other).sheet, "drawn from %s" % sheet.resource_path)
+	menu.show_main()
+	_check(menu._main_box.visible and menu._skin_button.has_focus(), "Back returns to the pause menu")
+	menu.close()
+	# The look carries into the next room.
+	var old := get_tree().current_scene
+	get_tree().reload_current_scene()
+	for i in 30:
+		await _frames(1)
+		if get_tree().current_scene != old and get_tree().current_scene != null:
+			break
+	_main = get_tree().current_scene
+	_check(_main._player.sprite.skin_id == other, "kept after reloading the room")
+	await _despawn()
+
+
+func _test_player_animations() -> void:
+	print("Player sprite: idle, run, jump, fall and land as you move")
+	await _spawn()
+	_place(5, 17)
+	await _frames(20)
+	_check(_player.sprite.animation == "idle", "idle standing still (%s)" % _player.sprite.animation)
+	Input.action_press("move_right")
+	await _frames(15)
+	_check(_player.sprite.animation == "run" and not _player.sprite.flip_h, "run, facing right (%s)" % _player.sprite.animation)
+	Input.action_release("move_right")
+	Input.action_press("move_left")
+	await _frames(15)
+	_check(_player.sprite.flip_h, "turned to face left")
+	Input.action_release("move_left")
+	await _frames(20)
+	Input.action_press("jump")
+	await _frames(4)
+	_check(_player.sprite.animation == "jump", "jump on the way up (%s)" % _player.sprite.animation)
+	var saw_fall := false
+	var saw_land := false
+	for i in 120:
+		await _frames(1)
+		saw_fall = saw_fall or _player.sprite.animation == "fall"
+		saw_land = saw_land or _player.sprite.animation == "land"
+		if saw_land:
+			break
+	_release_all()
+	_check(saw_fall, "fall on the way down")
+	_check(saw_land, "land on touching down")
+	await _frames(30)
+	_check(_player.sprite.animation == "idle", "back to idle (%s)" % _player.sprite.animation)
+	await _despawn()
+
+
 func _pause_menu() -> PauseMenu:
 	for c in get_tree().current_scene.get_children():
 		if c is PauseMenu:
@@ -1557,8 +1625,10 @@ func _test_pause_menu_quits_to_main_menu() -> void:
 	print("Pause menu: Quit returns to the main menu")
 	await _spawn()
 	await _press_pause()
-	var quit: Button = _pause_menu()._panel.find_children("*", "Button", true, false)[1]
-	_check(quit.text == "Quit to Menu", "second button is Quit to Menu")
+	var buttons := _pause_menu()._panel.find_children("*", "Button", true, false)
+	var found := buttons.filter(func(b): return b.text == "Quit to Menu")
+	_check(found.size() == 1, "has a Quit to Menu button")
+	var quit: Button = found[0]
 	quit.pressed.emit()
 	var at_menu := false
 	for i in 120:

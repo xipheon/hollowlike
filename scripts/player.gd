@@ -106,6 +106,18 @@ var _sprint_exhausted := false   # ran dry: let go of sprint before it works aga
 var _hitstop_active := false
 var _dead := false
 
+# Animation
+const LAND_ANIM_TIME := 0.15
+const WALL_JUMP_ANIM_TIME := 0.3
+const DOUBLE_JUMP_ANIM_TIME := 0.25
+var sprite: PlayerSprite
+var _wall_sliding := false
+var _sprinting := false
+var _was_on_floor := true
+var _land_anim_timer := 0.0
+var _wall_jump_anim_timer := 0.0
+var _double_jump_anim_timer := 0.0
+
 
 func _ready() -> void:
 	add_to_group("player")
@@ -152,6 +164,13 @@ func _ready() -> void:
 	camera.position_smoothing_speed = 9.0
 	add_child(camera)
 
+	# Feet at the bottom of the body box.
+	sprite = PlayerSprite.new()
+	sprite.position = Vector2(0, BODY_SIZE.y * 0.5 - PlayerSprite.FRAME.y * 0.5)
+	add_child(sprite)
+	sprite.apply_skin(GameState.player_skin)
+	GameState.player_skin_changed.connect(sprite.apply_skin)
+
 
 func _physics_process(delta: float) -> void:
 	if _dead:
@@ -169,6 +188,7 @@ func _physics_process(delta: float) -> void:
 		_air_jump_available = true
 	_update_safe_ground(on_floor, delta)
 	var sprinting := _update_stamina(input_x, on_floor and not stunned, delta)
+	_sprinting = sprinting
 	if Input.is_action_just_pressed("jump"):
 		_jump_buffer_timer = jump_buffer_time
 
@@ -180,6 +200,7 @@ func _physics_process(delta: float) -> void:
 			wall_sliding = true
 			_wall_normal_x = normal.x
 			_air_jump_available = true
+	_wall_sliding = wall_sliding
 
 	# Dash
 	if not stunned and _dash_timer <= 0.0 and _dash_cooldown_timer <= 0.0 \
@@ -211,11 +232,13 @@ func _physics_process(delta: float) -> void:
 				velocity = Vector2(_wall_normal_x * wall_jump_velocity.x, wall_jump_velocity.y)
 				facing = int(signf(_wall_normal_x))
 				_wall_lock_timer = wall_jump_lock_time
+				_wall_jump_anim_timer = WALL_JUMP_ANIM_TIME
 				_jump_buffer_timer = 0.0
 			# Only on a fresh press: a buffered press just before landing is a ground jump.
 			elif Input.is_action_just_pressed("jump") and _air_jump_available and GameState.has_ability("double_jump"):
 				velocity.y = double_jump_velocity
 				_air_jump_available = false
+				_double_jump_anim_timer = DOUBLE_JUMP_ANIM_TIME
 				_jump_buffer_timer = 0.0
 		# Variable jump height
 		if Input.is_action_just_released("jump") and velocity.y < 0.0:
@@ -241,6 +264,7 @@ func _physics_process(delta: float) -> void:
 		facing = int(signf(input_x))
 
 	_check_hurtbox()
+	_update_animation(delta)
 
 
 func _process(delta: float) -> void:
@@ -547,16 +571,51 @@ func hit_stop(duration: float) -> void:
 	_hitstop_active = false
 
 
+# ------------------------------------------------------------ Animation ----
+
+## Picks the sprite's animation from what the player is doing, and which way
+## it faces: wall sliding faces away from the wall. Dash and stun tint it.
+func _update_animation(delta: float) -> void:
+	_land_anim_timer = maxf(_land_anim_timer - delta, 0.0)
+	_wall_jump_anim_timer = maxf(_wall_jump_anim_timer - delta, 0.0)
+	_double_jump_anim_timer = maxf(_double_jump_anim_timer - delta, 0.0)
+	var on_floor := is_on_floor()
+	if on_floor and not _was_on_floor:
+		_land_anim_timer = LAND_ANIM_TIME
+	_was_on_floor = on_floor
+
+	var anim := "idle"
+	if _dash_timer > 0.0:
+		anim = "dash"
+	elif _wall_sliding:
+		anim = "wall_slide"
+	elif not on_floor:
+		if _wall_jump_anim_timer > 0.0:
+			anim = "wall_jump"
+		elif _double_jump_anim_timer > 0.0:
+			anim = "double_jump"
+		elif velocity.y < 0.0:
+			anim = "jump"
+		else:
+			anim = "fall"
+	elif absf(velocity.x) > 20.0:
+		anim = "sprint" if _sprinting else "run"
+	elif _land_anim_timer > 0.0:
+		anim = "land"
+	sprite.play_state(anim)
+	sprite.flip_h = (int(signf(_wall_normal_x)) if _wall_sliding else facing) < 0
+
+	if _dash_timer > 0.0:
+		sprite.self_modulate = Color(0.6, 0.95, 1.0)
+	elif _stun_timer > 0.0:
+		sprite.self_modulate = Color(1.0, 0.6, 0.6)
+	else:
+		sprite.self_modulate = Color.WHITE
+
+
 # ------------------------------------------------------ Placeholder art ----
 
+# The swing's reach, until the slash effects are drawn.
 func _draw() -> void:
-	var color := Color(0.88, 0.92, 1.0)
-	if _dash_timer > 0.0:
-		color = Color(0.45, 0.9, 1.0)
-	elif _stun_timer > 0.0:
-		color = Color(1.0, 0.6, 0.6)
-	draw_rect(Rect2(-BODY_SIZE * 0.5, BODY_SIZE), color)
-	# "Eye" shows facing direction
-	draw_rect(Rect2(facing * 5 - 3, -14, 6, 6), Color(0.1, 0.1, 0.15))
 	if _attack_timer > 0.0:
 		draw_rect(_attack_rect, Color(1, 1, 1, 0.65))

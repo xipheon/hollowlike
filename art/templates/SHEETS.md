@@ -14,7 +14,7 @@ Guide colours:
 
 - Guide: `art/templates/player_guide.png`
 - Save the art as: `art/sprites/player.png`
-- Frame: 64 x 64 px; the sheet is 8 x 14 frames (512 x 896 px)
+- Frame: 64 x 64 px; the sheet is 8 x 15 frames (512 x 960 px)
 - Pivot: bottom centre (the feet)
 - Collision box: 22 x 44
 - Facing right. Slashes, dust and trails go on the effects sheet, not here.
@@ -35,6 +35,7 @@ Guide colours:
 | 11 | attack_down | 5 | 20 | no |
 | 12 | hurt | 2 | 10 | no |
 | 13 | death | 8 | 10 | no |
+| 14 | double_jump | 2 | 10 | no |
 
 ## player_effects
 
