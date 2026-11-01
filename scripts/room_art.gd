@@ -1,7 +1,7 @@
 class_name RoomArt
 extends RefCounted
 ## Builds a room's tile art from its ASCII rows: solid terrain, one-way
-## platforms, spikes and acid on the
+## platforms, spikes, arena gates and acid on the
 ## main tile sheet, the warehouse wall behind (with windows the skyline shows
 ## through), and the far skyline as a parallax layer. Art only: collisions and
 ## hazards stay in main.gd.
@@ -30,6 +30,9 @@ const PLAT_MID := Vector2i(1, 4)
 const PLAT_R := Vector2i(2, 4)
 const PLAT_ONE := Vector2i(3, 4)
 const SPIKES := [Vector2i(4, 4), Vector2i(5, 4), Vector2i(3, 6), Vector2i(4, 6)]
+const GATE := Vector2i(6, 4)       # shut: the shutter, repeating down the column
+const GATE_END := Vector2i(7, 4)   # shut: its bottom tile, with the teeth
+const GATE_UP := Vector2i(0, 6)    # raised: just the teeth under the lintel
 const ACID_FRAMES := 4
 const ACID_FRAME_TIME := 0.24
 
@@ -80,6 +83,7 @@ var _w := 0
 var _h := 0
 var _rng := RandomNumberGenerator.new()
 var _terrain_by_sides := {}
+var _gates: TileMapLayer
 
 
 func _init(rows: Array, width: int, height: int) -> void:
@@ -98,6 +102,25 @@ func build(parent: Node2D, room: String, background_rows: Array) -> void:
 	parent.add_child(_make_skyline())
 	parent.add_child(_make_background(background_rows))
 	parent.add_child(_make_foreground())
+	_gates = _layer(TILESET, 0)
+	_gates.name = "Gates"
+	for coords in [GATE, GATE_END, GATE_UP]:
+		_ensure_tile(_gates, coords)
+	parent.add_child(_gates)
+	set_gates_closed(false)
+
+
+## Shows the arena gates (`|`) shut, or raised with only their teeth showing.
+func set_gates_closed(closed: bool) -> void:
+	_gates.clear()
+	for y in _h:
+		for x in _w:
+			if _ch(x, y) != "|":
+				continue
+			if closed:
+				_gates.set_cell(Vector2i(x, y), 0, GATE_END if _ch(x, y + 1) != "|" else GATE)
+			elif _ch(x, y - 1) != "|":
+				_gates.set_cell(Vector2i(x, y), 0, GATE_UP)
 
 
 func _ch(x: int, y: int) -> String:

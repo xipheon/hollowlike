@@ -1,6 +1,6 @@
 extends Node2D
 ## Builds a room from LevelData (ASCII): tile art (RoomArt), collisions and
-## hazards, entities. Gates and doors are still placeholders drawn here.
+## hazards, entities. Doors are still placeholders drawn here.
 
 const TILE := 32
 const LAYER_WORLD := 1
@@ -8,7 +8,6 @@ const LAYER_PLATFORMS := 32
 const SPIKE_HEIGHT := 24.0   # damage area: the bottom of the tile, up to the spike tips
 const DOOR_COLOR := Color(0.02, 0.02, 0.04)
 const DOOR_FRAME_COLOR := Color(0.5, 0.45, 0.35)
-const GATE_COLOR := Color(0.6, 0.6, 0.65)
 const ARENA_TRIGGER_INSET := 3   # tiles past a gate before the boss fight starts
 const INTRO_ZOOM := 2.2
 const INTRO_ZOOM_IN_TIME := 0.7
@@ -21,6 +20,7 @@ const CAMERA_RELEASE_TIME := 0.6
 @export var room := "start"
 
 var _rows: Array
+var _art: RoomArt
 var _w := 0
 var _h := 0
 var _player: Player
@@ -40,7 +40,8 @@ func _ready() -> void:
 		_w = maxi(_w, row.length())
 	_h = _rows.size()
 
-	RoomArt.new(_rows, _w, _h).build(self, room, LevelData.ROOMS[room].get("background", []))
+	_art = RoomArt.new(_rows, _w, _h)
+	_art.build(self, room, LevelData.ROOMS[room].get("background", []))
 	_build_solids()
 	_spawn_entities()
 	_hud = HUD.new()
@@ -210,7 +211,7 @@ func _set_gate_closed(closed: bool) -> void:
 	_gate_closed = closed
 	for shape in _gate_shapes:
 		shape.set_deferred("disabled", not closed)
-	queue_redraw()
+	_art.set_gates_closed(closed)
 
 
 # ------------------------------------------------------------- Level ----
@@ -441,21 +442,12 @@ func _spawn_pickup(ability: String, label: String, tile_origin: Vector2) -> void
 
 # ------------------------------------------------- Placeholder tile art ----
 
-# Ground, platforms, spikes, acid and the background are tile art (RoomArt). These still aren't.
+# Everything else is tile art (RoomArt). Doors still aren't.
 func _draw() -> void:
 	for y in _h:
 		for x in _w:
 			var r := Rect2(x * TILE, y * TILE, TILE, TILE)
 			match _ch(x, y):
-				"|":
-					if _gate_closed:
-						for i in 4:
-							draw_rect(Rect2(r.position.x + 3 + i * 7, r.position.y, 4, TILE), GATE_COLOR)
-						draw_rect(Rect2(r.position.x, r.position.y + 12, TILE, 4), GATE_COLOR)
-					elif _ch(x, y - 1) != "|":
-						# Raised gate: just the spiked bottom edge peeking out under the lintel.
-						for i in 4:
-							draw_rect(Rect2(r.position.x + 3 + i * 7, r.position.y, 4, 8), GATE_COLOR)
 				">":
 					draw_rect(r, DOOR_COLOR)
 					if _ch(x, y - 1) == "#":
