@@ -33,6 +33,7 @@ const SEGMENTS := {
 	# Rooms made in the editor: painted layers, helper nodes, decoration (room.gd, room_art.gd).
 	"editor_rooms": [
 		"_test_editor_room_plays", "_test_editor_room_door", "_test_editor_room_arena",
+		"_test_decorate_wall_button", "_test_auto_decorate_off",
 	],
 	# Every ceiling crawler placed in any room ("c" markers, enemy_crawler.gd ceiling code).
 	"crawlers": [
@@ -2103,6 +2104,38 @@ func _test_editor_room_arena() -> void:
 	_place(16, 11)
 	_check(await _wait_for_intro_end(), "walking in played the intro")
 	_check(_main._gate_closed and _main.gates().get_used_cells().size() == 4, "the gate came down (%d tiles)" % _main.gates().get_used_cells().size())
+	await _despawn()
+
+
+func _test_decorate_wall_button() -> void:
+	print("Decorate wall: paints the same decoration auto-decorate would, keeping hand-painted wall")
+	var hand_cell := Vector2i(3, 3)
+	# What auto-decoration shows at load, with one cell hand-painted.
+	var auto_room := _build_editor_room()
+	auto_room.background().set_cell(hand_cell, 0, RoomArt.HAZARD)
+	await _spawn_node(auto_room)
+	var shown := {}
+	for c in _main.background().get_used_cells():
+		shown[c] = _main.background().get_cell_atlas_coords(c)
+	await _despawn()
+	# The button, pressed on an unloaded room: same tiles, baked into the layer.
+	var baked := _build_editor_room()
+	baked.background().set_cell(hand_cell, 0, RoomArt.HAZARD)
+	baked.decorate_wall_action.call()
+	_check(baked.background().get_cell_atlas_coords(hand_cell) == RoomArt.HAZARD, "the hand-painted cell is kept")
+	var differ := shown.keys().filter(func(c): return baked.background().get_cell_atlas_coords(c) != shown[c])
+	_check(baked.background().get_used_cells().size() == shown.size() and differ.is_empty(),
+			"baked the same %d tiles auto-decorate shows (%d differ)" % [shown.size(), differ.size()])
+	baked.free()
+
+
+func _test_auto_decorate_off() -> void:
+	print("With auto-decorate off, unpainted wall stays open to the skyline")
+	var room := _build_editor_room()
+	room.auto_decorate = false
+	room.background().set_cell(Vector2i(3, 3), 0, RoomArt.WALLS[0])
+	await _spawn_node(room)
+	_check(_main.background().get_used_cells().size() == 1, "only the painted wall cell (%d)" % _main.background().get_used_cells().size())
 	await _despawn()
 
 

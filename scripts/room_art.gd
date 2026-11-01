@@ -119,20 +119,26 @@ func _init(cell: Callable, width: int, height: int) -> void:
 ## painted wall is kept as it is. Seeded by `room`, so it's the same every time.
 func dress(parent: Node2D, room: String, background: TileMapLayer, terrain: TileMapLayer,
 		gates: TileMapLayer, auto_decorate: bool) -> void:
-	_rng.seed = hash(room)
 	_gates = gates
 	set_gates_closed(false)
 	if auto_decorate:
-		var cells := {}
-		for y in _h:
-			for x in _w:
-				var c := Vector2i(x, y)
-				if background.get_cell_source_id(c) == -1:
-					cells[c] = _pick_wall()
-		_decorate(cells)
-		for c in cells:
-			background.set_cell(c, 0, cells[c])
+		decorate_unpainted(room, background)
 	_add_lights(parent, background, terrain)
+
+
+## Paints brick, windows, lights, posters and graffiti into every cell of the
+## room's wall that isn't painted yet. Seeded by `room`: the same every time.
+func decorate_unpainted(room: String, background: TileMapLayer) -> void:
+	_rng.seed = hash(room)
+	var cells := {}
+	for y in _h:
+		for x in _w:
+			var c := Vector2i(x, y)
+			if background.get_cell_source_id(c) == -1:
+				cells[c] = _pick_wall()
+	_decorate(cells)
+	for c in cells:
+		background.set_cell(c, 0, cells[c])
 
 
 ## For an ASCII room: builds every layer and adds it under `parent`, behind

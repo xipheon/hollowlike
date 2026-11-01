@@ -42,6 +42,10 @@ const KIND_CHARS := {"solid": "#", "platform": "=", "spikes": "^", "acid": "~", 
 ## paint by hand is always kept as it is. Off: unpainted wall stays open, and
 ## the skyline shows through.
 @export var auto_decorate := true
+## Paints the automatic decoration into the Background layer now, so you can
+## edit it by hand (only unpainted wall is filled). Turn auto_decorate off
+## afterwards if you want exactly what you see. Save the scene to keep it.
+@export_tool_button("Decorate wall", "TileMapLayer") var decorate_wall_action: Callable = decorate_wall
 
 var _grid := {}   # Vector2i -> layout character
 var _from_ascii := false   # built from LevelData rows (decided before the art adds its layers)
@@ -147,9 +151,17 @@ func _ch(x: int, y: int) -> String:
 	return _grid.get(Vector2i(x, y), " ")
 
 
-## A room made in the editor: the grid comes from the painted tiles' kinds, and
-## doors, the player start and bosses from the nodes under Entities.
-func _load_painted() -> void:
+## The Inspector's "Decorate wall" button (see decorate_wall_action).
+func decorate_wall() -> void:
+	_read_painted_grid()
+	RoomArt.new(_ch, _w, _h).decorate_unpainted(room, background())
+	if Engine.is_editor_hint() and Engine.has_singleton("EditorInterface"):
+		Engine.get_singleton("EditorInterface").mark_scene_as_unsaved()
+
+
+## The room's size and layout grid, from its painted layers.
+func _read_painted_grid() -> void:
+	_grid.clear()
 	var used := Rect2i()
 	for layer in [terrain(), gates(), background()]:
 		if layer != null and not layer.get_used_cells().is_empty():
@@ -161,6 +173,12 @@ func _load_painted() -> void:
 			var kind: String = layer.get_cell_tile_data(cell).get_custom_data("kind")
 			if KIND_CHARS.has(kind):
 				_grid[cell] = KIND_CHARS[kind]
+
+
+## A room made in the editor: the grid comes from the painted tiles' kinds, and
+## doors, the player start and bosses from the nodes under Entities.
+func _load_painted() -> void:
+	_read_painted_grid()
 	_art = RoomArt.new(_ch, _w, _h)
 	_art.dress(self, room, background(), terrain(), gates(), auto_decorate)
 	for door in entities_of(RoomDoor):
