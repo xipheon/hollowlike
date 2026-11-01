@@ -30,9 +30,7 @@ window/size/viewport_width=960
 window/size/viewport_height=540
 window/size/window_width_override=1280
 window/size/window_height_override=720
-window/size/resizable=true
 window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
 
 [dotnet]
 
@@ -51,5 +49,4 @@ project/assembly_name="Hollowlike Prototype"
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-
 environment/defaults/default_clear_color=Color(0.07, 0.08, 0.11, 1)

@@ -30,6 +30,10 @@ const SEGMENTS := {
 	"tilesets": [
 		"_test_terrain_brushes_match_room_art", "_test_tiles_say_what_they_are", "_test_room_template",
 	],
+	# Rooms made in the editor: painted layers, helper nodes, decoration (room.gd, room_art.gd).
+	"editor_rooms": [
+		"_test_editor_room_plays", "_test_editor_room_door", "_test_editor_room_arena",
+	],
 	# Every ceiling crawler placed in any room ("c" markers, enemy_crawler.gd ceiling code).
 	"crawlers": [
 		"_test_placed_ceiling_crawlers_stay_up", "_test_enemy_inspector_settings",
@@ -173,13 +177,19 @@ func _chosen_segments() -> Array:
 # Rooms run as the tree's current scene (beside this test node, not under it),
 # so door transitions and death reloads replace the room, not the test.
 func _spawn(scene: PackedScene = MAIN_SCENE, boss_beaten := false) -> void:
+	await _spawn_node(scene.instantiate(), boss_beaten)
+
+
+# Like _spawn, for a room built in the test instead of loaded from a scene.
+func _spawn_node(room: Node, boss_beaten := false) -> void:
 	GameState.arrived_from = ""
+	GameState.arrive_at = ""
 	GameState.bosses_defeated = {"boss": Vector2(49.5 * TILE, 15 * TILE - WardenBoss.SIZE.y * 0.5)} if boss_beaten else {}
 	GameState.carried_health = -1
 	GameState.player_skin = PlayerSprite.DEFAULT_SKIN
 	GameState.abilities = GameState.STARTING_ABILITIES.duplicate()
 	GameState.debug_mode = true
-	_main = scene.instantiate()
+	_main = room
 	get_tree().root.add_child(_main)
 	get_tree().current_scene = _main
 	_player = _main._player
@@ -1995,6 +2005,105 @@ func _test_terrain_brushes_match_room_art() -> void:
 		return got != RoomArt.EDGE_ORIGIN + Vector2i(open % 8, open / 8))
 	_check(bad.is_empty(), "wall brush: brick inside, crumbled edges at holes (%d of %d wrong)" % [bad.size(), bricks.size()])
 	wall.free()
+
+
+## A small room made the editor way, from the template: 30x14 tiles, concrete
+## painted with the terrain brush (floor, ceiling, right wall, and a left wall
+## with a 3-tile door at the bottom), spikes, a gate column at x 10 in front of
+## an arena, and placed nodes: PlayerStart, a crawler, a RoomDoor to the start
+## room, and an Arena with a Warden.
+func _build_editor_room() -> Room:
+	var room: Room = load("res://scenes/rooms/room_template.tscn").instantiate()
+	room.room = "test"
+	var solid: Array[Vector2i] = []
+	for x in 30:
+		for y in [0, 12, 13]:
+			solid.append(Vector2i(x, y))
+	for y in range(1, 12):
+		solid.append(Vector2i(29, y))
+		if y < 9:
+			solid.append(Vector2i(0, y))
+	room.terrain().set_cells_terrain_connect(solid, 0, 0)
+	room.terrain().set_cell(Vector2i(0, 9), 0, RoomArt.DOOR_TOP)
+	room.terrain().set_cell(Vector2i(0, 10), 0, RoomArt.DOOR)
+	room.terrain().set_cell(Vector2i(0, 11), 0, RoomArt.DOOR)
+	room.terrain().set_cells_terrain_connect([Vector2i(6, 11)], 0, 2)
+	for y in range(8, 12):
+		room.gates().set_cell(Vector2i(10, y), 0, RoomArt.GATE)
+	for y in range(1, 8):   # the wall above the gate
+		room.terrain().set_cells_terrain_connect([Vector2i(10, y)], 0, 0)
+	var start: PlayerStart = room.entities().get_node("PlayerStart")
+	start.position = Vector2(4.5 * TILE, 12 * TILE)
+	var crawler: CrawlerEnemy = CRAWLER_SCENE.instantiate()
+	crawler.name = "Crawler"
+	crawler.position = Vector2(8.5 * TILE, 12 * TILE - CrawlerEnemy.SIZE.y * 0.5)
+	room.entities().add_child(crawler)
+	var door := RoomDoor.new()
+	door.name = "WestDoor"
+	door.position = Vector2(0, 9 * TILE)
+	door.target_room = "start"
+	room.entities().add_child(door)
+	var warden: WardenBoss = load("res://scenes/bosses/warden.tscn").instantiate()
+	warden.name = "Warden"
+	warden.position = Vector2(22.5 * TILE, 12 * TILE - WardenBoss.SIZE.y * 0.5)
+	room.entities().add_child(warden)
+	var arena := Arena.new()
+	arena.position = Vector2(11 * TILE, 1 * TILE)
+	arena.size_tiles = Vector2i(18, 11)
+	arena.boss = NodePath("../Warden")
+	room.entities().add_child(arena)
+	return room
+
+
+const CRAWLER_SCENE := preload("res://scenes/enemies/crawler.tscn")
+
+
+func _test_editor_room_plays() -> void:
+	print("An editor-made room plays: floor, start, auto-decorated wall, raised gate, crawler, spikes")
+	await _spawn_node(_build_editor_room())
+	await _frames(30)
+	_check(_player.is_on_floor() and absf(_player.global_position.x - 4.5 * TILE) < 2.0,
+			"player starts at the PlayerStart, on the painted floor (col %.1f)" % (_player.global_position.x / TILE))
+	_check(_main._grid.get(Vector2i(6, 11)) == "^" and _main._grid.get(Vector2i(10, 9)) == "|" and _main._grid.get(Vector2i(0, 10)) == ">",
+			"spikes, gate and door read from the tiles' kinds")
+	_check(_main.background().get_used_cells().size() >= 30 * 14, "auto-decoration filled the unpainted wall")
+	_check(not _main._gate_closed and _main.gates().get_used_cells().size() == 1, "the gate starts raised (teeth only)")
+	var crawler: CrawlerEnemy = _main.entities().get_node("Crawler")
+	var x0 := crawler.global_position.x
+	await _frames(30)
+	_check(crawler.is_on_floor() and absf(crawler.global_position.x - x0) > 10.0, "the placed crawler patrols the floor")
+	_player.global_position = Vector2(6.5 * TILE, 10 * TILE)
+	_player.velocity = Vector2.ZERO
+	var hp := _player.health
+	await _frames(30)
+	_check(_player.health < hp, "the painted spikes hurt")
+	await _despawn()
+
+
+func _test_editor_room_door() -> void:
+	print("An editor-made room's RoomDoor leads to its target room")
+	await _spawn_node(_build_editor_room())
+	await _remove_enemies()
+	_place(2, 11)
+	await _frames(5)
+	Input.action_press("move_left")
+	var room := await _wait_for_room("start", 120)
+	Input.action_release("move_left")
+	_check(room != null, "walking into the door loaded the start room")
+	await _frames(10)
+	await _despawn()
+
+
+func _test_editor_room_arena() -> void:
+	print("An editor-made room's Arena starts the boss fight and shuts its gate")
+	await _spawn_node(_build_editor_room())
+	var boss: BossBase = _main._boss
+	_check(boss is WardenBoss and is_equal_approx(boss.arena_left, 11 * TILE) and is_equal_approx(boss.arena_right, 29 * TILE),
+			"the Warden gets the Arena's box (%.0f-%.0f)" % [boss.arena_left, boss.arena_right] if boss != null else "no boss")
+	_place(16, 11)
+	_check(await _wait_for_intro_end(), "walking in played the intro")
+	_check(_main._gate_closed and _main.gates().get_used_cells().size() == 4, "the gate came down (%d tiles)" % _main.gates().get_used_cells().size())
+	await _despawn()
 
 
 func _test_room_template() -> void:
