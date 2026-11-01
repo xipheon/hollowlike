@@ -17,7 +17,7 @@ const SEGMENTS := {
 		"_test_acid_kills", "_test_acid_kills_through_invulnerability",
 		"_test_spikes_hurt_and_respawn", "_test_spikes_respect_invulnerability",
 		"_test_safe_ground_needs_both_feet", "_test_tapped_down_strike_ends",
-		"_test_held_down_strike_stays_out", "_test_held_pogo_chains_on_spikes",
+		"_test_held_down_strike_ends", "_test_tapped_pogos_chain_on_spikes",
 	],
 	# First room: layout routes, crawlers, coins, pickups, one-way platforms, its door.
 	"start_room": [
@@ -306,35 +306,45 @@ func _test_tapped_down_strike_ends() -> void:
 	await _despawn()
 
 
-func _test_held_down_strike_stays_out() -> void:
-	print("Held down-strike stays out until release")
+func _test_held_down_strike_ends() -> void:
+	print("Holding attack doesn't keep the down-strike out: it lasts like any swing")
 	await _spawn()
 	_place(32, 0)   # long fall into the spike pit
 	await _frames(5)
 	Input.action_press("move_down")
 	Input.action_press("attack")
-	await _frames(20)
-	_check(not _player.is_on_floor(), "still airborne")
-	_check(_player._attack_timer > 0.0, "strike still out after 20 frames")
-	Input.action_release("attack")
+	await _frames(2)
+	_check(_player._attack_timer > 0.0 and _player._attack_dir == Vector2.DOWN, "strike went downward")
 	await _frames(15)
-	_check(_player._attack_timer <= 0.0, "strike ended after release")
+	_check(not _player.is_on_floor(), "still airborne")
+	_check(_player._attack_timer <= 0.0, "strike ended though attack is still held")
+	_release_all()
 	await _despawn()
 
 
-func _test_held_pogo_chains_on_spikes() -> void:
-	print("Holding the down-strike chains pogos on spikes")
+func _test_tapped_pogos_chain_on_spikes() -> void:
+	print("Tapping the down-strike on each fall chains pogos on spikes")
 	await _spawn()
 	_place(32, 9)
 	Input.action_press("move_down")
-	Input.action_press("attack")
+	var spike_top: float = 19 * TILE + TILE - _main.SPIKE_HEIGHT
 	var bounces := 0
 	var prev_vy := 0.0
+	var tapped := false
 	for i in 240:
+		# Swing once each time you drop to within reach of the spikes.
+		var near := _player.velocity.y > 0.0 and _player.global_position.y > spike_top - 70.0
+		if near and not tapped:
+			Input.action_press("attack")
+			tapped = true
+		else:
+			Input.action_release("attack")
 		await _frames(1)
 		if _player.velocity.y < -400.0 and prev_vy >= 0.0:
 			bounces += 1
+			tapped = false
 		prev_vy = _player.velocity.y
+	_release_all()
 	_check(bounces >= 3, "bounced %d times in 4s" % bounces)
 	_check(_player.health == _player.max_health, "never touched the spikes")
 	await _despawn()
@@ -1498,6 +1508,17 @@ func _test_player_animations() -> void:
 	_check(saw_land, "land on touching down")
 	await _frames(30)
 	_check(_player.sprite.animation == "idle", "back to idle (%s)" % _player.sprite.animation)
+
+	# Attacking plays the swing and a slash over the hit area, then hides it.
+	Input.action_press("attack")
+	await _frames(2)
+	Input.action_release("attack")
+	_check(_player.sprite.animation == "attack_side", "attack_side on a swing (%s)" % _player.sprite.animation)
+	_check(_player.slash.visible and _player.slash.animation == "slash_side"
+			and _player.slash.position == _player._attack_shape.position, "slash shown over the hit area")
+	await _frames(30)
+	_check(not _player.slash.visible, "slash gone once it's played")
+	_check(_player.sprite.animation == "idle", "back to idle after the swing (%s)" % _player.sprite.animation)
 	await _despawn()
 
 

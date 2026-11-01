@@ -83,7 +83,6 @@ var last_safe_position := Vector2.ZERO
 var _hurtbox: Area2D
 var _attack_area: Area2D
 var _attack_shape: CollisionShape2D
-var _attack_rect := Rect2()
 var _attack_dir := Vector2.RIGHT
 var _hit_this_swing := {}
 
@@ -115,12 +114,16 @@ const LAND_ANIM_TIME := 0.15
 const WALL_JUMP_ANIM_TIME := 0.3
 const DOUBLE_JUMP_ANIM_TIME := 0.25
 var sprite: PlayerSprite
+var slash: SlashEffect
 var _wall_sliding := false
 var _sprinting := false
 var _was_on_floor := true
 var _land_anim_timer := 0.0
 var _wall_jump_anim_timer := 0.0
 var _double_jump_anim_timer := 0.0
+var _attack_anim_timer := 0.0
+var _attack_anim := ""
+var _attack_anim_restart := false
 
 
 func _ready() -> void:
@@ -174,6 +177,8 @@ func _ready() -> void:
 	add_child(sprite)
 	sprite.apply_skin(GameState.player_skin)
 	GameState.player_skin_changed.connect(sprite.apply_skin)
+	slash = SlashEffect.new()
+	add_child(slash)
 
 
 func _physics_process(delta: float) -> void:
@@ -293,7 +298,6 @@ func _process(delta: float) -> void:
 		live_camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _shake_strength
 	else:
 		live_camera.offset = Vector2.ZERO
-	queue_redraw()
 
 
 # Only remember ground as "safe" after standing on it hazard-free for a moment.
@@ -363,7 +367,7 @@ func _update_timers(delta: float) -> void:
 		if _dash_timer <= 0.0:
 			velocity.x = _dash_dir * run_speed   # keep some momentum out of the dash
 			velocity.y = 0.0
-	if _attack_timer > 0.0 and not _is_holding_pogo():
+	if _attack_timer > 0.0:
 		_attack_timer -= delta
 		if _attack_timer <= 0.0:
 			_attack_shape.set_deferred("disabled", true)
@@ -430,8 +434,12 @@ func _start_attack(input_y: float, on_floor: bool) -> void:
 
 	(_attack_shape.shape as RectangleShape2D).size = size
 	_attack_shape.position = offset
-	_attack_rect = Rect2(offset - size * 0.5, size)
 	_attack_shape.set_deferred("disabled", false)
+
+	_attack_anim = "attack_up" if _attack_dir == Vector2.UP else "attack_down" if _attack_dir == Vector2.DOWN else "attack_side"
+	_attack_anim_timer = PlayerSprite.length(_attack_anim)
+	_attack_anim_restart = true
+	slash.swing(_attack_dir, offset, facing)
 
 
 func _on_attack_body_entered(body: Node) -> void:
@@ -464,13 +472,7 @@ func _pogo() -> void:
 	velocity.y = pogo_velocity
 	_air_dash_available = true
 	_air_jump_available = true
-	# Targets can be bounced on again once they leave and re-enter a held strike.
 	_hit_this_swing.clear()
-
-
-# A downward strike stays out while attack is held, until you land.
-func _is_holding_pogo() -> bool:
-	return _attack_dir == Vector2.DOWN and Input.is_action_pressed("attack") and not is_on_floor()
 
 
 # -------------------------------------------------------------- Damage ----
@@ -593,6 +595,7 @@ func _update_animation(delta: float) -> void:
 	_land_anim_timer = maxf(_land_anim_timer - delta, 0.0)
 	_wall_jump_anim_timer = maxf(_wall_jump_anim_timer - delta, 0.0)
 	_double_jump_anim_timer = maxf(_double_jump_anim_timer - delta, 0.0)
+	_attack_anim_timer = maxf(_attack_anim_timer - delta, 0.0)
 	var on_floor := is_on_floor()
 	if on_floor and not _was_on_floor:
 		_land_anim_timer = LAND_ANIM_TIME
@@ -601,6 +604,8 @@ func _update_animation(delta: float) -> void:
 	var anim := "idle"
 	if _dash_timer > 0.0:
 		anim = "dash"
+	elif _attack_anim_timer > 0.0:
+		anim = _attack_anim
 	elif _wall_sliding:
 		anim = "wall_slide"
 	elif not on_floor:
@@ -616,8 +621,10 @@ func _update_animation(delta: float) -> void:
 		anim = "sprint" if _sprinting else "run"
 	elif _land_anim_timer > 0.0:
 		anim = "land"
-	sprite.play_state(anim)
-	sprite.flip_h = (int(signf(_wall_normal_x)) if _wall_sliding else facing) < 0
+	sprite.play_state(anim, _attack_anim_restart and anim == _attack_anim)
+	_attack_anim_restart = false
+	var away_from_wall := _wall_sliding and _attack_anim_timer <= 0.0
+	sprite.flip_h = (int(signf(_wall_normal_x)) if away_from_wall else facing) < 0
 
 	if _dash_timer > 0.0:
 		sprite.self_modulate = Color(0.6, 0.95, 1.0)
@@ -625,11 +632,3 @@ func _update_animation(delta: float) -> void:
 		sprite.self_modulate = Color(1.0, 0.6, 0.6)
 	else:
 		sprite.self_modulate = Color.WHITE
-
-
-# ------------------------------------------------------ Placeholder art ----
-
-# The swing's reach, until the slash effects are drawn.
-func _draw() -> void:
-	if _attack_timer > 0.0:
-		draw_rect(_attack_rect, Color(1, 1, 1, 0.65))

@@ -19,9 +19,9 @@ const ROWS := [
 	["wall_slide", 4, 8.0, true],
 	["wall_jump", 2, 10.0, false],
 	["dash", 0, 16.0, false],
-	["attack_side", 0, 20.0, false],
-	["attack_up", 0, 20.0, false],
-	["attack_down", 0, 20.0, false],
+	["attack_side", 5, 20.0, false],
+	["attack_up", 5, 20.0, false],
+	["attack_down", 5, 20.0, false],
 	["hurt", 0, 10.0, false],
 	["death", 0, 10.0, false],
 	["double_jump", 2, 10.0, false],
@@ -35,8 +35,8 @@ const FALLBACKS := {
 ## Selectable looks: the same layout, a different sheet each. To add one, add
 ## it here and give it a recolour (or its own frames) in tools/make_player_sheet.gd.
 const SKINS := [
-	{"id": "pink", "name": "Pink Jacket", "sheet": "res://art/sprites/player_pink.png"},
 	{"id": "classic", "name": "Brown Jacket", "sheet": "res://art/sprites/player.png"},
+	{"id": "pink", "name": "Pink Jacket", "sheet": "res://art/sprites/player_pink.png"},
 ]
 const DEFAULT_SKIN := "pink"
 
@@ -85,12 +85,22 @@ func apply_skin(id: String) -> void:
 
 
 ## Plays an animation by name, or its fallback if that row isn't drawn yet.
-## Does nothing if it's already playing, so one-shots run to the end.
-func play_state(state: String) -> void:
+## Does nothing if it's already playing, so one-shots run to the end, unless
+## `restart` (a new swing while the last one's still showing).
+func play_state(state: String, restart := false) -> void:
 	var anim := state
 	while not sprite_frames.has_animation(anim) and FALLBACKS.has(anim):
 		anim = FALLBACKS[anim]
 	if not sprite_frames.has_animation(anim):
 		anim = "idle"
-	if animation != anim:
+	if animation != anim or restart:
 		play(anim)
+		frame = 0
+
+
+## How long an animation takes to play through once, in seconds.
+static func length(anim: String) -> float:
+	for r in ROWS:
+		if r[0] == anim:
+			return r[1] / r[2]
+	return 0.0

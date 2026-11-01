@@ -23,7 +23,7 @@ const SHEETS := [
 			["attack_side", 5, 20, false], ["attack_up", 5, 20, false], ["attack_down", 5, 20, false],
 			["hurt", 2, 10, false], ["death", 8, 10, false], ["double_jump", 2, 10, false]]},
 	{"name": "player_effects", "frame": Vector2i(64, 64), "pivot": "center", "box": Vector2i(0, 0),
-		"notes": "Pivot is the player's centre. Side slash reaches 60x40 to the right; up/down slashes are 48x52.",
+		"notes": "Slashes: the pivot is the centre of the attack's hit area (side: 41 px in front of the player, 60x40; up/down: 48 px above/below, 48x52 and 40x52), facing right. Drawn by tools/make_slash_effects.gd.",
 		"rows": [["slash_side", 4, 24, false], ["slash_up", 4, 24, false], ["slash_down", 4, 24, false],
 			["dash_trail", 4, 16, false], ["land_dust", 4, 16, false], ["hit_spark", 4, 20, false]]},
 	{"name": "crawler", "frame": Vector2i(32, 32), "pivot": "feet", "box": Vector2i(28, 24),

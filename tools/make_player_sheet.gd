@@ -22,6 +22,10 @@ const SOURCES := {
 	"wall_slide": ["wall_slide", [0, 1, 2, 3]],
 	"wall_jump": ["wall_jump", [2, 3]],     # the leap (0-1 are a wind-up on the wall)
 	"double_jump": ["double_jump", [2, 3]], # the mid-air tuck (0-1 are standing)
+	# Stand-ins until the attacks are redone; the slash effects carry the swing.
+	"attack_side": ["attack_side", [1, 2, 3, 4, 5]],
+	"attack_up": ["attack_up", [0, 1, 2, 3, 4]],     # 5 has a stray white shape
+	"attack_down": ["attack_down", [1, 2, 3, 4, 5]],
 }
 ## Every frame gets the same shift, worked out from this one so its feet sit on
 ## the pivot; poses that crouch or rise keep their offset from it.

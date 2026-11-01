@@ -43,7 +43,7 @@ Guide colours:
 - Save the art as: `art/sprites/player_effects.png`
 - Frame: 64 x 64 px; the sheet is 4 x 6 frames (256 x 384 px)
 - Pivot: centre
-- Pivot is the player's centre. Side slash reaches 60x40 to the right; up/down slashes are 48x52.
+- Slashes: the pivot is the centre of the attack's hit area (side: 41 px in front of the player, 60x40; up/down: 48 px above/below, 48x52 and 40x52), facing right. Drawn by tools/make_slash_effects.gd.
 
 | Row | Animation | Frames | FPS | Loops |
 |---|---|---|---|---|
