@@ -10,7 +10,7 @@ extends RefCounted
 ##   K  sword knight       >  door (left/right wall; see `doors`)
 ## Rows may be shorter than the widest row; missing tiles are empty.
 ## The outer border is automatically solid.
-## Each room is its own scene (main.gd with `room` set). `doors` maps the wall a
+## Each room is its own scene (room.gd with `room` set). `doors` maps the wall a
 ## door is in ("left"/"right") to the room it leads to; you arrive next to the
 ## door in that room that leads back.
 ## A room can add "background": rows of the wall behind it (see

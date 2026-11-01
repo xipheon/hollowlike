@@ -1,6 +1,6 @@
 class_name BossBase
 extends CharacterBody2D
-## What every arena boss shares. main.gd only talks to bosses through this:
+## What every arena boss shares. room.gd only talks to bosses through this:
 ## it sets the arena bounds, calls activate() after the intro, shows boss_name,
 ## and on `defeated` grants reward_ability and saves where the corpse lies.
 ## Subclasses set boss_name / reward_ability / max_health in _init() and

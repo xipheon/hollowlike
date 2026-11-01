@@ -12,7 +12,7 @@ extends Node
 # Tests grouped by what they cover, so a change only needs its segments run.
 # Each test spawns its own room, so segments run fine alone or in any order.
 const SEGMENTS := {
-	# Acid, spikes, safe-ground respawn, down-strikes and pogo (player.gd, main.gd hazards).
+	# Acid, spikes, safe-ground respawn, down-strikes and pogo (player.gd, room.gd hazards).
 	"hazards": [
 		"_test_acid_kills", "_test_acid_kills_through_invulnerability",
 		"_test_spikes_hurt_and_respawn", "_test_spikes_respect_invulnerability",
@@ -39,7 +39,7 @@ const SEGMENTS := {
 		"_test_boss_room_shafts_climbable", "_test_right_hallway_drops_to_far_side",
 		"_test_acid_gap_needs_dash", "_test_boss_hallway_door_to_climb_room_and_back",
 	],
-	# The Warden fight (boss_warden.gd, boss_shockwave.gd, main.gd boss/intro/camera code).
+	# The Warden fight (boss_warden.gd, boss_shockwave.gd, room.gd boss/intro/camera code).
 	"warden": [
 		"_test_boss_fight_starts_and_gate_shuts", "_test_boss_fight_starts_from_right_side",
 		"_test_boss_attacks_stay_in_arena", "_test_boss_hurts_player", "_test_player_attacks_hurt_boss",

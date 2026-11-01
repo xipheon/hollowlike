@@ -24,6 +24,8 @@ var debug_mode := OS.is_debug_build()
 
 ## Room the player last came from through a door ("" = fresh start, use P).
 var arrived_from := ""
+## Name of the door to arrive at in the next room ("" = the one leading back).
+var arrive_at := ""
 ## Rooms whose boss has been beaten (room id -> where its corpse lies, Vector2).
 var bosses_defeated := {}
 ## Health carried through a door into the next room, in half-hearts (-1 = none,
@@ -64,11 +66,13 @@ func set_player_skin(skin_id: String) -> void:
 
 
 ## Fade out, load the target room's scene, fade back in. The player arrives
-## with the health they left with.
-func go_through_door(from_room: String, to_room: String, health: int) -> void:
+## with the health they left with, at the door named `door` there (or, if
+## empty, the door leading back).
+func go_through_door(from_room: String, to_room: String, health: int, door := "") -> void:
 	if _transitioning:
 		return
 	carried_health = health
+	arrive_at = door
 	_fade_to_scene(LevelData.ROOMS[to_room].scene, from_room)
 
 

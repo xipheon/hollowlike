@@ -1,14 +1,16 @@
 class_name RoomArt
 extends RefCounted
-## Builds a room's tile art from its ASCII rows: solid terrain, one-way
-## platforms, spikes, doors, arena gates and acid on the
-## main tile sheet, the warehouse wall behind (with windows the skyline shows
-## through), and the far skyline as a parallax layer. Art only: collisions and
-## hazards stay in main.gd.
+## A room's tile art. For an ASCII room, build() lays every layer from the
+## layout: solid terrain, one-way platforms, spikes, doors, arena gates and
+## acid, the warehouse wall behind (with windows the skyline shows through),
+## and the far skyline. For a room made in the editor, dress() adds what the
+## painted layers don't hold: light glows, the gates' open/shut state, and the
+## automatic wall decoration where the wall is unpainted. Art only: collisions
+## and hazards are the room's (room.gd).
 ##
-## The wall is decorated automatically (windows, lights, posters, graffiti),
-## seeded by the room name so it looks the same every visit. A room can instead
-## give its own `background` rows in LevelData, using BACKGROUND_LEGEND.
+## Automatic decoration (windows, lights, posters, graffiti) is seeded by the
+## room name so it looks the same every visit. An ASCII room can instead give
+## its own `background` rows in LevelData, using BACKGROUND_LEGEND.
 
 const TILE := 32
 ## Built by tools/make_tilesets.gd; every tile says what it is in its custom data.
@@ -91,7 +93,7 @@ const LIGHT_LIT_CHANCE := 0.65
 const WALL_ART_CHANCE := 0.04    # chance per spot for a poster or graffiti
 const WALL_ART_GAP := 24         # tiles after one before the next can go up
 
-var _rows: Array
+var _cell: Callable
 var _w := 0
 var _h := 0
 var _rng := RandomNumberGenerator.new()
@@ -99,8 +101,11 @@ var _terrain_by_sides := {}
 var _gates: TileMapLayer
 
 
-func _init(rows: Array, width: int, height: int) -> void:
-	_rows = rows
+## `cell` answers what's at (x, y) as a layout character ("#" solid, "="
+## platform, "^" spikes, "~" sewer, "|" gate, ">" door, " " empty), with
+## anything outside the room solid.
+func _init(cell: Callable, width: int, height: int) -> void:
+	_cell = cell
 	_w = width
 	_h = height
 	for r in TERRAIN.size():
@@ -108,8 +113,31 @@ func _init(rows: Array, width: int, height: int) -> void:
 			_terrain_by_sides[TERRAIN[r][c]] = Vector2i(c, r)
 
 
-## Adds the art under `parent`, behind anything added later. `background_rows`
-## is the room's hand-made background, or empty for the automatic one.
+## For a room made in the editor, whose tile layers are already painted: adds
+## the light glows, shows its gates raised, and (with `auto_decorate`) fills
+## the wall you haven't painted with brick, windows, lights and posters. Hand-
+## painted wall is kept as it is. Seeded by `room`, so it's the same every time.
+func dress(parent: Node2D, room: String, background: TileMapLayer, terrain: TileMapLayer,
+		gates: TileMapLayer, auto_decorate: bool) -> void:
+	_rng.seed = hash(room)
+	_gates = gates
+	set_gates_closed(false)
+	if auto_decorate:
+		var cells := {}
+		for y in _h:
+			for x in _w:
+				var c := Vector2i(x, y)
+				if background.get_cell_source_id(c) == -1:
+					cells[c] = _pick_wall()
+		_decorate(cells)
+		for c in cells:
+			background.set_cell(c, 0, cells[c])
+	_add_lights(parent, background, terrain)
+
+
+## For an ASCII room: builds every layer and adds it under `parent`, behind
+## anything added later. `background_rows` is the room's hand-made background,
+## or empty for the automatic one.
 func build(parent: Node2D, room: String, background_rows: Array) -> void:
 	_rng.seed = hash(room)
 	parent.add_child(_make_skyline())
@@ -196,10 +224,7 @@ func set_gates_closed(closed: bool) -> void:
 
 
 func _ch(x: int, y: int) -> String:
-	if x < 0 or y < 0 or x >= _w or y >= _h:
-		return "#"
-	var row: String = _rows[y]
-	return row[x] if x < row.length() else " "
+	return _cell.call(x, y)
 
 
 func _layer(tiles: TileSet, z: int) -> TileMapLayer:

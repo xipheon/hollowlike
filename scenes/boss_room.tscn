@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://o0uxxapeplm0"]
 
-[ext_resource type="Script" uid="uid://02dmoll3yfr8" path="res://scripts/main.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/room.gd" id="1"]
 
 [node name="BossRoom" type="Node2D" unique_id=1483450916]
 script = ExtResource("1")
