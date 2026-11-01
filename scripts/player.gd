@@ -20,6 +20,7 @@ const PLATFORM_LAYER_NUMBER := 6
 const SAFE_GROUND_DELAY := 0.1
 const DEFAULT_HIT_DAMAGE := 2   # one full heart, in half-hearts, for hitboxes with no "damage" meta
 const PLATFORM_DROP_TIME := 0.25
+const DASH_STICK_THRESHOLD := 0.4   # how far a stick must lean on an axis to dash along it
 
 @export_group("Run")
 @export var run_speed := 320.0
@@ -90,7 +91,7 @@ var _coyote_timer := 0.0
 var _jump_buffer_timer := 0.0
 var _dash_timer := 0.0
 var _dash_cooldown_timer := 0.0
-var _dash_dir := 1
+var _dash_dir := Vector2.RIGHT   # one of 8 directions, normalised
 var _air_dash_available := true
 var _air_jump_available := true
 var _wall_normal_x := 0.0
@@ -219,10 +220,13 @@ func _physics_process(delta: float) -> void:
 			and _dash_buffer_timer > 0.0 and GameState.has_ability("dash") \
 			and (on_floor or _air_dash_available) and stamina >= dash_stamina_cost:
 		_dash_buffer_timer = 0.0
-		_start_dash(input_x, on_floor)
+		_start_dash(input_x, input_y, on_floor)
+	# A dash into the floor or a ceiling stops there.
+	if _dash_timer > 0.0 and ((_dash_dir.y > 0.0 and on_floor) or (_dash_dir.y < 0.0 and is_on_ceiling())):
+		_end_dash()
 
 	if _dash_timer > 0.0:
-		velocity = Vector2(_dash_dir * dash_speed, 0.0)
+		velocity = _dash_dir * dash_speed
 	else:
 		# Gravity (heavier on the way down for a snappier arc)
 		var g := gravity
@@ -304,12 +308,19 @@ func _process(delta: float) -> void:
 # Hazard overlaps lag a physics frame, so committing on the first frame of a
 # landing could save a spot inside a spike pit and respawn you onto the spikes.
 func _update_safe_ground(on_floor: bool, delta: float) -> void:
-	if not on_floor or _touching_hazard() or not _both_feet_supported():
+	# Not on a moving platform: it won't be there when you respawn.
+	if not on_floor or _touching_hazard() or not _both_feet_supported() or _on_moving_platform():
 		_safe_ground_timer = 0.0
 		return
 	_safe_ground_timer += delta
 	if _safe_ground_timer >= SAFE_GROUND_DELAY:
 		last_safe_position = global_position
+
+
+# A moving platform under either foot.
+func _on_moving_platform() -> bool:
+	return _foot_hit(-1, LAYER_GROUND).get("collider") is MovingPlatform \
+			or _foot_hit(1, LAYER_GROUND).get("collider") is MovingPlatform
 
 
 # Ground directly under both bottom corners, so a respawn here can't start
@@ -325,11 +336,16 @@ func _on_platform_only() -> bool:
 
 # Whether something on `mask` is just below the left (-1) or right (1) bottom corner.
 func _foot_on(side: int, mask: int) -> bool:
+	return not _foot_hit(side, mask).is_empty()
+
+
+# What's on `mask` just below that corner (a ray hit; empty if nothing).
+func _foot_hit(side: int, mask: int) -> Dictionary:
 	var half := BODY_SIZE * 0.5
 	var from := global_position + Vector2(side * half.x, half.y - 2.0)
 	var query := PhysicsRayQueryParameters2D.create(from, from + Vector2(0, 8), mask)
 	query.exclude = [get_rid()]
-	return not get_world_2d().direct_space_state.intersect_ray(query).is_empty()
+	return get_world_2d().direct_space_state.intersect_ray(query)
 
 
 # Down + jump on a one-way platform: stop colliding with platforms briefly.
@@ -365,8 +381,7 @@ func _update_timers(delta: float) -> void:
 	if _dash_timer > 0.0:
 		_dash_timer -= delta
 		if _dash_timer <= 0.0:
-			velocity.x = _dash_dir * run_speed   # keep some momentum out of the dash
-			velocity.y = 0.0
+			_end_dash()
 	if _attack_timer > 0.0:
 		_attack_timer -= delta
 		if _attack_timer <= 0.0:
@@ -401,14 +416,36 @@ func _set_stamina(value: float) -> void:
 
 # ---------------------------------------------------------------- Dash ----
 
-func _start_dash(input_x: float, on_floor: bool) -> void:
+## Dashes the way the direction input points, in 8 directions (straight ahead
+## with nothing held). On the ground, down is ignored: down-forward dashes
+## along the floor.
+func _start_dash(input_x: float, input_y: float, on_floor: bool) -> void:
 	_set_stamina(stamina - dash_stamina_cost)
-	_dash_dir = int(signf(input_x)) if input_x != 0.0 else facing
-	facing = _dash_dir
+	var dir := Vector2(_dash_axis(input_x), _dash_axis(input_y))
+	if on_floor and dir.y > 0.0:
+		dir.y = 0.0
+	if dir == Vector2.ZERO:
+		dir.x = facing
+	_dash_dir = dir.normalized()
+	if dir.x != 0.0:
+		facing = int(dir.x)
 	_dash_timer = dash_duration
 	_dash_cooldown_timer = dash_duration + dash_cooldown
 	if not on_floor:
 		_air_dash_available = false
+
+
+## An input axis snapped to -1, 0 or 1 (a stick held about halfway counts).
+func _dash_axis(value: float) -> float:
+	return signf(value) if absf(value) >= DASH_STICK_THRESHOLD else 0.0
+
+
+## Keeps some momentum out of the dash, in its direction.
+func _end_dash() -> void:
+	_dash_timer = 0.0
+	velocity = _dash_dir * run_speed
+	if _dash_dir.y > 0.0 and is_on_floor():
+		velocity.y = 0.0
 
 
 # -------------------------------------------------------------- Attack ----
@@ -625,6 +662,8 @@ func _update_animation(delta: float) -> void:
 	_attack_anim_restart = false
 	var away_from_wall := _wall_sliding and _attack_anim_timer <= 0.0
 	sprite.flip_h = (int(signf(_wall_normal_x)) if away_from_wall else facing) < 0
+	# Dashing up or down tilts the body that way, front first.
+	sprite.rotation = atan2(_dash_dir.y, absf(_dash_dir.x)) * facing if _dash_timer > 0.0 else 0.0
 
 	if _dash_timer > 0.0:
 		sprite.self_modulate = Color(0.6, 0.95, 1.0)

@@ -35,6 +35,10 @@ const SEGMENTS := {
 		"_test_editor_room_plays", "_test_editor_room_door", "_test_editor_room_arena",
 		"_test_decorate_wall_button", "_test_auto_decorate_off",
 	],
+	# Moving platforms and their track tiles (moving_platform.gd, tools/make_track_tiles.gd).
+	"platforms": [
+		"_test_track_brush", "_test_moving_platform_travel", "_test_moving_platform_carries_player",
+	],
 	# Every ceiling crawler placed in any room, and placed enemies' Inspector settings (enemy_crawler.gd, enemy_base.gd).
 	"crawlers": [
 		"_test_placed_ceiling_crawlers_stay_up", "_test_enemy_inspector_settings",
@@ -69,7 +73,7 @@ const SEGMENTS := {
 	"player": [
 		"_test_double_jump", "_test_player_animations", "_test_attack_buffer", "_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
 		"_test_sprint_is_faster_and_drains_stamina", "_test_stamina_refills_only_on_ground",
-		"_test_dash_needs_stamina", "_test_wall_jump_needs_stamina",
+		"_test_dash_needs_stamina", "_test_dash_eight_directions", "_test_wall_jump_needs_stamina",
 	],
 	# Pause menu, main menu, level select, debug tools.
 	"menus": [
@@ -227,7 +231,7 @@ func _place(col: float, row: float) -> void:
 
 
 func _release_all() -> void:
-	for a in ["move_left", "move_right", "move_down", "jump", "attack", "dash", "sprint"]:
+	for a in ["move_left", "move_right", "move_up", "move_down", "jump", "attack", "dash", "sprint"]:
 		Input.action_release(a)
 
 
@@ -1953,6 +1957,11 @@ func _layer_named(layer_name: String) -> TileMapLayer:
 func _test_terrain_brushes_match_room_art() -> void:
 	print("Terrain brushes paint the same tiles as the room art: concrete, catwalk, spikes, sewer")
 	var terrains := {"solid": 0, "platform": 1, "spikes": 2, "acid": 3}
+	var concrete_sides := {}   # atlas coords -> the sides it connects on ("NESW" letters)
+	for r in RoomArt.TERRAIN.size():
+		for c in RoomArt.TERRAIN[r].size():
+			concrete_sides[Vector2i(c, r)] = RoomArt.TERRAIN[r][c]
+	var steps := {"N": Vector2i.UP, "E": Vector2i.RIGHT, "S": Vector2i.DOWN, "W": Vector2i.LEFT}
 	for room in LevelData.ROOMS:
 		await _spawn(load(LevelData.ROOMS[room].scene), true)
 		var art := _layer_named("Terrain")
@@ -1971,9 +1980,19 @@ func _test_terrain_brushes_match_room_art() -> void:
 			var brush := TileMapLayer.new()
 			brush.tile_set = RoomArt.FOREGROUND_TILES
 			brush.set_cells_terrain_connect(cells, 0, terrains[kind])
+			# Concrete at the room's edge may join the solid outside or not (the
+			# brush gives it an edge, as there's nothing painted there): only the
+			# sides facing into the room have to match.
+			var inward := func(c: Vector2i, coords: Vector2i) -> String:
+				var sides := ""
+				for s in concrete_sides.get(coords, "?"):
+					if s == "?" or art.get_used_rect().has_point(c + steps[s]):
+						sides += s
+				return sides
 			# Spikes come in random variants: any spike tile will do.
 			var wrong := cells.filter(func(c): return art.get_used_rect().has_point(c) and (
 					brush.get_cell_source_id(c) == -1 if kind == "spikes"
+					else inward.call(c, brush.get_cell_atlas_coords(c)) != inward.call(c, art.get_cell_atlas_coords(c)) if kind == "solid"
 					else brush.get_cell_atlas_coords(c) != art.get_cell_atlas_coords(c)))
 			_check(wrong.is_empty(), "%s %s: %d cells match%s" % [room, kind, cells.size() - wrong.size(),
 					"" if wrong.is_empty() else ", wrong at %s" % [wrong.slice(0, 5).map(func(c): return [c, brush.get_cell_atlas_coords(c), art.get_cell_atlas_coords(c)])]])
@@ -2390,4 +2409,193 @@ func _test_door_to_boss_room_and_back() -> void:
 				break
 		room = get_tree().current_scene
 		_check(room != old and room._player.health == room._player.max_health, "restart refills health")
+	await _despawn()
+
+
+const MOVING_PLATFORM_SCENE := preload("res://scenes/props/moving_platform.tscn")
+
+
+## An open 40 x 16 room with two tracks: side to side on row 8 (cols 4-15), and
+## up and down in col 25 (rows 3-12), each with a 3-wide platform on it. A
+## third platform sits off any track.
+func _build_platform_room() -> Room:
+	var room: Room = load("res://scenes/rooms/room_template.tscn").instantiate()
+	room.room = "test"
+	var solid: Array[Vector2i] = []
+	for x in 40:
+		solid.append(Vector2i(x, 0))
+		solid.append(Vector2i(x, 15))
+	for y in range(1, 15):
+		solid.append(Vector2i(0, y))
+		solid.append(Vector2i(39, y))
+	room.terrain().set_cells_terrain_connect(solid, 0, 0)
+	var across: Array[Vector2i] = []
+	for x in range(4, 16):
+		across.append(Vector2i(x, 8))
+	room.terrain().set_cells_terrain_connect(across, 0, 4)
+	var upright: Array[Vector2i] = []
+	for y in range(3, 13):
+		upright.append(Vector2i(25, y))
+	room.terrain().set_cells_terrain_connect(upright, 0, 4)
+	room.entities().get_node("PlayerStart").position = Vector2(2.5 * TILE, 15 * TILE)
+	for p in [["Across", Vector2(7.5, 8)], ["Upright", Vector2(25.5, 12)], ["Loose", Vector2(33.5, 10)]]:
+		var platform: MovingPlatform = MOVING_PLATFORM_SCENE.instantiate()
+		platform.name = p[0]
+		platform.position = p[1] * TILE
+		room.entities().add_child(platform)
+	return room
+
+
+func _test_track_brush() -> void:
+	print("Track brush: straight runs of end, middle and end tiles, side to side or up and down")
+	var layer := TileMapLayer.new()
+	layer.tile_set = RoomArt.FOREGROUND_TILES
+	layer.set_cells_terrain_connect([Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)], 0, 4)
+	layer.set_cells_terrain_connect([Vector2i(0, 3), Vector2i(0, 4), Vector2i(0, 5), Vector2i(0, 6)], 0, 4)
+	var across := [0, 1, 2, 3].map(func(x): return layer.get_cell_atlas_coords(Vector2i(x, 0)))
+	var upright := [3, 4, 5, 6].map(func(y): return layer.get_cell_atlas_coords(Vector2i(0, y)))
+	var h := RoomArt.TRACK_H
+	var v := RoomArt.TRACK_V
+	_check(across == [h, h + Vector2i(1, 0), h + Vector2i(1, 0), h + Vector2i(2, 0)], "side to side: %s" % [across])
+	_check(upright == [v, v + Vector2i(0, 1), v + Vector2i(0, 1), v + Vector2i(0, 2)], "up and down: %s" % [upright])
+	var kinds := [layer.get_cell_tile_data(Vector2i(1, 0)).get_custom_data("kind"), layer.get_cell_tile_data(Vector2i(0, 4)).get_custom_data("kind")]
+	_check(kinds == ["track", "track"], "the tiles say they're track")
+	layer.free()
+
+
+func _test_moving_platform_travel() -> void:
+	print("Moving platforms: find their track, go end to end and back, stay put off a track")
+	await _spawn_node(_build_platform_room())
+	var across: MovingPlatform = _main.entities().get_node("Across")
+	var upright: MovingPlatform = _main.entities().get_node("Upright")
+	var loose: MovingPlatform = _main.entities().get_node("Loose")
+	_check(across.on_track() and across.travel() == [Vector2(5.5 * TILE, 8 * TILE), Vector2(14.5 * TILE, 8 * TILE)],
+			"side to side: the deck stays between the track's ends %s" % [across.travel()])
+	_check(upright.on_track() and upright.travel() == [Vector2(25.5 * TILE, 3 * TILE), Vector2(25.5 * TILE, 12 * TILE)],
+			"up and down: the deck follows the rail %s" % [upright.travel()])
+	_check(not _main._grid.has(Vector2i(8, 8)), "track tiles aren't solid")
+	var loose_at := loose.position
+	var min_x := INF
+	var max_x := -INF
+	var min_y := INF
+	var max_y := -INF
+	# Long enough for a full trip each way, waits included.
+	for i in int((9.0 * TILE / across.speed + across.end_pause) * 2.0 * 60.0) + 30:
+		await _frames(1)
+		min_x = minf(min_x, across.position.x)
+		max_x = maxf(max_x, across.position.x)
+		min_y = minf(min_y, upright.position.y)
+		max_y = maxf(max_y, upright.position.y)
+	_check(is_equal_approx(min_x, 5.5 * TILE) and is_equal_approx(max_x, 14.5 * TILE) and across.position.y == 8 * TILE,
+			"side to side: reached both ends (%.1f to %.1f)" % [min_x / TILE, max_x / TILE])
+	_check(is_equal_approx(min_y, 3 * TILE) and is_equal_approx(max_y, 12 * TILE) and upright.position.x == 25.5 * TILE,
+			"up and down: reached both ends (%.1f to %.1f)" % [min_y / TILE, max_y / TILE])
+	_check(not loose.on_track() and loose.position == loose_at, "off a track it stays put")
+	await _despawn()
+
+
+func _test_moving_platform_carries_player() -> void:
+	print("Moving platforms carry the player, can be dropped through, and aren't safe ground")
+	await _spawn_node(_build_platform_room())
+	await _frames(20)
+	var safe := _player.last_safe_position
+	for platform_name in ["Across", "Upright"]:
+		var platform: MovingPlatform = _main.entities().get_node(platform_name)
+		_player.global_position = platform.global_position + Vector2(0, -Player.BODY_SIZE.y * 0.5 - 2)
+		_player.velocity = Vector2.ZERO
+		await _frames(10)
+		var start := _player.global_position
+		var deck := platform.global_position
+		await _frames(60)
+		var moved := platform.global_position - deck
+		var rode := _player.global_position - start
+		_check(_player.is_on_floor() and moved.length() > 40.0 and rode.distance_to(moved) < 4.0,
+				"%s: the player rides along (platform moved %s, player %s)" % [platform_name, moved.round(), rode.round()])
+	_check(_player.last_safe_position == safe, "a moving platform isn't a respawn point")
+	# Drop through it: down + jump.
+	Input.action_press("move_down")
+	Input.action_press("jump")
+	await _frames(3)
+	_release_all()
+	var upright: MovingPlatform = _main.entities().get_node("Upright")
+	await _frames(20)
+	_check(_player.global_position.y > upright.global_position.y + TILE, "down + jump drops through it")
+	await _despawn()
+
+
+## Dashes from where the player is with `held` directions pressed, and returns
+## how far the dash itself went.
+func _dash_holding(held: Array) -> Vector2:
+	_player.stamina = _player.max_stamina
+	for a in held:
+		Input.action_press(a)
+	var start := _player.global_position
+	Input.action_press("dash")
+	await _frames(1)
+	Input.action_release("dash")
+	await _frames(int(ceilf(_player.dash_duration * 60.0)) - 1)
+	var moved := _player.global_position - start
+	_release_all()
+	await _frames(int(_player.dash_cooldown * 60.0) + 2)
+	return moved
+
+
+func _stand_at(col: float) -> void:
+	_player.global_position = Vector2(col * TILE, 15 * TILE - Player.BODY_SIZE.y * 0.5)
+	_player.velocity = Vector2.ZERO
+	await _frames(10)
+
+
+func _float_at(col: float, row: float) -> void:
+	_player.global_position = Vector2(col * TILE, row * TILE)
+	_player.velocity = Vector2.ZERO
+	_player._air_dash_available = true
+	await _frames(2)
+
+
+func _test_dash_eight_directions() -> void:
+	print("Dash goes the way you hold: 8 directions, along the floor if down on the ground")
+	await _spawn_node(_build_platform_room())
+	GameState.unlock("dash")
+	var reach := _player.dash_speed * _player.dash_duration
+	await _stand_at(32.5)
+	var moved := await _dash_holding([])
+	_check(moved.x > reach * 0.8 and absf(moved.y) < 2.0, "nothing held: straight ahead (%s)" % [moved.round()])
+
+	await _stand_at(32.5)
+	Input.action_press("move_up")
+	Input.action_press("dash")
+	await _frames(3)
+	var tilt := _player.sprite.rotation
+	_release_all()
+	_check(is_equal_approx(tilt, -PI / 2.0 * _player.facing), "dashing up tilts the sprite head first (%.2f)" % tilt)
+	await _frames(40)
+
+	await _stand_at(32.5)
+	moved = await _dash_holding(["move_up"])
+	_check(moved.y < -reach * 0.8 and absf(moved.x) < 2.0, "up from the ground: straight up (%s)" % [moved.round()])
+	await _frames(40)
+
+	await _stand_at(30.5)
+	moved = await _dash_holding(["move_down", "move_left"])
+	_check(moved.x < -reach * 0.8 and absf(moved.y) < 2.0 and _player.is_on_floor(), "down-left on the ground: along the floor (%s)" % [moved.round()])
+
+	await _float_at(30.5, 8)
+	moved = await _dash_holding(["move_up", "move_right"])
+	_check(moved.x > reach * 0.55 and moved.y < -reach * 0.55 and absf(absf(moved.x) - absf(moved.y)) < 4.0,
+			"up-right in the air: diagonal (%s)" % [moved.round()])
+
+	await _float_at(34.5, 5)
+	moved = await _dash_holding(["move_down", "move_left"])
+	_check(moved.x < -reach * 0.55 and moved.y > reach * 0.55, "down-left in the air: diagonal (%s)" % [moved.round()])
+
+	await _float_at(34.5, 13)
+	Input.action_press("move_down")
+	Input.action_press("dash")
+	await _frames(2)
+	Input.action_release("dash")
+	var dashing := _player._dash_timer > 0.0
+	await _frames(6)
+	_check(dashing and _player.is_on_floor() and _player._dash_timer <= 0.0 and _player.velocity.y <= 1.0,
+			"down into the floor: lands and the dash ends there")
 	await _despawn()

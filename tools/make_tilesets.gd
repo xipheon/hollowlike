@@ -4,15 +4,15 @@ extends SceneTree
 ##   godot --headless --path . --script res://tools/make_tilesets.gd
 ##
 ## foreground_tileset.tres: terrain, one-way platforms, spikes, sewer water,
-## gates and doors. background_tileset.tres: the brick wall, windows, decor,
-## lights and broken-wall edges. Every tile carries custom data saying what it
-## is, so the game reads behaviour from the tile, not from where it sits on a
-## sheet:
-##   kind   foreground: solid, platform, spikes, acid, gate, door
+## gates, doors and moving platform tracks. background_tileset.tres: the brick
+## wall, windows, decor, lights and broken-wall edges. Every tile carries custom
+## data saying what it is, so the game reads behaviour from the tile, not from
+## where it sits on a sheet:
+##   kind   foreground: solid, platform, spikes, acid, gate, door, track
 ##          background: wall, window, decor, light
 ##   light  steady, broken or sign (a glow the room adds; FlickerLight)
 ## Terrain sets let the editor's terrain brush pick tiles by their neighbours:
-##   foreground: concrete, catwalk, spikes, sewer (all Match Sides)
+##   foreground: concrete, catwalk, spikes, sewer, track (all Match Sides)
 ##   background: wall (Match Sides): plain brick in weighted random variants,
 ##               and the crumbled edge facing any unpainted (open) side.
 ## Rerun after changing a sheet's layout. Once rooms are painted, prefer
@@ -27,6 +27,7 @@ const CONCRETE := 0
 const CATWALK := 1
 const SPIKES := 2
 const SEWER := 3
+const TRACK := 4
 const WALL := 0
 
 const SIDES := {
@@ -109,6 +110,7 @@ func _foreground() -> TileSet:
 	var ts := _new_tileset("res://art/tiles/tileset.png", ["kind", "light"], [
 		["concrete", Color(0.6, 0.6, 0.62)], ["catwalk", Color(0.6, 0.35, 0.2)],
 		["spikes", Color(0.6, 0.85, 0.8)], ["sewer", Color(0.45, 0.5, 0.05)],
+		["track", Color(0.85, 0.7, 0.2)],
 	])
 	# Concrete: the 4x4 block, each tile connecting on the sides it's solid on.
 	for r in RoomArt.TERRAIN.size():
@@ -132,6 +134,12 @@ func _foreground() -> TileSet:
 		source.set_tile_animation_frames_count(pair[0], RoomArt.ACID_FRAMES)
 		for f in RoomArt.ACID_FRAMES:
 			source.set_tile_animation_frame_duration(pair[0], f, RoomArt.ACID_FRAME_TIME)
+	# Track for moving platforms: straight lines only, side to side or up and
+	# down. Its tiles only connect along their own line, so the brush can't
+	# make a corner or a junction.
+	for i in 3:
+		_terrain(_tile(ts, RoomArt.TRACK_H + Vector2i(i, 0), "track"), TRACK, ["E", "EW", "W"][i])
+		_terrain(_tile(ts, RoomArt.TRACK_V + Vector2i(0, i), "track"), TRACK, ["S", "NS", "N"][i])
 	# Gates and doors: painted tile by tile.
 	for coords in [RoomArt.GATE, RoomArt.GATE_END, RoomArt.GATE_UP]:
 		_tile(ts, coords, "gate")

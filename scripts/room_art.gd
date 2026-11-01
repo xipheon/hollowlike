@@ -35,6 +35,8 @@ const GATE_END := Vector2i(7, 4)   # shut: its bottom tile, with the teeth
 const GATE_UP := Vector2i(0, 6)    # raised: just the teeth under the lintel
 const DOOR := Vector2i(1, 6)
 const DOOR_TOP := Vector2i(2, 6)   # under solid ground: lintel and EXIT sign
+const TRACK_H := Vector2i(4, 0)    # moving platform track, side to side: left end, middle, right end
+const TRACK_V := Vector2i(7, 0)    # up and down: top end, middle, bottom end (going down the sheet)
 
 # Light glows (see FlickerLight). Positions are within the light's tile.
 const BULB_GLOW := Color(0.78, 1.0, 0.9)

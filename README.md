@@ -9,7 +9,7 @@ Open this folder in Godot (Import -> project.godot) and press F5.
 | Jump (hold for height) | Space / Z | A |
 | Attack | J / X (hold Up to aim up; Down in air = pogo) | X |
 | Sprint (uses stamina) | Shift | LT |
-| Dash (after beating the boss; uses stamina) | K / C | RB / B |
+| Dash (after beating the boss; uses stamina; hold a direction to dash any of 8 ways) | K / C | RB / B |
 | Pause | Esc / P | Start |
 | Restart | R | |
 | Debug (debug builds only) | F1 dash, F2 wall jump, F3 kill boss | |
