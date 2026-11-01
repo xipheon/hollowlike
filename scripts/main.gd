@@ -3,6 +3,8 @@ extends Node2D
 ## hazards, entities.
 
 const TILE := 32
+const CRAWLER_SCENE := preload("res://scenes/enemies/crawler.tscn")
+const KNIGHT_SCENE := preload("res://scenes/enemies/knight.tscn")
 const LAYER_WORLD := 1
 const LAYER_PLATFORMS := 32
 const SPIKE_HEIGHT := 24.0   # damage area: the bottom of the tile, up to the spike tips
@@ -379,18 +381,16 @@ func _spawn_entities() -> void:
 					start = tile_origin + Vector2(TILE * 0.5, TILE - Player.BODY_SIZE.y * 0.5)
 					has_start = true
 				"E":
-					var enemy := CrawlerEnemy.new()
-					enemy.palette = CrawlerEnemy.PALETTES.pick_random()
+					var enemy: CrawlerEnemy = CRAWLER_SCENE.instantiate()
 					enemy.position = tile_origin + Vector2(TILE * 0.5, TILE - CrawlerEnemy.SIZE.y * 0.5)
 					add_child(enemy)
 				"c":
-					var hanger := CrawlerEnemy.new()
-					hanger.palette = CrawlerEnemy.PALETTES.pick_random()
+					var hanger: CrawlerEnemy = CRAWLER_SCENE.instantiate()
 					hanger.on_ceiling = true
 					hanger.position = tile_origin + Vector2(TILE * 0.5, CrawlerEnemy.SIZE.y * 0.5)
 					add_child(hanger)
 				"K":
-					var knight := KnightEnemy.new()
+					var knight: KnightEnemy = KNIGHT_SCENE.instantiate()
 					knight.position = tile_origin + Vector2(TILE * 0.5, TILE - KnightEnemy.SIZE.y * 0.5)
 					add_child(knight)
 				"B":

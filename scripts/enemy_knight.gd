@@ -1,51 +1,49 @@
 class_name KnightEnemy
-extends CharacterBody2D
+extends EnemyBase
 ## Slow armoured swordsman, as tall as the player. Patrols, walks toward you
 ## when it sees you, and when you're in reach raises its sword (glows orange)
 ## then swings. The swing is slow to start: step back, or hit it first.
-## Needs: take_hit(), "enemy_hitbox" areas (body + sword).
+## Place scenes/enemies/knight.tscn and set it up in the Inspector.
 
 const SIZE := Vector2(24, 44)
 const SWORD_SIZE := Vector2(46, 28)
 
 enum State { PATROL, WINDUP, SWING, RECOVER }
 
-@export var max_health := 5
 @export var walk_speed := 90.0
 @export var gravity := 1800.0
-@export var damage := 8   ## per hit (body or sword), in half-hearts: 4 hearts
 @export var sight_range := 220.0     ## starts walking toward you within this
 @export var attack_range := 90.0     ## starts a swing when you're this close
 @export var windup_time := 0.30
 @export var swing_time := 0.15
 @export var recover_time := 0.8
 
-var health := 0
 var swings := 0   # swings started; handy for tests and debugging
 
 var _state := State.PATROL
 var _timer := 0.0
 var _dir := -1
-var _flash_timer := 0.0
+var _flashing_now := false
 var _knockback := 0.0
 var _ledge_ray: RayCast2D
 var _sword_shape: CollisionShape2D
 
 
-func _ready() -> void:
-	add_to_group("enemy")
-	health = max_health
-	collision_layer = 4       # enemy
-	collision_mask = 1 | 32   # world + platforms only, so the player walks through enemies
+func _init() -> void:
+	max_health = 5
+	damage = 8   # per hit (body or sword), in half-hearts: 4 hearts
 
+
+func _ready() -> void:
+	super._ready()
 	var shape := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
 	rect.size = SIZE
 	shape.shape = rect
 	add_child(shape)
 
-	add_child(_make_hitbox(SIZE - Vector2(4, 4), Vector2.ZERO))
-	var sword := _make_hitbox(SWORD_SIZE, Vector2.ZERO)
+	add_child(make_contact_hitbox(SIZE - Vector2(4, 4)))
+	var sword := make_contact_hitbox(SWORD_SIZE)
 	_sword_shape = sword.get_child(0)
 	_sword_shape.disabled = true
 	add_child(sword)
@@ -57,24 +55,8 @@ func _ready() -> void:
 	_set_dir(_dir)
 
 
-func _make_hitbox(size: Vector2, offset: Vector2) -> Area2D:
-	var hitbox := Area2D.new()
-	hitbox.add_to_group("enemy_hitbox")
-	hitbox.set_meta("damage", damage)   # read by the player's hurtbox
-	hitbox.collision_layer = 16   # hazard layer, which the player's hurtbox watches
-	hitbox.collision_mask = 0
-	hitbox.monitoring = false
-	var hit_shape := CollisionShape2D.new()
-	var hit_rect := RectangleShape2D.new()
-	hit_rect.size = size
-	hit_shape.shape = hit_rect
-	hit_shape.position = offset
-	hitbox.add_child(hit_shape)
-	return hitbox
-
-
 func _physics_process(delta: float) -> void:
-	_flash_timer = maxf(_flash_timer - delta, 0.0)
+	_flashing_now = _flashing(delta)
 	_timer -= delta
 	velocity.y += gravity * delta
 	var player := _find_player()
@@ -144,13 +126,9 @@ func _can_see(player: Node2D) -> bool:
 	return absf(d.x) <= sight_range and absf(d.y) <= SIZE.y
 
 
-func take_hit(amount: int, hit_dir: Vector2) -> void:
-	health -= amount
-	_flash_timer = 0.1
+func _on_hit(hit_dir: Vector2) -> void:
 	if hit_dir.x != 0.0:
 		_knockback = signf(hit_dir.x) * 160.0   # heavy: shoved, not staggered
-	if health <= 0:
-		queue_free()
 
 
 func _draw() -> void:
@@ -158,7 +136,7 @@ func _draw() -> void:
 	var armour := Color(0.42, 0.46, 0.55)
 	if _state == State.WINDUP:
 		armour = Color(1.0, 0.6, 0.2)   # telegraph
-	if _flash_timer > 0.0:
+	if _flashing_now:
 		armour = Color.WHITE
 	draw_rect(Rect2(-half, SIZE), armour)
 	# Helmet visor slit, facing forward

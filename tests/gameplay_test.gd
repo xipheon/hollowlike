@@ -32,7 +32,7 @@ const SEGMENTS := {
 	],
 	# Every ceiling crawler placed in any room ("c" markers, enemy_crawler.gd ceiling code).
 	"crawlers": [
-		"_test_placed_ceiling_crawlers_stay_up",
+		"_test_placed_ceiling_crawlers_stay_up", "_test_enemy_inspector_settings",
 	],
 	# Boss room layout around the arena: shafts, the drop, the acid gap, the climb door.
 	"boss_room": [
@@ -2016,6 +2016,41 @@ func _test_tiles_say_what_they_are() -> void:
 	var gates := _layer_named("Gates")
 	_check(gates.get_used_cells().size() > 0 and gates.get_used_cells().all(
 			func(c): return gates.get_cell_tile_data(c).get_custom_data("kind") == "gate"), "the boss room's gates are gate tiles")
+	await _despawn()
+
+
+## An enemy scene set up as if placed and edited in the Inspector.
+func _place_enemy(scene: PackedScene, settings: Dictionary, at: Vector2) -> EnemyBase:
+	var enemy: EnemyBase = scene.instantiate()
+	for key in settings:
+		enemy.set(key, settings[key])
+	enemy.position = at
+	_main.add_child(enemy)
+	return enemy
+
+
+func _test_enemy_inspector_settings() -> void:
+	print("Placed enemies keep their Inspector settings: fixed palette, kill heal, health")
+	await _spawn()
+	await _remove_enemies()
+	var floor_y := 18 * TILE - CrawlerEnemy.SIZE.y * 0.5
+	var random_one: CrawlerEnemy = _place_enemy(_main.CRAWLER_SCENE, {}, Vector2(5.5 * TILE, floor_y))
+	var pink: CrawlerEnemy = _place_enemy(_main.CRAWLER_SCENE, {"palette": "pink"}, Vector2(9.5 * TILE, floor_y))
+	var tough: CrawlerEnemy = _place_enemy(_main.CRAWLER_SCENE,
+			{"palette": "sewer", "heal_on_kill": 3, "max_health": 6}, Vector2(13.5 * TILE, floor_y))
+	var knight: KnightEnemy = _place_enemy(_main.KNIGHT_SCENE, {"heal_on_kill": 1}, Vector2(20.5 * TILE, 18 * TILE - KnightEnemy.SIZE.y * 0.5))
+	await _frames(2)
+	_check(random_one.palette in CrawlerEnemy.PALETTES, "left on random, it picked %s" % random_one.palette)
+	_check(pink.palette == "pink" and pink.kill_heal() == CrawlerEnemy.KILL_HEAL, "set to pink: stays pink, heals by default")
+	_check(tough.health == 6 and tough.kill_heal() == 3, "a sewer crawler set to heal 3, with 6 health")
+	_check(knight.health == 5 and knight.damage == 8 and knight.kill_heal() == 1, "a knight keeps its own defaults, set to heal 1")
+	var deaths := []
+	tough.died.connect(func() -> void: deaths.append(tough))
+	_player.health = 2
+	tough.take_hit(5, Vector2.RIGHT)
+	_check(_player.health == 2 and not tough.is_dying(), "survives 5 of its 6 health")
+	tough.take_hit(1, Vector2.RIGHT)
+	_check(_player.health == 5 and deaths.size() == 1, "its kill healed 3 and sent died (health %d)" % _player.health)
 	await _despawn()
 
 

@@ -1,16 +1,17 @@
 class_name CrawlerEnemy
-extends CharacterBody2D
+extends EnemyBase
 ## Simple patrolling enemy: a blob of sewer sludge that oozes along, turns at
 ## walls and ledges, hurts on contact, and leaves a fading slime trail. It
-## melts into a puddle when killed. Comes in several palettes; the room picks
-## one at random when it spawns it.
+## melts into a puddle when killed. Comes in several palettes, random unless
+## set; pink ones heal the player when killed.
 ## A crawler can start on a ceiling instead (`on_ceiling`): it oozes along
 ## upside down, and when the player passes underneath it lets go, drops on
 ## them, and carries on as a floor crawler. Hitting it up there knocks it down.
-## Copy this as a template for new enemies. Needs: take_hit(), "enemy_hitbox" area.
+## Place scenes/enemies/crawler.tscn and set it up in the Inspector.
 
 const SIZE := Vector2(28, 24)
-## Only pink crawlers heal you when killed: this many half-hearts.
+## Pink crawlers heal the player this many half-hearts when killed; the others
+## don't (unless heal_on_kill is set).
 const HEALING_PALETTE := "pink"
 const KILL_HEAL := 2
 
@@ -29,66 +30,48 @@ const TRAIL_SPACING := 10.0           # px travelled between slime drips
 ## Drops when the player is below it, at most this far to either side and this far down.
 const DROP_RANGE := Vector2(20, 12 * 32)
 
-@export var max_health := 3
+## Which colours: one of PALETTES, or "random" to pick one when it spawns.
+@export_enum("random", "sewer", "sickly", "pink") var palette := "random"
 @export var speed := 70.0
 @export var gravity := 1800.0
-@export var damage := 2   ## per hit, in half-hearts
-## Start stuck to the ceiling above (the room's "c" marker).
+## Start stuck to the ceiling above.
 @export var on_ceiling := false
 
-## One of PALETTES; random if left empty.
-var palette := ""
-var health := 0
 var sprite: AnimatedSprite2D
 var _dir := -1
 var _stagger_timer := 0.0
-var _flash_timer := 0.0
 var _turning := false
-var _dying := false
 var _dropping := false
 var _landing := false
 var _trail_distance := 0.0
 var _drip_color := Color.WHITE
 var _ledge_ray: RayCast2D
-var _hitbox: Area2D
 
 
 func _ready() -> void:
-	add_to_group("enemy")
-	health = max_health
-	collision_layer = 4    # enemy
-	collision_mask = 1 | 32   # world + platforms only, so the player walks through enemies
-
+	super._ready()
 	var shape := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
 	rect.size = SIZE
 	shape.shape = rect
 	add_child(shape)
-
-	_hitbox = Area2D.new()
-	_hitbox.add_to_group("enemy_hitbox")
-	_hitbox.set_meta("damage", damage)   # read by the player's hurtbox
-	_hitbox.collision_layer = 16   # hazard layer, which the player's hurtbox watches
-	_hitbox.collision_mask = 0
-	_hitbox.monitoring = false
-	var hit_shape := CollisionShape2D.new()
-	var hit_rect := RectangleShape2D.new()
-	hit_rect.size = SIZE - Vector2(2, 2)
-	hit_shape.shape = hit_rect
-	_hitbox.add_child(hit_shape)
-	add_child(_hitbox)
+	add_child(make_contact_hitbox(SIZE - Vector2(2, 2)))
 
 	_ledge_ray = RayCast2D.new()
 	_ledge_ray.collision_mask = 1 | 32
 	_ledge_ray.position = Vector2(_dir * 16, 0)
 	add_child(_ledge_ray)
 
-	if palette == "":
+	if palette == "random":
 		palette = PALETTES.pick_random()
 	sprite = _make_sprite()
 	add_child(sprite)
 	_set_surface(on_ceiling)
 	sprite.play(_anim("walk"))
+
+
+func default_kill_heal() -> int:
+	return KILL_HEAL if palette == HEALING_PALETTE else 0
 
 
 ## Which way is "down" for it: the ceiling or the floor. Its feet, the ledge
@@ -102,8 +85,8 @@ func _set_surface(ceiling: bool) -> void:
 
 
 ## An animation by its floor name, as the ceiling version when up there.
-func _anim(name: String) -> String:
-	return "ceiling_" + name if on_ceiling else name
+func _anim(anim_name: String) -> String:
+	return "ceiling_" + anim_name if on_ceiling else anim_name
 
 
 ## The animated sprite from this palette's sheet.
@@ -130,7 +113,7 @@ func _make_sprite() -> AnimatedSprite2D:
 
 
 func _physics_process(delta: float) -> void:
-	_flash_timer = maxf(_flash_timer - delta, 0.0)
+	var flashing := _flashing(delta)
 	_stagger_timer = maxf(_stagger_timer - delta, 0.0)
 	velocity.y += gravity * delta * (-1.0 if on_ceiling else 1.0)
 
@@ -153,7 +136,7 @@ func _physics_process(delta: float) -> void:
 		if _trail_distance >= TRAIL_SPACING:
 			_trail_distance = 0.0
 			_drip()
-	_update_sprite()
+	_update_sprite(flashing)
 
 
 # Only a wall we're walking into, not one we just turned away from.
@@ -197,31 +180,17 @@ func _land() -> void:
 	sprite.play("land")
 
 
-func take_hit(amount: int, hit_dir: Vector2) -> void:
-	if _dying:
-		return
-	health -= amount
-	_flash_timer = 0.1
+func _on_hit(_hit_dir: Vector2) -> void:
 	_stagger_timer = 0.3
-	if health <= 0:
-		if palette == HEALING_PALETTE:
-			get_tree().call_group("player", "heal", KILL_HEAL)
-		_die()
-	elif on_ceiling:
+	if on_ceiling:
 		_drop()   # knocked off the ceiling
 	elif not _dropping:
 		sprite.play("hurt")
 
 
-## Stops being an enemy at once (no more damage, can't be hit again), then
-## melts (into a puddle, or dripping off the ceiling) and is removed when the
-## animation ends.
-func _die() -> void:
-	_dying = true
+## Melts (into a puddle, or dripping off the ceiling); removed when the animation ends.
+func _on_death() -> void:
 	_dropping = false
-	remove_from_group("enemy")
-	collision_layer = 0
-	_hitbox.set_deferred("monitorable", false)
 	sprite.play(_anim("death"))
 
 
@@ -234,9 +203,9 @@ func _on_animation_finished() -> void:
 		sprite.play(_anim("walk"))
 
 
-func _update_sprite() -> void:
+func _update_sprite(flashing: bool) -> void:
 	sprite.flip_h = _dir < 0
-	sprite.self_modulate = FLASH if _flash_timer > 0.0 else Color.WHITE
+	sprite.self_modulate = FLASH if flashing else Color.WHITE
 	var busy := _dying or _turning or _dropping or _landing or _stagger_timer > 0.0
 	if not busy and sprite.animation != _anim("walk"):
 		sprite.play(_anim("walk"))
