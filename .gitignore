@@ -5,6 +5,9 @@
 # Export presets can hold signing credentials
 export_presets.cfg
 
+# Exported builds
+/build/
+
 # Mono / C# build output
 .mono/
 data_*/

@@ -17,6 +17,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 config/name="Hollowlike Prototype"
 run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7")
+boot_splash/bg_color=Color(0.07, 0.08, 0.11, 1)
 
 [autoload]
 
@@ -47,5 +48,8 @@ project/assembly_name="Hollowlike Prototype"
 2d_physics/layer_6="platforms"
 
 [rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
 
 environment/defaults/default_clear_color=Color(0.07, 0.08, 0.11, 1)
