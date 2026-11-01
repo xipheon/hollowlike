@@ -11,7 +11,9 @@ extends RefCounted
 ## give its own `background` rows in LevelData, using BACKGROUND_LEGEND.
 
 const TILE := 32
-const TILESET := preload("res://art/tiles/tileset.png")
+## Built by tools/make_tilesets.gd; every tile says what it is in its custom data.
+const FOREGROUND_TILES := preload("res://art/tiles/foreground_tileset.tres")
+const BACKGROUND_TILES := preload("res://art/tiles/background_tileset.tres")
 const BACKGROUND := preload("res://art/tiles/background.png")
 const SKYLINE := preload("res://art/backgrounds/skyline.png")
 
@@ -118,40 +120,50 @@ func build(parent: Node2D, room: String, background_rows: Array) -> void:
 	parent.add_child(background)
 	var foreground := _make_foreground()
 	parent.add_child(foreground)
-	_gates = _layer(TILESET, 0)
+	_gates = _layer(FOREGROUND_TILES, 0)
 	_gates.name = "Gates"
-	for coords in [GATE, GATE_END, GATE_UP]:
-		_ensure_tile(_gates, coords)
 	parent.add_child(_gates)
 	set_gates_closed(false)
 	_add_lights(parent, background, foreground)
 
 
-## Glows for the lit bulbs, the dead bulbs (which sputter, showing the lit
-## bulb over the dead one while they're on) and the EXIT signs (which blink,
-## darkening their letters while they're out).
+## Glows for every tile whose `light` data says it has one: lit bulbs, dead
+## bulbs (which sputter, showing the lit bulb over the dead one while they're
+## on) and EXIT signs (which blink, darkening their letters while they're out).
 func _add_lights(parent: Node2D, background: TileMapLayer, foreground: TileMapLayer) -> void:
-	for cell in background.get_used_cells_by_id(0, LIGHT_LIT):
-		_add_light(parent, cell, FlickerLight.Kind.STEADY, null, null)
-	for cell in background.get_used_cells_by_id(0, LIGHT_DEAD):
-		var lit := Sprite2D.new()
-		lit.texture = BACKGROUND
-		lit.region_enabled = true
-		lit.region_rect = Rect2(LIGHT_LIT * TILE, Vector2(TILE, TILE))
-		lit.centered = false
-		lit.position = Vector2(cell * TILE)
-		lit.z_index = -1
-		lit.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		parent.add_child(lit)
-		_add_light(parent, cell, FlickerLight.Kind.BROKEN, lit, null)
-	for cell in foreground.get_used_cells_by_id(0, DOOR_TOP):
-		var dark := ColorRect.new()
-		dark.color = SIGN_OFF
-		dark.position = Vector2(cell * TILE) + SIGN_LETTERS.position
-		dark.size = SIGN_LETTERS.size
-		dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		parent.add_child(dark)
-		_add_light(parent, cell, FlickerLight.Kind.SIGN, null, dark)
+	for layer in [background, foreground]:
+		for cell in layer.get_used_cells():
+			var data: TileData = layer.get_cell_tile_data(cell)
+			match data.get_custom_data("light") if data != null else "":
+				"steady":
+					_add_light(parent, cell, FlickerLight.Kind.STEADY, null, null)
+				"broken":
+					_add_broken_light(parent, cell)
+				"sign":
+					_add_sign(parent, cell)
+
+
+func _add_broken_light(parent: Node2D, cell: Vector2i) -> void:
+	var lit := Sprite2D.new()
+	lit.texture = BACKGROUND
+	lit.region_enabled = true
+	lit.region_rect = Rect2(LIGHT_LIT * TILE, Vector2(TILE, TILE))
+	lit.centered = false
+	lit.position = Vector2(cell * TILE)
+	lit.z_index = -1
+	lit.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	parent.add_child(lit)
+	_add_light(parent, cell, FlickerLight.Kind.BROKEN, lit, null)
+
+
+func _add_sign(parent: Node2D, cell: Vector2i) -> void:
+	var dark := ColorRect.new()
+	dark.color = SIGN_OFF
+	dark.position = Vector2(cell * TILE) + SIGN_LETTERS.position
+	dark.size = SIGN_LETTERS.size
+	dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(dark)
+	_add_light(parent, cell, FlickerLight.Kind.SIGN, null, dark)
 
 
 func _add_light(parent: Node2D, cell: Vector2i, kind: FlickerLight.Kind, lit: CanvasItem, dark: CanvasItem) -> void:
@@ -193,42 +205,20 @@ func _ch(x: int, y: int) -> String:
 	return row[x] if x < row.length() else " "
 
 
-func _layer(texture: Texture2D, z: int) -> TileMapLayer:
+func _layer(tiles: TileSet, z: int) -> TileMapLayer:
 	var layer := TileMapLayer.new()
-	layer.tile_set = TileSet.new()
-	layer.tile_set.tile_size = Vector2i(TILE, TILE)
-	var source := TileSetAtlasSource.new()
-	source.texture = texture
-	source.texture_region_size = Vector2i(TILE, TILE)
-	layer.tile_set.add_source(source, 0)
+	layer.tile_set = tiles
 	layer.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	layer.z_index = z
 	return layer
 
 
-func _source(layer: TileMapLayer) -> TileSetAtlasSource:
-	return layer.tile_set.get_source(0)
-
-
-func _ensure_tile(layer: TileMapLayer, coords: Vector2i) -> void:
-	if not _source(layer).has_tile(coords):
-		_source(layer).create_tile(coords)
-
-
 # --------------------------------------------------- Terrain and acid ----
 
 func _make_foreground() -> TileMapLayer:
-	var layer := _layer(TILESET, 0)
+	var layer := _layer(FOREGROUND_TILES, 0)
 	layer.name = "Terrain"
-	for coords in _terrain_by_sides.values() + [PLAT_L, PLAT_MID, PLAT_R, PLAT_ONE, DOOR, DOOR_TOP] + SPIKES:
-		_ensure_tile(layer, coords)
 	var last_spike := -1   # variant of the spike just to the left, so neighbours differ
-	for coords in [ACID_TOP, ACID_FILL]:
-		_source(layer).create_tile(coords)
-		_source(layer).set_tile_animation_columns(coords, ACID_FRAMES)
-		_source(layer).set_tile_animation_frames_count(coords, ACID_FRAMES)
-		for f in ACID_FRAMES:
-			_source(layer).set_tile_animation_frame_duration(coords, f, ACID_FRAME_TIME)
 	for y in _h:
 		for x in _w:
 			match _ch(x, y):
@@ -259,7 +249,7 @@ func _make_foreground() -> TileMapLayer:
 # ---------------------------------------------------------- Background ----
 
 func _make_background(hand_rows: Array) -> TileMapLayer:
-	var layer := _layer(BACKGROUND, -1)
+	var layer := _layer(BACKGROUND_TILES, -1)
 	layer.name = "Background"
 	# cell -> background sheet cell; cells left out stay open to the skyline.
 	# Solid cells get wall too, so the terrain's ragged edges have brick behind them.
@@ -273,9 +263,7 @@ func _make_background(hand_rows: Array) -> TileMapLayer:
 		_apply_hand_rows(cells, hand_rows)
 		_break_edges(cells)
 	for cell in cells:
-		var coords: Vector2i = cells[cell]
-		_ensure_tile(layer, coords)
-		layer.set_cell(cell, 0, coords)
+		layer.set_cell(cell, 0, cells[cell])
 	return layer
 
 

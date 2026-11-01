@@ -26,6 +26,10 @@ const SEGMENTS := {
 		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
 		"_test_pink_crawler_kill_heals", "_test_crawler_sludge", "_test_ceiling_crawler", "_test_room_lights_flicker",
 	],
+	# The tilesets' terrain brushes and tile data (tools/make_tilesets.gd, room_art.gd).
+	"tilesets": [
+		"_test_terrain_brushes_match_room_art", "_test_tiles_say_what_they_are",
+	],
 	# Every ceiling crawler placed in any room ("c" markers, enemy_crawler.gd ceiling code).
 	"crawlers": [
 		"_test_placed_ceiling_crawlers_stay_up",
@@ -1926,6 +1930,92 @@ func _test_ceiling_crawler() -> void:
 	knocked.take_hit(1, Vector2.UP)
 	await _frames(1)
 	_check(not knocked.on_ceiling and knocked.sprite.animation == "drop", "a hit knocks it off the ceiling")
+	await _despawn()
+
+
+func _layer_named(layer_name: String) -> TileMapLayer:
+	return _main.get_children().filter(func(c): return c is TileMapLayer and c.name == layer_name)[0]
+
+
+# For each terrain, repaints every room's cells of that terrain with the
+# editor's terrain brush (set_cells_terrain_connect) and checks it picks the
+# same tile the room art did. Cells just outside the room count as concrete,
+# like the room's solid border.
+func _test_terrain_brushes_match_room_art() -> void:
+	print("Terrain brushes paint the same tiles as the room art: concrete, catwalk, spikes, sewer")
+	var terrains := {"solid": 0, "platform": 1, "spikes": 2, "acid": 3}
+	for room in LevelData.ROOMS:
+		await _spawn(load(LevelData.ROOMS[room].scene), true)
+		var art := _layer_named("Terrain")
+		var rect := art.get_used_rect().grow(1)
+		for kind in terrains:
+			var cells: Array[Vector2i] = []
+			for cell in art.get_used_cells():
+				if art.get_cell_tile_data(cell).get_custom_data("kind") == kind:
+					cells.append(cell)
+			if kind == "solid":   # the room's border is solid too
+				for x in range(rect.position.x, rect.end.x):
+					for y in range(rect.position.y, rect.end.y):
+						var c := Vector2i(x, y)
+						if not art.get_used_rect().has_point(c):
+							cells.append(c)
+			var brush := TileMapLayer.new()
+			brush.tile_set = RoomArt.FOREGROUND_TILES
+			brush.set_cells_terrain_connect(cells, 0, terrains[kind])
+			# Spikes come in random variants: any spike tile will do.
+			var wrong := cells.filter(func(c): return art.get_used_rect().has_point(c) and (
+					brush.get_cell_source_id(c) == -1 if kind == "spikes"
+					else brush.get_cell_atlas_coords(c) != art.get_cell_atlas_coords(c)))
+			_check(wrong.is_empty(), "%s %s: %d cells match%s" % [room, kind, cells.size() - wrong.size(),
+					"" if wrong.is_empty() else ", wrong at %s" % [wrong.slice(0, 5).map(func(c): return [c, brush.get_cell_atlas_coords(c), art.get_cell_atlas_coords(c)])]])
+			brush.free()
+		await _despawn()
+
+	# The wall brush: plain brick in the open, crumbled edges around a hole.
+	var wall := TileMapLayer.new()
+	wall.tile_set = RoomArt.BACKGROUND_TILES
+	var hole := Rect2i(4, 3, 4, 3)
+	var bricks: Array[Vector2i] = []
+	for y in 10:
+		for x in 12:
+			if not hole.has_point(Vector2i(x, y)):
+				bricks.append(Vector2i(x, y))
+	wall.set_cells_terrain_connect(bricks, 0, 0)
+	var sides := [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
+	var bad := bricks.filter(func(c):
+		var open := 0
+		for i in 4:
+			var n: Vector2i = c + sides[i]
+			if hole.has_point(n) or n.x < 0 or n.y < 0 or n.x >= 12 or n.y >= 10:
+				open |= 1 << i
+		var got := wall.get_cell_atlas_coords(c)
+		if open == 0:
+			return not got in RoomArt.WALLS
+		# The wall's outer border is open too here, so expect an edge facing out.
+		return got != RoomArt.EDGE_ORIGIN + Vector2i(open % 8, open / 8))
+	_check(bad.is_empty(), "wall brush: brick inside, crumbled edges at holes (%d of %d wrong)" % [bad.size(), bricks.size()])
+	wall.free()
+
+
+func _test_tiles_say_what_they_are() -> void:
+	print("Every painted tile carries its kind; lights come from tile data")
+	await _spawn()
+	var counts := {}
+	for layer_name in ["Terrain", "Background", "Gates"]:
+		var layer := _layer_named(layer_name)
+		for cell in layer.get_used_cells():
+			var kind: String = layer.get_cell_tile_data(cell).get_custom_data("kind")
+			counts[kind] = counts.get(kind, 0) + 1
+	_check(not counts.has(""), "no tile without a kind %s" % [counts])
+	for kind in ["solid", "platform", "spikes", "acid", "door", "wall", "window", "light"]:
+		_check(counts.get(kind, 0) > 0, "start room has %s tiles (%d)" % [kind, counts.get(kind, 0)])
+	var lights := _main.get_children().filter(func(c): return c is FlickerLight)
+	_check(lights.size() == counts.get("light", 0) + 1, "a glow per light tile, plus the door's EXIT sign (%d)" % lights.size())
+	await _despawn()
+	await _spawn(BOSS_SCENE)
+	var gates := _layer_named("Gates")
+	_check(gates.get_used_cells().size() > 0 and gates.get_used_cells().all(
+			func(c): return gates.get_cell_tile_data(c).get_custom_data("kind") == "gate"), "the boss room's gates are gate tiles")
 	await _despawn()
 
 
