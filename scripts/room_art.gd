@@ -15,7 +15,6 @@ const TILE := 32
 const FOREGROUND_TILES := preload("res://art/tiles/foreground_tileset.tres")
 const BACKGROUND_TILES := preload("res://art/tiles/background_tileset.tres")
 const BACKGROUND := preload("res://art/tiles/background.png")
-const SKYLINE := preload("res://art/backgrounds/skyline.png")
 
 # Solid neighbours (N, E, S, W) of each cell in the tileset's 4x4 terrain block,
 # as in tools/make_art_templates.gd.
@@ -52,8 +51,6 @@ const SIGN_OFF := Color8(52, 10, 14)        # the sign box's colour, covering th
 const ACID_FRAMES := 4
 const ACID_FRAME_TIME := 0.24
 
-const SKYLINE_SCROLL := Vector2(0.15, 0.0)  # x drifts slowly; y stays fixed on screen
-const SKYLINE_SCREEN_BOTTOM := 450.0        # screen y of the skyline's bottom edge (the screen is 540 tall)
 
 # Background sheet cells (art/tiles/background.png). Pieces bigger than one
 # tile give their top-left cell and size.
@@ -373,32 +370,7 @@ func _break_edges(cells: Dictionary) -> void:
 
 # ------------------------------------------------------------- Skyline ----
 
-## The skyline repeats sideways and stays put vertically, its bottom edge a
-## little above the bottom of the screen. Sky colour fills above it, ground
-## colour below.
 func _make_skyline() -> Parallax2D:
-	var parallax := Parallax2D.new()
-	parallax.name = "Skyline"
-	parallax.scroll_scale = SKYLINE_SCROLL
-	parallax.repeat_size = Vector2(SKYLINE.get_width(), 0)
-	parallax.repeat_times = 2
-	parallax.z_index = -2
-	parallax.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	var image := SKYLINE.get_image()
-	var top := SKYLINE_SCREEN_BOTTOM - SKYLINE.get_height()
-	var sky := ColorRect.new()
-	sky.color = image.get_pixel(0, 0)
-	sky.position = Vector2(0, top - 4000.0)
-	sky.size = Vector2(SKYLINE.get_width(), 4000.0)
-	parallax.add_child(sky)
-	var ground := ColorRect.new()
-	ground.color = image.get_pixel(0, image.get_height() - 1)
-	ground.position = Vector2(0, SKYLINE_SCREEN_BOTTOM)
-	ground.size = Vector2(SKYLINE.get_width(), 4000.0)
-	parallax.add_child(ground)
-	var sprite := Sprite2D.new()
-	sprite.texture = SKYLINE
-	sprite.centered = false
-	sprite.position = Vector2(0, top)
-	parallax.add_child(sprite)
-	return parallax
+	var skyline := Skyline.new()
+	skyline.name = "Skyline"
+	return skyline

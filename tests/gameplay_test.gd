@@ -28,7 +28,7 @@ const SEGMENTS := {
 	],
 	# The tilesets' terrain brushes and tile data (tools/make_tilesets.gd, room_art.gd).
 	"tilesets": [
-		"_test_terrain_brushes_match_room_art", "_test_tiles_say_what_they_are",
+		"_test_terrain_brushes_match_room_art", "_test_tiles_say_what_they_are", "_test_room_template",
 	],
 	# Every ceiling crawler placed in any room ("c" markers, enemy_crawler.gd ceiling code).
 	"crawlers": [
@@ -1995,6 +1995,35 @@ func _test_terrain_brushes_match_room_art() -> void:
 		return got != RoomArt.EDGE_ORIGIN + Vector2i(open % 8, open / 8))
 	_check(bad.is_empty(), "wall brush: brick inside, crumbled edges at holes (%d of %d wrong)" % [bad.size(), bricks.size()])
 	wall.free()
+
+
+func _test_room_template() -> void:
+	print("Room template: layers with the right tilesets, skyline, entities, helper nodes")
+	var room: Room = load("res://scenes/rooms/room_template.tscn").instantiate()
+	add_child(room)
+	await _frames(1)
+	_check(room.auto_decorate, "auto-decorates the wall by default")
+	_check(room.background().tile_set == RoomArt.BACKGROUND_TILES and room.background().z_index == -1, "Background: wall tiles, behind")
+	_check(room.terrain().tile_set == RoomArt.FOREGROUND_TILES and room.gates().tile_set == RoomArt.FOREGROUND_TILES,
+			"Terrain and Gates: foreground tiles")
+	var skyline: Skyline = room.get_node("Skyline")
+	_check(skyline.get_children().any(func(c): return c is Sprite2D and c.texture == Skyline.TEXTURE), "the skyline builds itself")
+	var start: PlayerStart = room.entities().get_node("PlayerStart")
+	_check(start != null and not start.visible, "a PlayerStart, hidden in game")
+	var door := RoomDoor.new()
+	var prop: Array = door.get_property_list().filter(func(p): return p.name == "target_room")
+	_check(prop.size() == 1 and prop[0].hint == PROPERTY_HINT_ENUM and prop[0].hint_string.split(",").size() == LevelData.ROOMS.size(),
+			"a door offers the rooms to pick (%s)" % (prop[0].hint_string if prop.size() == 1 else "none"))
+	door.position = Vector2(0, 64)
+	_check(door.rect() == Rect2(0, 64, 32, 96), "a door is a tile wide and 3 tall by default")
+	door.free()
+	var arena := Arena.new()
+	arena.position = Vector2(64, 32)
+	arena.size_tiles = Vector2i(10, 6)
+	_check(arena.rect() == Rect2(64, 32, 320, 192), "an arena's box comes from its size in tiles")
+	arena.free()
+	room.queue_free()
+	await _frames(1)
 
 
 func _test_tiles_say_what_they_are() -> void:
