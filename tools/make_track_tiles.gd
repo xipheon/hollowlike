@@ -2,9 +2,10 @@ extends SceneTree
 ## Draws the moving platform track tiles onto the tile sheet and writes a
 ## preview. A track is a steel guide rail with a slot down the middle and a
 ## striped buffer stop at each end. Horizontal tiles (left end, middle, right
-## end) go at RoomArt.TRACK_H; the vertical ones are the same tiles turned on
-## end, at RoomArt.TRACK_V (top end, middle, bottom end). Run from the project
-## folder:
+## end) go at RoomArt.TRACK_H, with the rail centred on the height of the
+## platform's catwalk deck. The vertical ones, at RoomArt.TRACK_V (top end,
+## middle, bottom end), are the same rail centred and turned on end, so it runs
+## up the middle of the deck. Run from the project folder:
 ##   godot --headless --path . --script res://tools/make_track_tiles.gd
 
 const TILE := 32
@@ -23,19 +24,20 @@ const BOLT := Color8(150, 152, 156)
 const STRIPE_A := Color8(196, 158, 44)
 const STRIPE_B := Color8(30, 28, 26)
 
-const RAIL_TOP := 13      # rail rows, top to bottom
-const RAIL_BOTTOM := 20
+const RAIL_HEIGHT := 8     # rail rows, outline to outline
+const TOP_RAIL := 5       # side to side: the rail's top row, centred on the catwalk deck (its rows 1-17)
+const MIDDLE_RAIL := 12   # up and down (before turning on end): centred, under the deck's middle
 const STOP_FROM := 3      # the buffer stop's columns, from the end's outer edge
 const STOP_TO := 9
 
 
 func _init() -> void:
-	var left := _rail_tile(-1)
-	var mid := _rail_tile(0)
-	var right := _rail_tile(1)
+	var left := _rail_tile(-1, TOP_RAIL)
+	var mid := _rail_tile(0, TOP_RAIL)
+	var right := _rail_tile(1, TOP_RAIL)
 	var horizontal := [left, mid, right]
 	# Turned anticlockwise, the left end points down: top, middle, bottom is R, M, L.
-	var vertical := [_turned(right), _turned(mid), _turned(left)]
+	var vertical := [_turned(_rail_tile(1, MIDDLE_RAIL)), _turned(_rail_tile(0, MIDDLE_RAIL)), _turned(_rail_tile(-1, MIDDLE_RAIL))]
 
 	var sheet := Image.load_from_file(ProjectSettings.globalize_path(SHEET_PATH))
 	sheet.convert(Image.FORMAT_RGBA8)
@@ -48,8 +50,9 @@ func _init() -> void:
 	quit()
 
 
-## A horizontal rail tile: `end` -1 stops at the left, 1 at the right, 0 runs through.
-func _rail_tile(end: int) -> Image:
+## A horizontal rail tile: `end` -1 stops at the left, 1 at the right, 0 runs
+## through. `top` is the rail's top row.
+func _rail_tile(end: int, top: int) -> Image:
 	var img := Image.create(TILE, TILE, false, Image.FORMAT_RGBA8)
 	var x0 := 0
 	var x1 := TILE - 1
@@ -58,36 +61,36 @@ func _rail_tile(end: int) -> Image:
 	elif end > 0:
 		x1 = TILE - 1 - STOP_FROM - 2
 	for x in range(x0, x1 + 1):
-		img.set_pixel(x, RAIL_TOP, OUTLINE)
-		img.set_pixel(x, RAIL_TOP + 1, STEEL_LIGHT)
-		img.set_pixel(x, RAIL_TOP + 2, STEEL)
-		img.set_pixel(x, RAIL_TOP + 3, SLOT)
-		img.set_pixel(x, RAIL_TOP + 4, SLOT)
-		img.set_pixel(x, RAIL_TOP + 5, STEEL)
-		img.set_pixel(x, RAIL_TOP + 6, STEEL_DARK)
-		img.set_pixel(x, RAIL_BOTTOM, OUTLINE)
+		img.set_pixel(x, top, OUTLINE)
+		img.set_pixel(x, top + 1, STEEL_LIGHT)
+		img.set_pixel(x, top + 2, STEEL)
+		img.set_pixel(x, top + 3, SLOT)
+		img.set_pixel(x, top + 4, SLOT)
+		img.set_pixel(x, top + 5, STEEL)
+		img.set_pixel(x, top + 6, STEEL_DARK)
+		img.set_pixel(x, top + RAIL_HEIGHT - 1, OUTLINE)
 		# Rust creeping along the rail, the same on every tile so they join up.
 		var h := (x * 7 + 3) % 11
 		if h == 0:
-			img.set_pixel(x, RAIL_TOP + 2, RUST)
+			img.set_pixel(x, top + 2, RUST)
 		elif h == 5:
-			img.set_pixel(x, RAIL_TOP + 5, RUST_DARK)
+			img.set_pixel(x, top + 5, RUST_DARK)
 	# Bolts where the rail is fixed to the wall, every 16 px.
 	for bx in [7, 23]:
 		if bx >= x0 + 1 and bx <= x1 - 1:
-			img.set_pixel(bx, RAIL_TOP + 1, BOLT)
-			img.set_pixel(bx, RAIL_TOP + 6, BOLT)
+			img.set_pixel(bx, top + 1, BOLT)
+			img.set_pixel(bx, top + 6, BOLT)
 	if end != 0:
-		_buffer_stop(img, end)
+		_buffer_stop(img, end, top)
 	return img
 
 
 ## A striped steel block across the rail's end, taller than the rail.
-func _buffer_stop(img: Image, end: int) -> void:
+func _buffer_stop(img: Image, end: int, rail_top: int) -> void:
 	var a := STOP_FROM if end < 0 else TILE - 1 - STOP_TO
 	var b := STOP_TO if end < 0 else TILE - 1 - STOP_FROM
-	var top := RAIL_TOP - 4
-	var bottom := RAIL_BOTTOM + 4
+	var top := maxi(rail_top - 4, 0)
+	var bottom := rail_top + RAIL_HEIGHT - 1 + 4
 	for y in range(top, bottom + 1):
 		for x in range(a, b + 1):
 			var c: Color

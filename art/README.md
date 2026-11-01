@@ -54,11 +54,11 @@ Rooms are scenes made in the Godot editor. Each tile you paint says what it is (
 1. **Start from the template.** Duplicate `scenes/rooms/room_template.tscn` (right-click it in the FileSystem dock, then *Duplicate*). Rename the root node, and set its `room` to the new room's id.
 2. **Add it to the game.** Add the id and scene path to `ROOMS` in `scripts/level_data.gd`. Doors can then lead to it, and the level select lists it.
 3. **Paint the Terrain layer** with `art/tiles/foreground_tileset.tres`. The room's top-left corner is cell (0, 0). Use the *Terrains* tab for brushes that pick the right edge tiles on their own: **concrete** for solid ground, **catwalk** for one-way platforms, **spikes**, and **sewer** for acid water. To place one exact tile, pick it from the *Tiles* tab instead. Door tiles go here too.
-4. **Moving platforms (Tracks layer).** Select the Tracks layer and paint a track with the **track** brush. A track is a straight line, either side to side or up and down. Then select Terrain and paint catwalk over the track. When the room loads, each catwalk run that touches a track becomes a moving platform, as wide as the run.
-   - **Side to side:** the whole deck stays between the track's end stops.
-   - **Up and down:** paint the catwalk across the rail. The deck stays centred on the rail.
+4. **Moving platforms.** Paint a track on the Terrain layer with the **track** brush. A track is a straight line, either side to side or up and down. Then drag `scenes/props/moving_platform.tscn` onto Entities and put its origin, the middle of the deck's top edge, on the track.
+   - **Side to side:** the deck rides along the rail at the top of the track tiles, and stays between the end stops.
+   - **Up and down:** the deck stays centred on the rail.
 
-   Platforms go back and forth and pause at each end. To give one its own `speed` or `end_pause`, place `scenes/props/moving_platform.tscn` under Entities instead of painting it. Put its origin, the middle of the deck's top edge, on the track. Older rooms get a Tracks layer the first time you open them. Save the scene to keep it.
+   Platforms go back and forth and pause at each end. Set `width_tiles`, `speed` and `end_pause` in the Inspector. A platform placed off a track stays still.
 5. **Paint the Gates layer** where a boss arena's gates go, with the shut gate tiles. They show raised until a fight starts, then drop shut.
 6. **Paint the wall (Background layer).** The game shows exactly what you paint here. Any cell left empty is open, and the skyline shows through it.
    - Press **Decorate wall** in the root's Inspector to fill every empty cell with brick, windows, lights, posters and graffiti. Cells you've already painted are kept. Then edit the result by hand.

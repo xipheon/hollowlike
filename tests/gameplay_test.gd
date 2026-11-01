@@ -2166,15 +2166,6 @@ func _test_room_template() -> void:
 	_check(room.background().tile_set == RoomArt.BACKGROUND_TILES and room.background().z_index == -1, "Background: wall tiles, behind")
 	_check(room.terrain().tile_set == RoomArt.FOREGROUND_TILES and room.gates().tile_set == RoomArt.FOREGROUND_TILES,
 			"Terrain and Gates: foreground tiles")
-	_check(room.tracks().tile_set == RoomArt.FOREGROUND_TILES and room.tracks().get_index() == room.background().get_index() + 1
-			and room.tracks().get_index() < room.terrain().get_index(), "Tracks: foreground tiles, between the wall and Terrain")
-	# A room saved before tracks existed gets the layer, in the same place.
-	var old_room: Room = load("res://scenes/rooms/room_template.tscn").instantiate()
-	old_room.tracks().free()
-	old_room.add_tracks_layer()
-	_check(old_room.tracks() != null and old_room.tracks().get_index() == old_room.background().get_index() + 1
-			and old_room.tracks().owner == old_room, "an older room gets a Tracks layer, saved with it")
-	old_room.free()
 	var skyline: Skyline = room.get_node("Skyline")
 	_check(skyline.get_children().any(func(c): return c is Sprite2D and c.texture == Skyline.TEXTURE), "the skyline builds itself")
 	var start: PlayerStart = room.entities().get_node("PlayerStart")
@@ -2424,11 +2415,9 @@ func _test_door_to_boss_room_and_back() -> void:
 const MOVING_PLATFORM_SCENE := preload("res://scenes/props/moving_platform.tscn")
 
 
-## An open 40 x 16 room with two tracks on the Tracks layer: side to side on
-## row 8 (cols 4-15), and up and down in col 25 (rows 3-12), each with 3 tiles
-## of catwalk painted over it (cols 6-8 and cols 24-26 of row 12). A catwalk
-## off the track (cols 30-32, row 11) and a placed platform scene off any track
-## ("Loose") stay put.
+## An open 40 x 16 room with two tracks: side to side on row 8 (cols 4-15), and
+## up and down in col 25 (rows 3-12), each with a 3-wide platform on it. A
+## third platform sits off any track.
 func _build_platform_room() -> Room:
 	var room: Room = load("res://scenes/rooms/room_template.tscn").instantiate()
 	room.room = "test"
@@ -2443,21 +2432,17 @@ func _build_platform_room() -> Room:
 	var across: Array[Vector2i] = []
 	for x in range(4, 16):
 		across.append(Vector2i(x, 8))
-	room.tracks().set_cells_terrain_connect(across, 0, 4)
+	room.terrain().set_cells_terrain_connect(across, 0, 4)
 	var upright: Array[Vector2i] = []
 	for y in range(3, 13):
 		upright.append(Vector2i(25, y))
-	room.tracks().set_cells_terrain_connect(upright, 0, 4)
-	for run in [[6, 8, 8], [24, 26, 12], [30, 32, 11]]:
-		var cells: Array[Vector2i] = []
-		for x in range(run[0], run[1] + 1):
-			cells.append(Vector2i(x, run[2]))
-		room.terrain().set_cells_terrain_connect(cells, 0, 1)
+	room.terrain().set_cells_terrain_connect(upright, 0, 4)
 	room.entities().get_node("PlayerStart").position = Vector2(2.5 * TILE, 15 * TILE)
-	var loose: MovingPlatform = MOVING_PLATFORM_SCENE.instantiate()
-	loose.name = "Loose"
-	loose.position = Vector2(36.5, 3) * TILE   # clear of the dash test's paths
-	room.entities().add_child(loose)
+	for p in [["Across", Vector2(7.5, 8)], ["Upright", Vector2(25.5, 12)], ["Loose", Vector2(33.5, 10)]]:
+		var platform: MovingPlatform = MOVING_PLATFORM_SCENE.instantiate()
+		platform.name = p[0]
+		platform.position = p[1] * TILE
+		room.entities().add_child(platform)
 	return room
 
 
@@ -2479,18 +2464,11 @@ func _test_track_brush() -> void:
 
 
 func _test_moving_platform_travel() -> void:
-	print("Moving platforms: catwalk over track becomes one, goes end to end and back; off a track things stay put")
+	print("Moving platforms: find their track, go end to end and back, stay put off a track")
 	await _spawn_node(_build_platform_room())
-	var across: MovingPlatform = _main.entities().get_node_or_null("MovingPlatform_6_8")
-	var upright: MovingPlatform = _main.entities().get_node_or_null("MovingPlatform_24_12")
+	var across: MovingPlatform = _main.entities().get_node("Across")
+	var upright: MovingPlatform = _main.entities().get_node("Upright")
 	var loose: MovingPlatform = _main.entities().get_node("Loose")
-	_check(across != null and upright != null and _main.entities_of(MovingPlatform).size() == 3,
-			"the two catwalks over track became platforms, the one off it didn't")
-	_check(across.width_tiles == 3 and across.position.y == 8 * TILE,
-			"as wide as the painted catwalk, on its row")
-	_check(_main.terrain().get_cell_source_id(Vector2i(7, 8)) == -1 and not _main._grid.has(Vector2i(7, 8)),
-			"its catwalk tiles came off Terrain (not a fixed platform too)")
-	_check(_main._grid.get(Vector2i(31, 11)) == "=", "catwalk off the track stays a fixed platform")
 	_check(across.on_track() and across.travel() == [Vector2(5.5 * TILE, 8 * TILE), Vector2(14.5 * TILE, 8 * TILE)],
 			"side to side: the deck stays between the track's ends %s" % [across.travel()])
 	_check(upright.on_track() and upright.travel() == [Vector2(25.5 * TILE, 3 * TILE), Vector2(25.5 * TILE, 12 * TILE)],
@@ -2521,7 +2499,7 @@ func _test_moving_platform_carries_player() -> void:
 	await _spawn_node(_build_platform_room())
 	await _frames(20)
 	var safe := _player.last_safe_position
-	for platform_name in ["MovingPlatform_6_8", "MovingPlatform_24_12"]:
+	for platform_name in ["Across", "Upright"]:
 		var platform: MovingPlatform = _main.entities().get_node(platform_name)
 		_player.global_position = platform.global_position + Vector2(0, -Player.BODY_SIZE.y * 0.5 - 2)
 		_player.velocity = Vector2.ZERO
@@ -2539,7 +2517,7 @@ func _test_moving_platform_carries_player() -> void:
 	Input.action_press("jump")
 	await _frames(3)
 	_release_all()
-	var upright: MovingPlatform = _main.entities().get_node("MovingPlatform_24_12")
+	var upright: MovingPlatform = _main.entities().get_node("Upright")
 	await _frames(20)
 	_check(_player.global_position.y > upright.global_position.y + TILE, "down + jump drops through it")
 	await _despawn()

@@ -7,9 +7,6 @@ extends Node2D
 ## scenes/rooms/room_template.tscn):
 ##   Skyline     the far city, behind everything
 ##   Background  the wall behind the room (background_tileset.tres)
-##   Tracks      moving platform tracks (foreground_tileset.tres, "track" brush):
-##               catwalk painted on Terrain over a track becomes a platform
-##               riding it (see _make_moving_platforms)
 ##   Terrain     what you stand on and what hurts (foreground_tileset.tres)
 ##   Gates       arena gates, shut during a boss fight (foreground_tileset.tres)
 ##   Entities    placed enemies and bosses, a PlayerStart, RoomDoors, Arenas
@@ -19,7 +16,6 @@ extends Node2D
 ## "~" sewer water, "|" gate, ">" door). Does nothing while editing.
 
 const TILE := 32
-const MOVING_PLATFORM_SCENE := preload("res://scenes/props/moving_platform.tscn")
 const LAYER_WORLD := 1
 const LAYER_PLATFORMS := 32
 const SPIKE_HEIGHT := 24.0   # damage area: the bottom of the tile, up to the spike tips
@@ -62,10 +58,6 @@ func background() -> TileMapLayer:
 	return get_node_or_null("Background")
 
 
-func tracks() -> TileMapLayer:
-	return get_node_or_null("Tracks")
-
-
 func terrain() -> TileMapLayer:
 	return get_node_or_null("Terrain")
 
@@ -87,7 +79,6 @@ func entities_of(type: Variant) -> Array:
 
 func _ready() -> void:
 	if Engine.is_editor_hint():
-		add_tracks_layer.call_deferred()
 		return
 	Engine.time_scale = 1.0
 	_load_room()
@@ -149,26 +140,11 @@ func decorate_wall() -> void:
 		Engine.get_singleton("EditorInterface").mark_scene_as_unsaved()
 
 
-## Gives a room made before tracks existed its Tracks layer, just above the
-## Background, when it's opened for editing (saved with the scene). Only for
-## the scene being edited, not a room placed inside another scene.
-func add_tracks_layer() -> void:
-	if tracks() != null or (Engine.is_editor_hint() and get_tree().edited_scene_root != self):
-		return
-	var layer := TileMapLayer.new()
-	layer.name = "Tracks"
-	layer.tile_set = RoomArt.FOREGROUND_TILES
-	layer.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	add_child(layer)
-	move_child(layer, background().get_index() + 1 if background() != null else 0)
-	layer.owner = self
-
-
 ## The room's size and layout grid, from its painted layers.
 func _read_painted_grid() -> void:
 	_grid.clear()
 	var used := Rect2i()
-	for layer in [terrain(), gates(), background(), tracks()]:
+	for layer in [terrain(), gates(), background()]:
 		if layer != null and not layer.get_used_cells().is_empty():
 			used = layer.get_used_rect() if used.size == Vector2i.ZERO else used.merge(layer.get_used_rect())
 	_w = used.end.x
@@ -183,7 +159,6 @@ func _read_painted_grid() -> void:
 ## The grid comes from the painted tiles' kinds, and doors and bosses from the
 ## nodes under Entities.
 func _load_room() -> void:
-	_make_moving_platforms()
 	_read_painted_grid()
 	_art = RoomArt.new(_ch, _w, _h)
 	_art.dress(self, background(), terrain(), gates())
@@ -195,48 +170,6 @@ func _load_room() -> void:
 		var boss: BossBase = arena.get_node_or_null(arena.boss)
 		if boss != null:
 			_set_up_boss(boss, Rect2(to_local(arena.global_position), Vector2(arena.size_tiles * TILE)))
-
-
-## Each side-by-side run of catwalk on Terrain with track under any of its
-## tiles (on the Tracks layer) becomes a MovingPlatform as wide as the run,
-## riding that track. Its tiles come off Terrain, so they aren't a fixed
-## platform too.
-func _make_moving_platforms() -> void:
-	var layer := tracks()
-	if layer == null or entities() == null:
-		return
-	var catwalk := {}
-	for cell in terrain().get_used_cells():
-		if terrain().get_cell_tile_data(cell).get_custom_data("kind") == "platform":
-			catwalk[cell] = true
-	var done := {}
-	for cell in catwalk:
-		if done.has(cell):
-			continue
-		var left: Vector2i = cell
-		while catwalk.has(left + Vector2i.LEFT):
-			left += Vector2i.LEFT
-		var run: Array[Vector2i] = []
-		var c := left
-		while catwalk.has(c):
-			run.append(c)
-			done[c] = true
-			c += Vector2i.RIGHT
-		if not run.any(func(r): return _is_track(layer, r)):
-			continue
-		var platform: MovingPlatform = MOVING_PLATFORM_SCENE.instantiate()
-		platform.name = "MovingPlatform_%d_%d" % [left.x, left.y]
-		platform.width_tiles = run.size()
-		var top_middle := Vector2(left.x * TILE + run.size() * TILE * 0.5, left.y * TILE)
-		platform.position = entities().to_local(terrain().to_global(top_middle))
-		for r in run:
-			terrain().erase_cell(r)
-		entities().add_child(platform)
-
-
-static func _is_track(layer: TileMapLayer, cell: Vector2i) -> bool:
-	var data := layer.get_cell_tile_data(cell)
-	return data != null and data.get_custom_data("kind") == "track"
 
 
 func _build_solids() -> void:
