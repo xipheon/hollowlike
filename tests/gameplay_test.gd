@@ -30,6 +30,10 @@ const SEGMENTS := {
 	"tilesets": [
 		"_test_terrain_brushes_match_room_art", "_test_tiles_say_what_they_are", "_test_room_template",
 	],
+	# One-off: the converted room scenes match their ASCII rows (tools/convert_ascii_rooms.gd).
+	"conversion": [
+		"_test_converted_rooms_match_ascii",
+	],
 	# Rooms made in the editor: painted layers, helper nodes, decoration (room.gd, room_art.gd).
 	"editor_rooms": [
 		"_test_editor_room_plays", "_test_editor_room_door", "_test_editor_room_arena",
@@ -195,6 +199,12 @@ func _spawn_node(room: Node, boss_beaten := false) -> void:
 	get_tree().current_scene = _main
 	_player = _main._player
 	await _frames(2)
+
+
+## Every node in a room, however deep (enemies and bosses sit under Entities,
+## and what they spawn lands beside them).
+func _all(room: Node) -> Array:
+	return room.find_children("*", "", true, false)
 
 
 func _despawn() -> void:
@@ -563,7 +573,7 @@ func _test_boss_attacks_stay_in_arena() -> void:
 		for i in 720:
 			await _frames(1)
 			_player._invuln_timer = 999.0
-			for c in _main.get_children():
+			for c in _all(_main):
 				saw_wave = saw_wave or c is WardenShockwave
 			var bx := boss.global_position.x
 			if bx < boss.arena_left or bx > boss.arena_right or boss.global_position.y > 15 * TILE:
@@ -630,7 +640,7 @@ func _test_boss_defeat_opens_gate_and_sticks() -> void:
 	var room := await _wait_for_room("boss", 30)
 	await _frames(3)
 	_check(room != null and room._boss == null, "no live boss after reloading the room")
-	var corpses := room.get_children().filter(func(c): return c is WardenBoss) if room != null else []
+	var corpses := _all(room).filter(func(c): return c is WardenBoss) if room != null else []
 	_check(corpses.size() == 1 and corpses[0]._state == WardenBoss.State.DEAD, "corpse is back after reloading")
 	_check(corpses.size() == 1 and absf(corpses[0].global_position.x - died_at.x) < 8.0, "in the same spot")
 	await _despawn()
@@ -794,7 +804,7 @@ func _test_warden_damage_split_and_phase_two() -> void:
 	var boss := await _start_boss_fight()
 	_check(boss._hitbox.get_meta("damage") == 2, "body 2")
 	boss._shockwave()
-	var waves := _main.get_children().filter(func(c): return c is WardenShockwave)
+	var waves := _all(_main).filter(func(c): return c is WardenShockwave)
 	_check(waves.size() == 2 and waves.all(func(w): return w.get_meta("damage") == 1), "shockwaves 1")
 	for w in waves:
 		w.queue_free()
@@ -803,7 +813,7 @@ func _test_warden_damage_split_and_phase_two() -> void:
 	_check(boss.is_phase_two() and boss._hitbox.get_meta("damage") == 3, "phase two body 3")
 	await _frames(1)
 	boss._charge_end()   # phase two: hitting a wall sends shockwaves too
-	waves = _main.get_children().filter(func(c): return c is WardenShockwave)
+	waves = _all(_main).filter(func(c): return c is WardenShockwave)
 	_check(waves.size() == 2 and waves.all(func(w): return w.get_meta("damage") == 2), "phase two shockwaves 2, from a wall hit")
 	await _despawn()
 
@@ -1001,7 +1011,7 @@ func _test_harrier_swoops_ignore_player_height() -> void:
 
 
 func _feathers() -> Array:
-	return _main.get_children().filter(func(c): return c is HarrierFeather)
+	return _all(_main).filter(func(c): return c is HarrierFeather)
 
 
 func _test_harrier_phase_two_cycle() -> void:
@@ -1266,7 +1276,7 @@ func _test_harrier_defeat_grants_wall_jump() -> void:
 	get_tree().reload_current_scene()
 	var room := await _wait_for_room("aerie", 30)
 	await _frames(30)
-	var bodies := room.get_children().filter(func(c): return c is HarrierBoss) if room != null else []
+	var bodies := _all(room).filter(func(c): return c is HarrierBoss) if room != null else []
 	_check(room != null and room._boss == null and bodies.size() == 1 and bodies[0]._state == HarrierBoss.State.DEAD,
 			"still beaten after reloading")
 	await _despawn()
@@ -1883,7 +1893,7 @@ func _test_crawler_sludge() -> void:
 	await _frames(60)
 	_check(crawler.sprite.animation in ["walk", "turn"], "oozing along (%s)" % crawler.sprite.animation)
 	_check(crawler.sprite.flip_h == (crawler._dir < 0), "faces the way it's going")
-	_check(_main.get_children().any(func(c): return c is SlimeDrip), "leaves a slime trail")
+	_check(_all(_main).any(func(c): return c is SlimeDrip), "leaves a slime trail")
 	crawler.take_hit(1, Vector2.RIGHT)
 	await _frames(1)
 	_check(crawler.sprite.animation == "hurt", "wobbles when hit (%s)" % crawler.sprite.animation)
@@ -2137,6 +2147,96 @@ func _test_auto_decorate_off() -> void:
 	await _spawn_node(room)
 	_check(_main.background().get_used_cells().size() == 1, "only the painted wall cell (%d)" % _main.background().get_used_cells().size())
 	await _despawn()
+
+
+## For each room, plays the converted scene and compares it with what its
+## ASCII rows build: size, layout grid, every Terrain and Background tile (the
+## automatic decoration included), doors, the player start, and every enemy
+## and boss by kind and position.
+func _test_converted_rooms_match_ascii() -> void:
+	print("Converted rooms match their ASCII versions: layout, tiles, wall, doors, start, enemies")
+	var layout_chars := "#=^~|>"
+	for id in LevelData.ROOMS:
+		var data: Dictionary = LevelData.ROOMS[id]
+		if not data.has("rows"):
+			continue
+		var rows: Array = data.rows
+		var ascii := {}
+		var w := 0
+		for row in rows:
+			w = maxi(w, row.length())
+		var h := rows.size()
+		for y in h:
+			for x in rows[y].length():
+				if rows[y][x] != " ":
+					ascii[Vector2i(x, y)] = rows[y][x]
+		var ch := func(x: int, y: int) -> String:
+			return "#" if x < 0 or y < 0 or x >= w or y >= h else ascii.get(Vector2i(x, y), " ")
+		var art := Node2D.new()
+		RoomArt.new(ch, w, h).build(art, id, data.get("background", []))
+
+		await _spawn(load(data.scene))
+		_check(_main.is_painted() and _main._w == w and _main._h == h, "%s: painted, %d x %d tiles (%d x %d)" % [id, w, h, _main._w, _main._h])
+		var grid_wrong := 0
+		for y in h:
+			for x in w:
+				var want: String = ascii.get(Vector2i(x, y), " ")
+				if not want in layout_chars:
+					want = " "
+				if _main._ch(x, y) != want:
+					grid_wrong += 1
+		_check(grid_wrong == 0, "%s: layout grid matches (%d cells differ)" % [id, grid_wrong])
+		for layer_name in ["Terrain", "Background"]:
+			var want_layer: TileMapLayer = art.get_node(layer_name)
+			var got: TileMapLayer = _layer_named(layer_name)
+			var differ := 0
+			for cell in want_layer.get_used_cells():
+				if got.get_cell_atlas_coords(cell) != want_layer.get_cell_atlas_coords(cell):
+					differ += 1
+			_check(differ == 0 and got.get_used_cells().size() == want_layer.get_used_cells().size(),
+					"%s: %s tiles match (%d of %d differ)" % [id, layer_name, differ, want_layer.get_used_cells().size()])
+		art.free()
+
+		# Enemies and bosses: kind and position, as the ASCII spawner placed them.
+		var want_things := []
+		for cell in ascii:
+			var o := Vector2(cell * TILE)
+			match ascii[cell]:
+				"E": want_things.append(["crawler", o + Vector2(TILE * 0.5, TILE - 12)])
+				"c": want_things.append(["ceiling", o + Vector2(TILE * 0.5, 12)])
+				"K": want_things.append(["knight", o + Vector2(TILE * 0.5, TILE - 22)])
+				"B": want_things.append(["warden", o + Vector2(TILE * 0.5, TILE - 36)])
+				"F": want_things.append(["harrier", o + Vector2(TILE * 0.5, TILE * 0.5)])
+		var got_things := []
+		var unplayed: Room = load(data.scene).instantiate()   # positions as placed, before anything moves
+		for e in unplayed.entities().get_children():
+			var kind := "crawler" if e is CrawlerEnemy else "knight" if e is KnightEnemy else "warden" if e is WardenBoss else "harrier" if e is HarrierBoss else ""
+			if kind == "crawler" and e.on_ceiling:
+				kind = "ceiling"
+			if kind != "":
+				got_things.append([kind, e.position])
+		unplayed.free()
+		var sort := func(a, b): return str(a) < str(b)
+		want_things.sort_custom(sort)
+		got_things.sort_custom(sort)
+		_check(str(want_things) == str(got_things), "%s: %d enemies and bosses in place" % [id, want_things.size()])
+		# Doors and the player start.
+		var doors: Array = _main._doors.map(func(d): return [d.rect, d.target])
+		var want_doors := []
+		for x in w:
+			var y := 0
+			while y < h:
+				if ch.call(x, y) == ">":
+					var top := y
+					while ch.call(x, y) == ">":
+						y += 1
+					want_doors.append([Rect2i(x, top, 1, y - top), data.doors["left" if x * 2 < w else "right"]])
+				y += 1
+		_check(str(doors) == str(want_doors), "%s: doors %s" % [id, doors])
+		var p := _find_tile(rows, "P")
+		var starts: Array = _main.entities_of(PlayerStart)
+		_check(starts.size() == 1 and starts[0].position == Vector2(p.x * TILE + TILE * 0.5, (p.y + 1) * TILE), "%s: PlayerStart on the P" % id)
+		await _despawn()
 
 
 func _test_room_template() -> void:
