@@ -1858,33 +1858,36 @@ func _test_double_jump() -> void:
 func _test_pink_crawler_kill_heals() -> void:
 	print("Killing a pink crawler heals a heart; other colours don't heal")
 	await _spawn()
-	var crawlers := get_tree().get_nodes_in_group("enemy").filter(func(e): return e is CrawlerEnemy)
-	for c in crawlers:
-		c.palette = "pink" if c == crawlers[0] else "sewer"
+	await _remove_enemies()
+	var floor_y := 18 * TILE - CrawlerEnemy.SIZE.y * 0.5
+	var pink: CrawlerEnemy = _place_enemy(PINK_CRAWLER_SCENE, {}, Vector2(5.5 * TILE, floor_y))
+	var sewer: CrawlerEnemy = _place_enemy(CRAWLER_SCENE, {}, Vector2(9.5 * TILE, floor_y))
+	var pink2: CrawlerEnemy = _place_enemy(PINK_CRAWLER_SCENE, {}, Vector2(13.5 * TILE, floor_y))
+	await _frames(2)
+	_check(pink is PinkCrawler and not sewer is PinkCrawler, "the pink scene is a PinkCrawler, the sewer one isn't")
 	_player.health = 5
-	crawlers[0].take_hit(99, Vector2.RIGHT)
-	_check(_player.health == 5 + CrawlerEnemy.KILL_HEAL, "pink: health 5 -> %d half-hearts" % _player.health)
+	pink.take_hit(99, Vector2.RIGHT)
+	_check(_player.health == 5 + PinkCrawler.KILL_HEAL, "pink: health 5 -> %d half-hearts" % _player.health)
 	_check(_main._hud._health_bar.current == _player.health, "HUD updated")
-	crawlers[1].take_hit(99, Vector2.RIGHT)
-	_check(_player.health == 5 + CrawlerEnemy.KILL_HEAL, "sewer: no healing (%d)" % _player.health)
+	sewer.take_hit(99, Vector2.RIGHT)
+	_check(_player.health == 5 + PinkCrawler.KILL_HEAL, "sewer: no healing (%d)" % _player.health)
 	_player.health = _player.max_health
-	crawlers[2].palette = "pink"
-	crawlers[2].take_hit(99, Vector2.RIGHT)
+	pink2.take_hit(99, Vector2.RIGHT)
 	_check(_player.health == _player.max_health, "no overheal")
 	await _despawn()
 
 
 func _test_crawler_sludge() -> void:
-	print("Crawlers: random palette, ooze with a slime trail, wobble when hit, melt when killed")
+	print("Crawlers: sewer ones in the first room, ooze with a slime trail, wobble when hit, melt when killed")
 	await _spawn()
 	var crawlers := get_tree().get_nodes_in_group("enemy").filter(func(e): return e is CrawlerEnemy)
-	_check(not crawlers.is_empty() and crawlers.all(func(c): return c.palette in CrawlerEnemy.PALETTES),
-			"each spawned with a palette %s" % [crawlers.map(func(c): return c.palette)])
+	_check(not crawlers.is_empty() and crawlers.all(func(c): return c.scene_file_path == CRAWLER_SCENE.resource_path),
+			"the room's crawlers are all sewer crawlers (%d)" % crawlers.size())
 	var crawler: CrawlerEnemy = crawlers[0]
 	await _frames(60)
 	_check(crawler.sprite.animation in ["walk", "turn"], "oozing along (%s)" % crawler.sprite.animation)
 	_check(crawler.sprite.flip_h == (crawler._dir < 0), "faces the way it's going")
-	_check(_all(_main).any(func(c): return c is SlimeDrip), "leaves a slime trail")
+	_check(_all(_main).any(func(c): return c is SlimeDrip and c.color == crawler.slime_color), "leaves a slime trail in its colour")
 	crawler.take_hit(1, Vector2.RIGHT)
 	await _frames(1)
 	_check(crawler.sprite.animation == "hurt", "wobbles when hit (%s)" % crawler.sprite.animation)
@@ -1903,7 +1906,7 @@ func _test_ceiling_crawler() -> void:
 	await _remove_enemies()
 	_player._invuln_timer = 999.0
 	_player.global_position = Vector2(25 * TILE, 17 * TILE)   # well off to the side
-	var hanger := CrawlerEnemy.new()
+	var hanger: CrawlerEnemy = CRAWLER_SCENE.instantiate()
 	hanger.on_ceiling = true
 	hanger.position = Vector2(8.5 * TILE, CrawlerEnemy.SIZE.y * 0.5)   # under the room's top edge
 	_main.add_child(hanger)
@@ -1934,7 +1937,7 @@ func _test_ceiling_crawler() -> void:
 	hanger.queue_free()
 
 	# Hitting one on the ceiling knocks it down.
-	var knocked := CrawlerEnemy.new()
+	var knocked: CrawlerEnemy = CRAWLER_SCENE.instantiate()
 	knocked.on_ceiling = true
 	knocked.position = Vector2(5.5 * TILE, CrawlerEnemy.SIZE.y * 0.5)
 	_main.add_child(knocked)
@@ -2073,7 +2076,8 @@ func _build_editor_room() -> Room:
 	return room
 
 
-const CRAWLER_SCENE := preload("res://scenes/enemies/crawler.tscn")
+const CRAWLER_SCENE := preload("res://scenes/enemies/crawler_sewer.tscn")
+const PINK_CRAWLER_SCENE := preload("res://scenes/enemies/crawler_pink.tscn")
 const KNIGHT_SCENE := preload("res://scenes/enemies/knight.tscn")
 
 
@@ -2218,18 +2222,17 @@ func _place_enemy(scene: PackedScene, settings: Dictionary, at: Vector2) -> Enem
 
 
 func _test_enemy_inspector_settings() -> void:
-	print("Placed enemies keep their Inspector settings: fixed palette, kill heal, health")
+	print("Placed enemies keep their Inspector settings; crawler colours are ready-made scenes")
 	await _spawn()
 	await _remove_enemies()
 	var floor_y := 18 * TILE - CrawlerEnemy.SIZE.y * 0.5
-	var random_one: CrawlerEnemy = _place_enemy(CRAWLER_SCENE, {}, Vector2(5.5 * TILE, floor_y))
-	var pink: CrawlerEnemy = _place_enemy(CRAWLER_SCENE, {"palette": "pink"}, Vector2(9.5 * TILE, floor_y))
-	var tough: CrawlerEnemy = _place_enemy(CRAWLER_SCENE,
-			{"palette": "sewer", "heal_on_kill": 3, "max_health": 6}, Vector2(13.5 * TILE, floor_y))
+	var pink: CrawlerEnemy = _place_enemy(PINK_CRAWLER_SCENE, {}, Vector2(9.5 * TILE, floor_y))
+	var tough: CrawlerEnemy = _place_enemy(CRAWLER_SCENE, {"heal_on_kill": 3, "max_health": 6}, Vector2(13.5 * TILE, floor_y))
 	var knight: KnightEnemy = _place_enemy(KNIGHT_SCENE, {"heal_on_kill": 1}, Vector2(20.5 * TILE, 18 * TILE - KnightEnemy.SIZE.y * 0.5))
 	await _frames(2)
-	_check(random_one.palette in CrawlerEnemy.PALETTES, "left on random, it picked %s" % random_one.palette)
-	_check(pink.palette == "pink" and pink.kill_heal() == CrawlerEnemy.KILL_HEAL, "set to pink: stays pink, heals by default")
+	_check(pink.sprite == pink.get_node("Sprite") and pink.sprite.sprite_frames.resource_path.ends_with("crawler_pink_frames.tres"),
+			"the sprite comes with the scene, with its saved frames")
+	_check(pink is PinkCrawler and pink.kill_heal() == PinkCrawler.KILL_HEAL, "pink heals by default")
 	_check(tough.health == 6 and tough.kill_heal() == 3, "a sewer crawler set to heal 3, with 6 health")
 	_check(knight.health == 5 and knight.damage == 8 and knight.kill_heal() == 1, "a knight keeps its own defaults, set to heal 1")
 	var deaths := []

@@ -1,0 +1,18 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_crawler.gd" id="1_rdwdk"]
+[ext_resource type="SpriteFrames" path="res://art/sprites/crawler_sickly_frames.tres" id="2_mcsyv"]
+[ext_resource type="Script" path="res://scripts/crawler_sprite.gd" id="3_i6wst"]
+
+[node name="SicklyCrawler" type="CharacterBody2D" unique_id=566546517]
+script = ExtResource("1_rdwdk")
+slime_color = Color(0.3764706, 0.42352942, 0.08627451, 1)
+hit_recoil = 500.0
+
+[node name="Sprite" type="AnimatedSprite2D" parent="." unique_id=1831476746]
+texture_filter = 1
+position = Vector2(0, -4)
+sprite_frames = ExtResource("2_mcsyv")
+animation = &"walk"
+flip_h = true
+script = ExtResource("3_i6wst")

@@ -1,0 +1,18 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/crawler_pink.gd" id="1_yn5oa"]
+[ext_resource type="SpriteFrames" path="res://art/sprites/crawler_pink_frames.tres" id="2_yvfeo"]
+[ext_resource type="Script" path="res://scripts/crawler_sprite.gd" id="3_xfil0"]
+
+[node name="PinkCrawler" type="CharacterBody2D" unique_id=1678196816]
+script = ExtResource("1_yn5oa")
+slime_color = Color(0.8, 0.4392157, 0.59607846, 1)
+hit_recoil = 500.0
+
+[node name="Sprite" type="AnimatedSprite2D" parent="." unique_id=191070602]
+texture_filter = 1
+position = Vector2(0, -4)
+sprite_frames = ExtResource("2_yvfeo")
+animation = &"walk"
+flip_h = true
+script = ExtResource("3_xfil0")

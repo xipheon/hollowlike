@@ -1,0 +1,18 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_crawler.gd" id="1_yekdp"]
+[ext_resource type="SpriteFrames" path="res://art/sprites/crawler_sewer_frames.tres" id="2_84ms5"]
+[ext_resource type="Script" path="res://scripts/crawler_sprite.gd" id="3_k0u2o"]
+
+[node name="SewerCrawler" type="CharacterBody2D" unique_id=1046304201]
+script = ExtResource("1_yekdp")
+slime_color = Color(0.1764706, 0.16470589, 0.0627451, 1)
+hit_recoil = 500.0
+
+[node name="Sprite" type="AnimatedSprite2D" parent="." unique_id=197606893]
+texture_filter = 1
+position = Vector2(0, -4)
+sprite_frames = ExtResource("2_84ms5")
+animation = &"walk"
+flip_h = true
+script = ExtResource("3_k0u2o")

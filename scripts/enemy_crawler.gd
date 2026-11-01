@@ -1,41 +1,29 @@
 class_name CrawlerEnemy
 extends EnemyBase
-## Simple patrolling enemy: a blob of sewer sludge that oozes along, turns at
+## What every crawler shares: a blob of sewer sludge that oozes along, turns at
 ## walls and ledges, hurts on contact, and leaves a fading slime trail. It
-## melts into a puddle when killed. Comes in several palettes, random unless
-## set; pink ones heal the player when killed.
+## melts into a puddle when killed.
 ## A crawler can start on a ceiling instead (`on_ceiling`): it oozes along
 ## upside down, and when the player passes underneath it lets go, drops on
 ## them, and carries on as a floor crawler. Hitting it up there knocks it down.
-## Place scenes/enemies/crawler.tscn and set it up in the Inspector.
+## Each colour is its own scene, with its sprite already in it (built by
+## tools/make_crawler_scenes.gd): scenes/enemies/crawler_sewer.tscn,
+## crawler_sickly.tscn and crawler_pink.tscn (PinkCrawler, which heals you when
+## killed). Place one and set it up in the Inspector.
 
 const SIZE := Vector2(28, 24)
-## Pink crawlers heal the player this many half-hearts when killed; the others
-## don't (unless heal_on_kill is set).
-const HEALING_PALETTE := "pink"
-const KILL_HEAL := 2
-
-## Sheet per palette, drawn by tools/make_crawler_sheet.gd.
-const PALETTES := ["sewer", "sickly", "pink"]
-const SHEET_PATH := "res://art/sprites/crawler_%s.png"
-const FRAME := Vector2i(32, 32)
-## Sheet rows: [animation, frames, fps, loops], as in art/templates/SHEETS.md.
-const ROWS := [
-	["walk", 4, 8.0, true], ["turn", 2, 10.0, false], ["hurt", 2, 10.0, false], ["death", 5, 10.0, false],
-	["ceiling_walk", 4, 8.0, true], ["ceiling_turn", 2, 10.0, false], ["ceiling_hurt", 2, 10.0, false],
-	["ceiling_death", 5, 10.0, false], ["drop", 2, 8.0, true], ["land", 2, 10.0, false],
-]
+const FRAME := Vector2i(32, 32)   # sprite frame size, art/templates/SHEETS.md
 const FLASH := Color(2.5, 2.5, 2.5)   # brightens the sprite towards white when hit
 const TRAIL_SPACING := 10.0           # px travelled between slime drips
 ## Drops when the player is below it, at most this far to either side and this far down.
 const DROP_RANGE := Vector2(20, 12 * 32)
 
-## Which colours: one of PALETTES, or "random" to pick one when it spawns.
-@export_enum("random", "sewer", "sickly", "pink") var palette := "random"
 @export var speed := 70.0
 @export var gravity := 1800.0
 ## Start stuck to the ceiling above.
 @export var on_ceiling := false
+## The slime trail's colour (each colour's scene sets its own).
+@export var slime_color := Color.WHITE
 
 var sprite: AnimatedSprite2D
 var _dir := -1
@@ -44,7 +32,6 @@ var _turning := false
 var _dropping := false
 var _landing := false
 var _trail_distance := 0.0
-var _drip_color := Color.WHITE
 var _ledge_ray: RayCast2D
 
 
@@ -66,16 +53,10 @@ func _ready() -> void:
 	_ledge_ray.position = Vector2(_dir * 16, 0)
 	add_child(_ledge_ray)
 
-	if palette == "random":
-		palette = PALETTES.pick_random()
-	sprite = _make_sprite()
-	add_child(sprite)
+	sprite = $Sprite
+	sprite.animation_finished.connect(_on_animation_finished)
 	_set_surface(on_ceiling)
 	sprite.play(_anim("walk"))
-
-
-func default_kill_heal() -> int:
-	return KILL_HEAL if palette == HEALING_PALETTE else 0
 
 
 ## Which way is "down" for it: the ceiling or the floor. Its feet, the ledge
@@ -91,29 +72,6 @@ func _set_surface(ceiling: bool) -> void:
 ## An animation by its floor name, as the ceiling version when up there.
 func _anim(anim_name: String) -> String:
 	return "ceiling_" + anim_name if on_ceiling else anim_name
-
-
-## The animated sprite from this palette's sheet.
-func _make_sprite() -> AnimatedSprite2D:
-	var s := AnimatedSprite2D.new()
-	s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	var sheet: Texture2D = load(SHEET_PATH % palette)
-	_drip_color = sheet.get_image().get_pixel(FRAME.x / 2, FRAME.y - 2)   # the walk frame's body, low down
-	var frames := SpriteFrames.new()
-	frames.remove_animation("default")
-	for row in ROWS.size():
-		var r: Array = ROWS[row]
-		frames.add_animation(r[0])
-		frames.set_animation_speed(r[0], r[2])
-		frames.set_animation_loop(r[0], r[3])
-		for f in r[1]:
-			var atlas := AtlasTexture.new()
-			atlas.atlas = sheet
-			atlas.region = Rect2(Vector2(f, row) * Vector2(FRAME), Vector2(FRAME))
-			frames.add_frame(r[0], atlas)
-	s.sprite_frames = frames
-	s.animation_finished.connect(_on_animation_finished)
-	return s
 
 
 func _physics_process(delta: float) -> void:
@@ -218,6 +176,6 @@ func _update_sprite(flashing: bool) -> void:
 ## A small blob of sludge left on the floor behind it, fading out.
 func _drip() -> void:
 	var drip := SlimeDrip.new()
-	drip.color = _drip_color
+	drip.color = slime_color
 	drip.global_position = global_position + Vector2(-_dir * SIZE.x * 0.4, SIZE.y * 0.5)
 	get_parent().add_child(drip)

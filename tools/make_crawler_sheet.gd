@@ -3,7 +3,9 @@ extends SceneTree
 ## one sheet per palette (art/sprites/crawler_<palette>.png, the crawler layout
 ## in art/templates/SHEETS.md) and writes a preview. Nothing is generated: each
 ## frame is a dome-shaped height profile with a ripple travelling from back to
-## front, shaded from its surface down and outlined. Run from the project folder:
+## front, shaded from its surface down and outlined. Then run
+## tools/make_crawler_scenes.gd to rebuild the crawler scenes from the sheets.
+## Run from the project folder:
 ##   godot --headless --path . --script res://tools/make_crawler_sheet.gd
 
 const FRAME := 32
@@ -13,7 +15,7 @@ const SHEET_PATH := "res://art/sprites/crawler_%s.png"
 const PREVIEW_PATH := "res://art/sprites/source/crawler_preview.png"
 const PREVIEW_SCALE := 4
 
-## Colours per palette (the ids are CrawlerEnemy.PALETTES).
+## Colours per palette (each has its crawler scene; see tools/make_crawler_scenes.gd).
 const PALETTES := {
 	"sewer": {   # the sewer water's own colours
 		"outline": Color8(20, 18, 8), "dark": Color8(45, 42, 16), "body": Color8(76, 73, 0),

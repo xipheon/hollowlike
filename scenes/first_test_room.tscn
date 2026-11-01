@@ -4,7 +4,7 @@
 [ext_resource type="Script" uid="uid://cn6hkptll1fwr" path="res://scripts/skyline.gd" id="2_85g3d"]
 [ext_resource type="TileSet" uid="uid://00at4qbp0e2p" path="res://art/tiles/background_tileset.tres" id="3_choun"]
 [ext_resource type="TileSet" uid="uid://rm55alkb3j7e" path="res://art/tiles/foreground_tileset.tres" id="4_ya4ey"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/crawler.tscn" id="5_eb6dy"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/crawler_sewer.tscn" id="5_eb6dy"]
 [ext_resource type="Script" uid="uid://7l6ef5tfrino" path="res://scripts/player_start.gd" id="7_a8y0u"]
 [ext_resource type="Script" uid="uid://c0iiycufi7sln" path="res://scripts/room_door.gd" id="8_jkv2x"]
 [ext_resource type="PackedScene" path="res://scenes/props/moving_platform.tscn" id="8_tipki"]

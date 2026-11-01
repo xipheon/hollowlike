@@ -4,8 +4,7 @@
 [ext_resource type="Script" path="res://scripts/skyline.gd" id="2_fk6e8"]
 [ext_resource type="TileSet" path="res://art/tiles/background_tileset.tres" id="3_iwld0"]
 [ext_resource type="TileSet" path="res://art/tiles/foreground_tileset.tres" id="4_v3h64"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/crawler.tscn" id="5_q3tmi"]
-[ext_resource type="Script" path="res://scripts/enemy_crawler.gd" id="6_dsyu8"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/crawler_sewer.tscn" id="5_q3tmi"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/knight.tscn" id="7_3p6ex"]
 [ext_resource type="Script" path="res://scripts/enemy_knight.gd" id="8_8cs8p"]
 [ext_resource type="Script" path="res://scripts/player_start.gd" id="9_v8nrs"]
@@ -35,9 +34,8 @@ tile_set = ExtResource("4_v3h64")
 
 [node name="Entities" type="Node2D" parent="." unique_id=1882700712]
 
-[node name="CeilingCrawler" type="CharacterBody2D" parent="Entities" unique_id=1694696031 instance=ExtResource("5_q3tmi")]
+[node name="CeilingCrawler" parent="Entities" unique_id=1694696031 instance=ExtResource("5_q3tmi")]
 position = Vector2(624, 172)
-script = ExtResource("6_dsyu8")
 on_ceiling = true
 
 [node name="Knight" type="CharacterBody2D" parent="Entities" unique_id=642904087 instance=ExtResource("7_3p6ex")]

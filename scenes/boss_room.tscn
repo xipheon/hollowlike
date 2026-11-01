@@ -7,8 +7,7 @@
 [ext_resource type="PackedScene" path="res://scenes/bosses/warden.tscn" id="5_c7j7s"]
 [ext_resource type="Script" path="res://scripts/boss_warden.gd" id="6_4e86d"]
 [ext_resource type="Script" path="res://scripts/arena.gd" id="7_xmdvo"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/crawler.tscn" id="8_okx5s"]
-[ext_resource type="Script" path="res://scripts/enemy_crawler.gd" id="9_rrfgo"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/crawler_sewer.tscn" id="8_okx5s"]
 [ext_resource type="Script" path="res://scripts/player_start.gd" id="10_v502q"]
 [ext_resource type="Script" path="res://scripts/room_door.gd" id="11_d53cq"]
 
@@ -47,13 +46,11 @@ script = ExtResource("7_xmdvo")
 size_tiles = Vector2i(28, 11)
 boss = NodePath("../Warden")
 
-[node name="Crawler" type="CharacterBody2D" parent="Entities" unique_id=1387159146 instance=ExtResource("8_okx5s")]
+[node name="Crawler" parent="Entities" unique_id=1387159146 instance=ExtResource("8_okx5s")]
 position = Vector2(112, 756)
-script = ExtResource("9_rrfgo")
 
-[node name="CeilingCrawler" type="CharacterBody2D" parent="Entities" unique_id=1939459662 instance=ExtResource("8_okx5s")]
+[node name="CeilingCrawler" parent="Entities" unique_id=1939459662 instance=ExtResource("8_okx5s")]
 position = Vector2(1008, 780)
-script = ExtResource("9_rrfgo")
 on_ceiling = true
 
 [node name="PlayerStart" type="Node2D" parent="Entities" unique_id=69818486]
