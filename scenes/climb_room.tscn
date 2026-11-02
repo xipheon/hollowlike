@@ -69,3 +69,6 @@ target_room = "aerie"
 [node name="PinkCrawler" parent="Entities" unique_id=1678196816 instance=ExtResource("9_bxhul")]
 position = Vector2(698, 1191)
 on_ceiling = true
+
+[node name="Thug" parent="." unique_id=465414929 instance=ExtResource("7_3p6ex")]
+position = Vector2(293, 1384)

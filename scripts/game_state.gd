@@ -88,9 +88,12 @@ func start_new_game() -> void:
 	start_at_room("first_test_room")
 
 
-## Wipe progress and load any room at its PlayerStart (level select).
-func start_at_room(room: String) -> void:
+## Wipe progress and load any room at its PlayerStart (level select), with
+## the starting abilities plus any in `unlocked` (a LevelButton's abilities).
+func start_at_room(room: String, unlocked: Array = []) -> void:
 	abilities = STARTING_ABILITIES.duplicate()
+	for ability in unlocked:
+		abilities[ability] = true
 	bosses_defeated = {}
 	carried_health = -1
 	_fade_to_scene(LevelData.ROOMS[room].scene, "")

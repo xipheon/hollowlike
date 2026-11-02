@@ -16,6 +16,7 @@ extends Node2D
 ## "~" sewer water, "|" gate, ">" door). Does nothing while editing.
 
 const TILE := 32
+const PAUSE_MENU_SCENE := preload("res://scenes/ui/pause_menu.tscn")
 const LAYER_WORLD := 1
 const LAYER_PLATFORMS := 32
 const SPIKE_HEIGHT := 24.0   # damage area: the bottom of the tile, up to the spike tips
@@ -88,7 +89,7 @@ func _ready() -> void:
 	add_child(_hud)
 	_hud.bind_player(_player)
 	_player.died.connect(_on_player_died)
-	add_child(PauseMenu.new())
+	add_child(PAUSE_MENU_SCENE.instantiate())
 
 
 func _physics_process(_delta: float) -> void:

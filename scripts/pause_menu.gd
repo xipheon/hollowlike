@@ -2,90 +2,47 @@ class_name PauseMenu
 extends CanvasLayer
 ## Esc / P / Start pauses: Resume, pick a Skin, Quit back to the main menu, or
 ## Quit the game. Also lists the controls. Won't open while something else
-## (the boss intro) already has the game paused.
+## (the boss intro) already has the game paused. Laid out in
+## scenes/ui/pause_menu.tscn; edit it there (the room adds it to itself).
+## The skin list is made from PlayerSprite.SKINS: one copy of SkinTemplate,
+## the styled button in the scene, per skin.
 
-const CONTROLS_TEXT := "Move: A/D or arrows · left stick / d-pad\n" \
-	+ "Jump: Space/Z · A   (hold = higher)\n" \
-	+ "Attack: J/X · X   (hold Up / Down-in-air to aim)\n" \
-	+ "Sprint: Shift · LT   (uses stamina)\n" \
-	+ "Dash: K/C · RB/B   (uses stamina)\n" \
-	+ "Pause: Esc/P · Start      Restart: R"
 const DEBUG_CONTROLS_TEXT := "\nDebug: F1 = dash, F2 = wall jump, F3 = kill boss"
-
 const SKIN_MARK := "▶  "   # in front of the skin being worn
 
-var _panel: Control
-var _main_box: VBoxContainer
-var _skin_box: VBoxContainer
-var _resume_button: Button
-var _skin_button: Button
-var _quit_game_button: Button
-var _kill_boss_button: Button
+@onready var _panel: Control = %Panel
+@onready var _main_box: Control = %MainBox
+@onready var _skin_box: Control = %SkinBox
+@onready var _resume_button: Button = %ResumeButton
+@onready var _skin_button: Button = %SkinButton
+@onready var _quit_game_button: Button = %QuitGameButton
+## Debug mode only, and only in a room with a living boss (see open()).
+@onready var _kill_boss_button: Button = %KillBossButton
 ## One button per PlayerSprite.SKINS entry, keyed by skin id.
 var _skin_buttons := {}
 
 
 func _ready() -> void:
-	layer = 50
-	process_mode = Node.PROCESS_MODE_ALWAYS
+	_panel.visible = false   # shown in the editor, hidden until paused
+	_resume_button.pressed.connect(close)
+	_skin_button.pressed.connect(show_skins)
+	%QuitToMenuButton.pressed.connect(func() -> void: GameState.return_to_menu())
+	_quit_game_button.pressed.connect(func() -> void: get_tree().quit())
+	_kill_boss_button.pressed.connect(_debug_kill_boss)
+	%SkinBackButton.pressed.connect(show_main)
+	if GameState.debug_mode:
+		%Controls.text += DEBUG_CONTROLS_TEXT
 
-	_panel = ColorRect.new()
-	(_panel as ColorRect).color = Color(0, 0, 0, 0.6)
-	_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(_panel)
-
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_panel.add_child(center)
-	var box := _add_box(center, "PAUSED")
-	_main_box = box
-
-	_resume_button = _add_button(box, "Resume", close)
-	_skin_button = _add_button(box, "Skin", show_skins)
-	_add_button(box, "Quit to Menu", func() -> void: GameState.return_to_menu())
-	_quit_game_button = _add_button(box, "Quit Game", func() -> void: get_tree().quit())
-	# Debug mode only, and only in a room with a living boss (see open()).
-	_kill_boss_button = _add_button(box, "Debug: Kill Boss", _debug_kill_boss)
-	_kill_boss_button.modulate = Color(1.0, 0.6, 0.6)
-
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 16)
-	box.add_child(spacer)
-
-	var controls := Label.new()
-	controls.text = CONTROLS_TEXT + (DEBUG_CONTROLS_TEXT if GameState.debug_mode else "")
-	controls.add_theme_font_size_override("font_size", 13)
-	controls.modulate = Color(1, 1, 1, 0.6)
-	box.add_child(controls)
-
-	_skin_box = _add_box(center, "SKIN")
+	var template: Button = %SkinTemplate
 	for s in PlayerSprite.SKINS:
-		_skin_buttons[s.id] = _add_button(_skin_box, s.name, func() -> void: _pick_skin(s.id))
-	_add_button(_skin_box, "Back", show_main)
-	_skin_box.visible = false
-
-	_panel.visible = false
-
-
-func _add_box(parent: Control, title_text: String) -> VBoxContainer:
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
-	parent.add_child(box)
-	var title := Label.new()
-	title.text = title_text
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 32)
-	box.add_child(title)
-	return box
-
-
-func _add_button(box: Container, text: String, on_press: Callable) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(220, 40)
-	button.pressed.connect(on_press)
-	box.add_child(button)
-	return button
+		var button := template.duplicate() as Button
+		button.name = "Skin_" + s.id
+		button.pressed.connect(func() -> void: _pick_skin(s.id))
+		template.add_sibling(button)
+		_skin_buttons[s.id] = button
+	template.get_parent().remove_child(template)
+	template.queue_free()
+	_refresh_skin_marks()
 
 
 func is_open() -> bool:

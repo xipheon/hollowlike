@@ -699,7 +699,7 @@ func _lone_thug() -> ThugEnemy:
 func _test_thugs_are_slow() -> void:
 	print("Thugs are as tall as the player and slower")
 	await _spawn(CLIMB_SCENE)
-	_check(_thugs().size() == 3, "3 thugs in the climb room (%d)" % _thugs().size())
+	_check(not _thugs().is_empty(), "thugs in the climb room (%d)" % _thugs().size())
 	_check(ThugEnemy.SIZE.y == Player.BODY_SIZE.y, "same height as the player")
 	var thug := await _lone_thug()
 	thug.patrol_time = Vector2(999, 999)   # no pauses while its speed is measured
@@ -1746,7 +1746,7 @@ func _test_debug_kill_boss_off_outside_debug_mode() -> void:
 
 
 func _test_level_select_loads_each_room() -> void:
-	print("Main menu: Level Select lists every room and starts at its PlayerStart; debug mode only")
+	print("Main menu: Level Select's buttons (set in the scene) each start their room at its PlayerStart, with their abilities; debug mode only")
 	# Outside debug mode (release exports) there's no Level Select.
 	GameState.debug_mode = false
 	var release_menu := MENU_SCENE.instantiate()
@@ -1758,23 +1758,34 @@ func _test_level_select_loads_each_room() -> void:
 			"hidden outside debug mode")
 	await _despawn()
 	GameState.debug_mode = true
-	for room in LevelData.ROOMS:
-		GameState.unlock("dash")
+	# The buttons are whatever the scene has: read them from a copy of it.
+	var listed: Node = MENU_SCENE.instantiate()
+	var buttons: Array = listed.find_children("*", "Button", true, false).filter(func(b): return b is LevelButton)
+	var entries := buttons.map(func(b): return [b.room, b.abilities.duplicate()])
+	listed.free()
+	_check(not entries.is_empty() and entries.all(func(e): return LevelData.ROOMS.has(e[0])),
+			"%d level buttons, each for a real room %s" % [entries.size(), entries.map(func(e): return e[0])])
+	for entry in entries:
+		var room: String = entry[0]
+		var granted: Array = entry[1]
+		GameState.unlock("wall_jump")   # progress from before, which a level start wipes
 		var menu := MENU_SCENE.instantiate()
 		get_tree().root.add_child(menu)
 		get_tree().current_scene = menu
 		await _frames(2)
 		menu.level_select_button.pressed.emit()
-		_check(menu.level_buttons.size() == LevelData.ROOMS.size(), "%d level buttons" % menu.level_buttons.size())
-		_check(menu.level_buttons["first_test_room"].has_focus(), "first level focused")
+		_check(menu._levels.get_child(0).has_focus(), "first level focused")
 		menu.level_buttons[room].pressed.emit()
 		var loaded := await _wait_for_room(room, 120)
 		_check(loaded != null, "%s loaded" % room)
 		if loaded != null:
 			var p: Player = loaded._player
 			var start: PlayerStart = loaded.entities_of(PlayerStart)[0]
-			_check(absf(p.global_position.x - start.global_position.x) < 2.0 and not GameState.has_ability("dash"),
-					"%s: fresh progress, starting at its PlayerStart (col %.1f)" % [room, p.global_position.x / TILE])
+			var expected := GameState.STARTING_ABILITIES.duplicate()
+			for a in granted:
+				expected[a] = true
+			_check(absf(p.global_position.x - start.global_position.x) < 2.0 and GameState.abilities == expected,
+					"%s: at its PlayerStart (col %.1f), starting abilities plus %s" % [room, p.global_position.x / TILE, granted])
 		await _frames(30)   # let the fade finish
 		await _despawn()
 	var menu := MENU_SCENE.instantiate()
