@@ -89,6 +89,7 @@ const SEGMENTS := {
 	# NPC dialogue: lines, conversations and the progress states that pick them (dialogue_*.gd).
 	"dialogue": [
 		"_test_dialogue_states", "_test_npc_talk", "_test_attack_still_swings_near_npc",
+		"_test_guard_art", "_test_guard_talks",
 	],
 	# Pause menu, main menu, level select, debug tools.
 	"menus": [
@@ -3623,4 +3624,75 @@ func _test_attack_still_swings_near_npc() -> void:
 	_check(not _player.is_on_floor(), "in the air beside it")
 	await _tap_attack()
 	_check(_player._attack_timer > 0.0 and not box.is_open(), "in the air: a swing, not a talk")
+	await _despawn()
+
+
+func _test_guard_art() -> void:
+	print("The security guard is the thug with his T-shirt navy: nothing else changed")
+	var thug := (load("res://art/sprites/thug.png") as Texture2D).get_image()
+	var guard := (load("res://art/sprites/guard.png") as Texture2D).get_image()
+	thug.convert(Image.FORMAT_RGBA8)
+	guard.convert(Image.FORMAT_RGBA8)
+	var tool: Dictionary = load("res://tools/make_guard_sheet.gd").get_script_constant_map()
+	var shirt := 0
+	var wrong := []
+	for y in thug.get_height():
+		for x in thug.get_width():
+			var was := thug.get_pixel(x, y)
+			var now := guard.get_pixel(x, y)
+			if was.is_equal_approx(now) or (was.a == 0.0 and now.a == 0.0):
+				continue   # unchanged, or invisible (the import tints see-through pixels by their neighbours)
+			shirt += 1
+			var row: int = y % tool.FRAME.y
+			var navy: bool = absf(now.h - tool.NAVY_HUE) < 0.02 and now.s > 0.5 and now.v < 0.55
+			if row < tool.TORSO_ROWS.x or row > tool.TORSO_ROWS.y or was.s > tool.SHIRT_MAX_SATURATION or not navy:
+				wrong.append(Vector2i(x, y))
+	_check(guard.get_size() == thug.get_size() and shirt > 300 and wrong.is_empty(),
+			"%d shirt pixels navy, nothing else touched%s" % [shirt, "" if wrong.is_empty() else ", but %d others (%s)" % [wrong.size(), wrong[0]]])
+
+
+func _test_guard_talks() -> void:
+	print("The guard, in the first test room: a warning before the Warden, thanks and a Harrier warning after, then quiet; never gives anything")
+	await _spawn()
+	var guards: Array = _main.entities_of(NPC).filter(func(n): return n.npc_id == "guard")
+	_check(guards.size() == 1, "he's in the first test room")
+	if guards.is_empty():
+		await _despawn()
+		return
+	var guard: NPC = guards[0]
+	_check(guard.name_key == "NPC_GUARD" and tr(guard.name_key) == "Security Guard"
+			and guard.sprite.sprite_frames == load("res://art/sprites/guard_frames.tres"), "the Security Guard, in his navy shirt")
+	var gifts := 0
+	for s in guard.states:
+		for talk in [s.first_talk, s.repeat_talk]:
+			for l in talk.lines:
+				if l.give_ability != "":
+					gifts += 1
+	_check(gifts == 0, "he gives nothing")
+	var opening := func() -> String:
+		var d: Dialogue = DialogueState.pick(guard.states, "guard")
+		return d.lines[0].text
+	GameState.flags = {}
+	_check(opening.call() == "DLG_GUARD_BEFORE_1", "before the Warden: his warning (%s)" % opening.call())
+	GameState.set_flag("warden_defeated")
+	var after_warden: Dialogue = DialogueState.pick(guard.states, "guard")
+	var said: Array = after_warden.lines.map(func(l): return tr(l.text))
+	_check(said[0].contains("thank you") and said.any(func(s): return s.contains("rafters")),
+			"after the Warden: thanks, and a warning about the Harrier's rafters")
+	GameState.set_flag("harrier_defeated")
+	_check(opening.call() == "DLG_GUARD_AFTER_HARRIER_1", "after the Harrier: something new (%s)" % opening.call())
+	GameState.flags = {}
+	# And for real: walk up to him and talk.
+	_player.global_position = guard.global_position + Vector2(-30, -Player.BODY_SIZE.y * 0.5)
+	_player.velocity = Vector2.ZERO
+	await _frames(6)
+	var box: DialogueBox = _main.get_children().filter(func(c): return c is DialogueBox)[0]
+	await _tap_attack()
+	_check(box.is_open() and box._text.text == tr("DLG_GUARD_BEFORE_1") and box._name.text == "Security Guard", "talking to him in the room opens his warning")
+	for i in 12:
+		if not box.is_open():
+			break
+		await _tap_attack()
+	await _frames(3)
+	_check(not box.is_open() and not get_tree().paused and GameState.has_flag("talked_guard_before"), "and ends, remembered")
 	await _despawn()

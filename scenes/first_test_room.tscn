@@ -10,6 +10,7 @@
 [ext_resource type="PackedScene" path="res://scenes/props/moving_platform.tscn" id="8_tipki"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/crawler_sickly.tscn" id="9_ofw6u"]
 [ext_resource type="TileSet" uid="uid://d4ew55mdk4v5b" path="res://art/tiles/props_tileset.tres" id="props_tiles"]
+[ext_resource type="PackedScene" path="res://scenes/npcs/guard.tscn" id="guard_npc"]
 
 [node name="FirstTestRoom" type="Node2D" unique_id=2075219856]
 script = ExtResource("1_tipki")
@@ -68,6 +69,9 @@ position = Vector2(880, 564)
 
 [node name="Crawler5" parent="Entities" unique_id=1464113161 instance=ExtResource("5_eb6dy")]
 position = Vector2(1360, 564)
+
+[node name="Guard" parent="Entities" unique_id=2022706780 instance=ExtResource("guard_npc")]
+position = Vector2(400, 576)
 
 [node name="RightDoor" type="Node2D" parent="Entities" unique_id=939832536]
 position = Vector2(3360, 288)

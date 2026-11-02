@@ -1,0 +1,105 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/npcs/npc.tscn" id="1_npc"]
+[ext_resource type="SpriteFrames" path="res://art/sprites/guard_frames.tres" id="2_frames"]
+[ext_resource type="Script" path="res://scripts/dialogue_line.gd" id="3_line"]
+[ext_resource type="Script" path="res://scripts/dialogue.gd" id="4_talk"]
+[ext_resource type="Script" path="res://scripts/dialogue_state.gd" id="5_state"]
+
+[sub_resource type="Resource" id="after_harrier_first_0"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_AFTER_HARRIER_1"
+
+[sub_resource type="Resource" id="after_harrier_first_1"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_AFTER_HARRIER_2"
+
+[sub_resource type="Resource" id="after_harrier_first"]
+script = ExtResource("4_talk")
+lines = Array[ExtResource("3_line")]([SubResource("after_harrier_first_0"), SubResource("after_harrier_first_1")])
+
+[sub_resource type="Resource" id="after_harrier_repeat_0"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_AFTER_HARRIER_AGAIN"
+
+[sub_resource type="Resource" id="after_harrier_repeat"]
+script = ExtResource("4_talk")
+lines = Array[ExtResource("3_line")]([SubResource("after_harrier_repeat_0")])
+
+[sub_resource type="Resource" id="after_harrier"]
+script = ExtResource("5_state")
+name = "after_harrier"
+requires = Array[String](["warden_defeated", "harrier_defeated"])
+first_talk = SubResource("after_harrier_first")
+repeat_talk = SubResource("after_harrier_repeat")
+
+[sub_resource type="Resource" id="after_warden_first_0"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_AFTER_WARDEN_1"
+
+[sub_resource type="Resource" id="after_warden_first_1"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_AFTER_WARDEN_2"
+
+[sub_resource type="Resource" id="after_warden_first_2"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_AFTER_WARDEN_3"
+
+[sub_resource type="Resource" id="after_warden_first"]
+script = ExtResource("4_talk")
+lines = Array[ExtResource("3_line")]([SubResource("after_warden_first_0"), SubResource("after_warden_first_1"), SubResource("after_warden_first_2")])
+
+[sub_resource type="Resource" id="after_warden_repeat_0"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_AFTER_WARDEN_AGAIN"
+
+[sub_resource type="Resource" id="after_warden_repeat"]
+script = ExtResource("4_talk")
+lines = Array[ExtResource("3_line")]([SubResource("after_warden_repeat_0")])
+
+[sub_resource type="Resource" id="after_warden"]
+script = ExtResource("5_state")
+name = "after_warden"
+requires = Array[String](["warden_defeated"])
+first_talk = SubResource("after_warden_first")
+repeat_talk = SubResource("after_warden_repeat")
+
+[sub_resource type="Resource" id="before_first_0"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_BEFORE_1"
+
+[sub_resource type="Resource" id="before_first_1"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_BEFORE_2"
+
+[sub_resource type="Resource" id="before_first_2"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_BEFORE_3"
+
+[sub_resource type="Resource" id="before_first"]
+script = ExtResource("4_talk")
+lines = Array[ExtResource("3_line")]([SubResource("before_first_0"), SubResource("before_first_1"), SubResource("before_first_2")])
+
+[sub_resource type="Resource" id="before_repeat_0"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_BEFORE_AGAIN"
+
+[sub_resource type="Resource" id="before_repeat"]
+script = ExtResource("4_talk")
+lines = Array[ExtResource("3_line")]([SubResource("before_repeat_0")])
+
+[sub_resource type="Resource" id="before"]
+script = ExtResource("5_state")
+name = "before"
+requires = Array[String]([])
+first_talk = SubResource("before_first")
+repeat_talk = SubResource("before_repeat")
+
+[node name="Guard" instance=ExtResource("1_npc")]
+npc_id = "guard"
+name_key = "NPC_GUARD"
+states = Array[ExtResource("5_state")]([SubResource("after_harrier"), SubResource("after_warden"), SubResource("before")])
+
+[node name="Sprite" parent="." index="0"]
+sprite_frames = ExtResource("2_frames")
+animation = &"idle"
