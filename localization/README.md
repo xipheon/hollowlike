@@ -7,7 +7,7 @@ natively: one folder per language, one file per feature.
 localization/
   en/
     ui.po        menus, HUD, boss / ability / skin names
-    dialog.po    (later) character dialog
+    dialog.po    character dialogue: lines (DLG_) and names (NPC_)
   fr/
     ui.po
     ...
@@ -21,7 +21,7 @@ msgid "UI_MENU_START"
 msgstr "Start"
 ```
 
-Keys start with their feature (`UI_`, later `DLG_` for dialog), so files never
+Keys start with their feature (`UI_`; `DLG_` and `NPC_` for dialogue), so files never
 clash. Keep `{named}` placeholders as they are; they can move anywhere in the
 sentence. Poedit (free) or any text editor can edit these files.
 

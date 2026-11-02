@@ -84,6 +84,11 @@ const SEGMENTS := {
 	# Translations: localization/<language>/<feature>.po, keys in use, switching language (game_state.gd).
 	"localization": [
 		"_test_translation_files_registered", "_test_every_key_has_english", "_test_language_switch",
+		"_test_dialog_file_keys",
+	],
+	# NPC dialogue: lines, conversations and the progress states that pick them (dialogue_*.gd).
+	"dialogue": [
+		"_test_dialogue_states",
 	],
 	# Pause menu, main menu, level select, debug tools.
 	"menus": [
@@ -3292,11 +3297,11 @@ func _test_translation_files_registered() -> void:
 
 
 func _test_every_key_has_english() -> void:
-	print("Localization: every UI_ key the scenes and scripts use has English text")
+	print("Localization: every UI_, DLG_ and NPC_ key the scenes, scripts and resources use has English text")
 	TranslationServer.set_locale("en")
-	var key := RegEx.create_from_string("\"(UI_[A-Z0-9_]*[A-Z0-9])\"")
+	var key := RegEx.create_from_string("\"((?:UI|DLG|NPC)_[A-Z0-9_]*[A-Z0-9])\"")
 	var used := {}
-	for path in _files_under("res://scenes", ".tscn") + _files_under("res://scripts", ".gd"):
+	for path in _files_under("res://scenes", ".tscn") + _files_under("res://scripts", ".gd") + _files_under("res://art", ".tres"):
 		for m in key.search_all(FileAccess.get_file_as_string(path)):
 			used[m.get_string(1)] = path
 	for ability in GameState.STARTING_ABILITIES:   # built in code: GameState.ability_name()
@@ -3304,6 +3309,16 @@ func _test_every_key_has_english() -> void:
 	var untranslated := used.keys().filter(func(k): return TranslationServer.translate(k) == k)
 	_check(used.size() > 20 and untranslated.is_empty(), "%d keys in use%s" % [used.size(),
 			"" if untranslated.is_empty() else "; no English for %s" % [untranslated.map(func(k): return "%s (%s)" % [k, used[k].get_file()])]])
+
+
+func _test_dialog_file_keys() -> void:
+	print("Localization: dialog.po holds only dialogue keys (DLG_ lines, NPC_ names), each with English text")
+	var translation := load("res://localization/en/dialog.po") as Translation
+	var keys := Array(translation.get_message_list()).filter(func(k): return k != "")
+	var stray := keys.filter(func(k): return not (k.begins_with("DLG_") or k.begins_with("NPC_")))
+	var empty := keys.filter(func(k): return translation.get_message(k) == "")
+	_check(not keys.is_empty() and stray.is_empty() and empty.is_empty(),
+			"%d keys%s%s" % [keys.size(), "" if stray.is_empty() else "; not dialogue: %s" % [stray], "" if empty.is_empty() else "; no text: %s" % [empty]])
 
 
 func _test_language_switch() -> void:
@@ -3451,3 +3466,55 @@ func _test_thug_punch_reach() -> void:
 	_player.global_position.x -= thug._dir * 4.0
 	_check(thug.in_punch_reach(_player), "2 px inside it is in")
 	await _despawn()
+
+
+## A conversation of lines saying `keys`.
+func _talk(keys: Array) -> Dialogue:
+	var dialogue := Dialogue.new()
+	for k in keys:
+		var line := DialogueLine.new()
+		line.text = k
+		dialogue.lines.append(line)
+	return dialogue
+
+
+func _test_dialogue_states() -> void:
+	print("Dialogue states: an NPC says the first state that applies; its first talk once, then its repeat talk")
+	GameState.flags = {}
+	var before := DialogueState.new()
+	before.name = "before"
+	before.forbids = ["warden_defeated"]
+	before.first_talk = _talk(["DLG_GUARD_BEFORE_1", "DLG_GUARD_BEFORE_2"])
+	before.repeat_talk = _talk(["DLG_GUARD_BEFORE_AGAIN"])
+	var after_warden := DialogueState.new()
+	after_warden.name = "after_warden"
+	after_warden.requires = ["warden_defeated"]
+	after_warden.first_talk = _talk(["DLG_GUARD_AFTER_WARDEN_1"])
+	after_warden.repeat_talk = _talk(["DLG_GUARD_AFTER_WARDEN_AGAIN"])
+	var after_harrier := DialogueState.new()
+	after_harrier.name = "after_harrier"
+	after_harrier.requires = ["warden_defeated", "harrier_defeated"]
+	after_harrier.first_talk = _talk(["DLG_GUARD_AFTER_HARRIER_1"])   # no repeat: says it again
+	var states: Array[DialogueState] = [after_harrier, after_warden, before]
+	var says := func() -> String:
+		var d := DialogueState.pick(states, "guard")
+		return d.lines[0].text if d != null else "nothing"
+	_check(says.call() == "DLG_GUARD_BEFORE_1", "first meeting: the first talk (%s)" % says.call())
+	_check(says.call() == "DLG_GUARD_BEFORE_1", "picking doesn't count as hearing it")
+	DialogueState.heard(states, "guard")
+	_check(says.call() == "DLG_GUARD_BEFORE_AGAIN" and GameState.has_flag("talked_guard_before"), "once heard, the repeat talk (%s)" % says.call())
+	GameState.set_flag("warden_defeated")
+	_check(says.call() == "DLG_GUARD_AFTER_WARDEN_1", "after the Warden: that state's first talk (%s)" % says.call())
+	DialogueState.heard(states, "guard")
+	_check(says.call() == "DLG_GUARD_AFTER_WARDEN_AGAIN", "then its repeat (%s)" % says.call())
+	GameState.set_flag("harrier_defeated")
+	DialogueState.heard(states, "guard")
+	_check(says.call() == "DLG_GUARD_AFTER_HARRIER_1", "a state with no repeat talk says its first again (%s)" % says.call())
+	_check(DialogueState.pick(states, "someone_else") != null and not GameState.has_flag("talked_someone_else_after_harrier"),
+			"each NPC remembers for itself")
+	var only_before: Array[DialogueState] = [before]
+	_check(DialogueState.pick(only_before, "guard") == null, "nothing applies: nothing to say")
+	var line := DialogueLine.new()
+	var prop: Array = line.get_property_list().filter(func(p): return p.name == "give_ability")
+	_check(prop.size() == 1 and prop[0].hint == PROPERTY_HINT_ENUM and "dash" in prop[0].hint_string.split(","), "a line can give an ability, picked from a list")
+	GameState.flags = {}

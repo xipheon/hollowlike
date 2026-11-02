@@ -38,7 +38,7 @@ project/assembly_name="Hollowlike Prototype"
 
 [internationalization]
 
-locale/translations=PackedStringArray("res://localization/en/ui.po")
+locale/translations=PackedStringArray("res://localization/en/ui.po", "res://localization/en/dialog.po")
 
 [layer_names]
 

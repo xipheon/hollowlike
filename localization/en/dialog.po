@@ -1,0 +1,56 @@
+# Hollowlike: character dialogue, English.
+# One file per language and feature: localization/<language>/<feature>.po.
+# Lines start DLG_<CHARACTER>_, names NPC_. msgstr is the text shown; each
+# line fills the dialogue box, so keep it to a sentence or two. See
+# localization/README.md.
+msgid ""
+msgstr ""
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Names on the dialogue box's name plate.
+msgid "NPC_GUARD"
+msgstr "Security Guard"
+
+#. The security guard, before you've beaten the Warden. Night shift, nervous,
+#. stuck at his post near the start. The "loading bay" is the Warden's arena.
+msgid "DLG_GUARD_BEFORE_1"
+msgstr "Whoa, easy there. Didn't think anyone still came down here."
+
+msgid "DLG_GUARD_BEFORE_2"
+msgstr "Night shift's been quiet since the lights went out. Too quiet."
+
+msgid "DLG_GUARD_BEFORE_3"
+msgstr "Something's holed up in the old loading bay past the shutter. Big. Armoured. I'd turn back if I were you."
+
+#. The guard, before the Warden, on every later visit.
+msgid "DLG_GUARD_BEFORE_AGAIN"
+msgstr "Still here? That thing in the loading bay isn't going anywhere. Neither am I."
+
+#. The guard, after you've beaten the Warden: thanks, and a warning about the
+#. Harrier, which nests high up past the climb.
+msgid "DLG_GUARD_AFTER_WARDEN_1"
+msgstr "You took that thing down? I... thank you. Really."
+
+msgid "DLG_GUARD_AFTER_WARDEN_2"
+msgstr "But listen. Up past the climb, something's nesting in the rafters. Feathers like knives."
+
+msgid "DLG_GUARD_AFTER_WARDEN_3"
+msgstr "It sees you long before you see it. Keep moving, and watch the sky."
+
+#. The guard, after the Warden, on every later visit.
+msgid "DLG_GUARD_AFTER_WARDEN_AGAIN"
+msgstr "Thanks again. And mind the rafters."
+
+#. The guard, after you've beaten the Harrier too.
+msgid "DLG_GUARD_AFTER_HARRIER_1"
+msgstr "Both of them? You're something else."
+
+msgid "DLG_GUARD_AFTER_HARRIER_2"
+msgstr "Maybe I'll finally get some quiet on this shift."
+
+#. The guard, after the Harrier, on every later visit.
+msgid "DLG_GUARD_AFTER_HARRIER_AGAIN"
+msgstr "Quiet nights from here on. I hope."
