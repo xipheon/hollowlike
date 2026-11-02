@@ -76,7 +76,10 @@ const RECOIL_MOSTLY := 0.5   # a recoil pointing this far up refreshes air moves
 @export var wall_jump_lock_time := 0.15
 
 @export_group("Combat")
-@export var max_health := 10   ## in half-hearts (10 = 5 hearts)
+## In half-hearts (10 = 5 hearts), before items: Heart Containers add to it
+## (GameState.max_health_bonus()).
+@export var max_health := 10
+## Before items: a Strong Pipe adds to it (GameState.damage_bonus()).
 @export var attack_damage := 1
 @export var attack_duration := 0.12
 @export var attack_cooldown := 0.26
@@ -150,6 +153,8 @@ var _double_jump_anim_timer := 0.0
 var _attack_anim_timer := 0.0
 var _attack_anim := ""
 var _attack_anim_restart := false
+var _base_max_health := 0     # max_health and attack_damage as set, before items
+var _base_attack_damage := 0
 
 
 func _ready() -> void:
@@ -158,7 +163,11 @@ func _ready() -> void:
 	collision_mask = LAYER_GROUND
 	floor_snap_length = 6.0
 	platform_on_leave = PLATFORM_ON_LEAVE_DO_NOTHING   # _carry_platform_momentum() does it
-	health =GameState.take_carried_health(max_health)
+	_base_max_health = max_health
+	_base_attack_damage = attack_damage
+	_apply_items()
+	GameState.item_received.connect(_on_item_received)
+	health = GameState.take_carried_health(max_health)
 	stamina = max_stamina
 	last_safe_position = global_position
 
@@ -643,6 +652,20 @@ static func damage_of(area: Area2D) -> int:
 func reduce_damage(amount: int) -> int:
 	var after_flat := maxi(amount - armor_flat, 0)
 	return roundi(after_flat * (1.0 - clampf(armor_percent, 0.0, 1.0)))
+
+
+## Most health and attack damage: as set, plus what your items add.
+func _apply_items() -> void:
+	max_health = _base_max_health + GameState.max_health_bonus()
+	attack_damage = _base_attack_damage + GameState.damage_bonus()
+
+
+## A new item: its bonuses apply at once, and a new heart comes full.
+func _on_item_received(item: Item) -> void:
+	_apply_items()
+	if item.max_health_bonus > 0 and not _dead:
+		health = mini(health + item.max_health_bonus, max_health)
+	health_changed.emit(health, max_health)
 
 
 func heal(amount: int) -> void:

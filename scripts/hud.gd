@@ -81,6 +81,7 @@ func _ready() -> void:
 	hide_boss()
 
 	GameState.ability_unlocked.connect(_on_ability_unlocked)
+	GameState.item_received.connect(_on_item_received)
 	_refresh_abilities()
 
 
@@ -180,6 +181,17 @@ func _on_stamina_changed(current: float, maximum: float) -> void:
 func _on_ability_unlocked(ability: String) -> void:
 	_refresh_abilities()
 	show_message(tr("UI_HUD_UNLOCKED").format({"ability": GameState.ability_name(ability)}))
+
+
+## What you got, and what it does (after any ability it unlocked, which it
+## replaces). Not for a gift in a conversation: the dialogue box shows it.
+func _on_item_received(item: Item) -> void:
+	var box := get_tree().get_first_node_in_group("dialogue_box") as DialogueBox
+	if box != null and box.is_open():
+		_message_timer = 0.0   # nor the ability it unlocked
+		_message_label.modulate.a = 0.0
+		return
+	show_message(tr("UI_ITEM_RECEIVED").format({"item": tr(item.name_key)}) + "\n" + tr(item.description_key), 3.5)
 
 
 func _refresh_abilities() -> void:

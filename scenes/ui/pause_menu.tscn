@@ -37,6 +37,12 @@ custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
 text = "UI_PAUSE_RESUME"
 
+[node name="InventoryButton" type="Button" parent="Panel/Center/MainBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "UI_PAUSE_INVENTORY"
+
 [node name="SkinButton" type="Button" parent="Panel/Center/MainBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 40)
@@ -113,5 +119,56 @@ text = "Skin name"
 [node name="SkinBackButton" type="Button" parent="Panel/Center/SkinBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "UI_BACK"
+
+[node name="InventoryBox" type="VBoxContainer" parent="Panel/Center"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Panel/Center/InventoryBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "UI_INVENTORY_TITLE"
+horizontal_alignment = 1
+
+[node name="Items" type="VBoxContainer" parent="Panel/Center/InventoryBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ItemTemplate" type="Button" parent="Panel/Center/InventoryBox/Items"]
+unique_name_in_owner = true
+texture_filter = 1
+custom_minimum_size = Vector2(320, 44)
+layout_mode = 2
+auto_translate_mode = 2
+text = "Item name"
+alignment = 0
+expand_icon = true
+
+[node name="InventoryEmpty" type="Label" parent="Panel/Center/InventoryBox"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.6)
+layout_mode = 2
+text = "UI_INVENTORY_EMPTY"
+horizontal_alignment = 1
+
+[node name="ItemDescription" type="Label" parent="Panel/Center/InventoryBox"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.75)
+custom_minimum_size = Vector2(320, 44)
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "What the highlighted item does."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="InventoryBackButton" type="Button" parent="Panel/Center/InventoryBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 40)
 layout_mode = 2
 text = "UI_BACK"

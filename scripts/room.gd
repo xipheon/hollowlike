@@ -32,6 +32,7 @@ const INTRO_TITLE_FADE_TIME := 0.4
 const INTRO_HOLD_TIME := 1.2
 const INTRO_ZOOM_OUT_TIME := 0.8
 const CAMERA_RELEASE_TIME := 0.6
+const REWARD_SPACING := 48.0   # px between a boss's dropped items
 ## The room's look, built in game (_set_look): its dimming (a CanvasModulate),
 ## glow on its brightest pixels (a WorldEnvironment), and its colour grade on a
 ## layer of its own, over everything in the room and under the HUD (HUD.LAYER)
@@ -483,6 +484,7 @@ func _set_up_boss(boss: BossBase, arena: Rect2) -> void:
 		if fell_at is Vector2:
 			boss.position = fell_at
 		boss.become_corpse()
+		_drop_rewards(boss)   # any you left behind are still there
 		return
 	_boss = boss
 	_boss.arena_left = arena.position.x
@@ -547,6 +549,33 @@ func debug_kill_boss() -> void:
 	_boss.debug_kill()
 
 
+## Lays `boss`'s rewards (those not picked up yet) on the floor where it lies,
+## side by side.
+func _drop_rewards(boss: BossBase) -> void:
+	var floor_y := _floor_below(boss.global_position)
+	for i in boss.rewards.size():
+		var flag := "picked_%s_%d" % [room, i]
+		if GameState.has_flag(flag):
+			continue
+		var pickup := ItemPickup.new()
+		pickup.item = boss.rewards[i]
+		pickup.picked_flag = flag
+		var spread := (i - (boss.rewards.size() - 1) * 0.5) * REWARD_SPACING
+		pickup.position = to_local(Vector2(boss.global_position.x + spread, floor_y - ItemPickup.HOVER))
+		add_child.call_deferred(pickup)
+
+
+## The top of the solid ground below `at` (world y), read from the layout (so
+## it works before the room's collisions are built), or `at`'s own y if none.
+func _floor_below(at: Vector2) -> float:
+	var local := to_local(at)
+	var x := floori(local.x / TILE)
+	for y in range(maxi(floori(local.y / TILE), 0), _h):
+		if _kind_at(x, y) == RoomArt.Kind.SOLID:
+			return to_global(Vector2(0, y * TILE)).y
+	return at.y
+
+
 func _on_boss_defeated() -> void:
 	GameState.bosses_defeated[room] = _boss.global_position
 	var beaten := _boss
@@ -554,10 +583,9 @@ func _on_boss_defeated() -> void:
 	get_tree().call_group("boss_attack", "queue_free")   # shockwaves, feathers
 	_set_gate_closed(false)
 	_hud.hide_boss()
-	GameState.unlock(beaten.reward_ability)
 	GameState.set_flag(beaten.defeat_flag)
-	_hud.show_message(tr("UI_HUD_BOSS_FALLS").format({"boss": tr(beaten.boss_name),
-			"ability": GameState.ability_name(beaten.reward_ability)}), 3.5)
+	_drop_rewards(beaten)
+	_hud.show_message(tr("UI_HUD_BOSS_FALLS").format({"boss": tr(beaten.boss_name)}), 3.5)
 	_player.shake(10.0, 0.5)
 	if _arena_camera == null:
 		return   # killed (debug) before the fight locked the camera

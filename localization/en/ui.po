@@ -103,11 +103,9 @@ msgstr ", "
 msgid "UI_HUD_UNLOCKED"
 msgstr "Unlocked: {ability}"
 
-#. On screen when a boss is beaten. {boss}: its name; {ability}: what it gave you.
+#. On screen when a boss is beaten. {boss}: its name. What it drops is picked up after.
 msgid "UI_HUD_BOSS_FALLS"
-msgstr ""
-"{boss} FALLS\n"
-"{ability} unlocked"
+msgstr "{boss} FALLS"
 
 #. Ability names.
 msgid "UI_ABILITY_DOUBLE_JUMP"
@@ -177,3 +175,47 @@ msgstr "Killed by an enemy"
 #. Something that doesn't say what it is.
 msgid "UI_DEATH_BY_UNKNOWN"
 msgstr "Struck down"
+
+#. Items: their names, and what they do (shown in the inventory and when you get one).
+msgid "UI_ITEM_DASH_BOOTS"
+msgstr "Dash Boots"
+
+msgid "UI_ITEM_DASH_BOOTS_DESC"
+msgstr "Spring-loaded soles. Dash in any direction."
+
+msgid "UI_ITEM_HEART_CONTAINER"
+msgstr "Heart Container"
+
+msgid "UI_ITEM_HEART_CONTAINER_DESC"
+msgstr "One more heart of health."
+
+msgid "UI_ITEM_CLIMBING_SPURS"
+msgstr "Climbing Spurs"
+
+msgid "UI_ITEM_CLIMBING_SPURS_DESC"
+msgstr "Steel spikes that bite into walls. Jump off a wall you're sliding down."
+
+msgid "UI_ITEM_STRONG_PIPE"
+msgstr "Strong Pipe"
+
+msgid "UI_ITEM_STRONG_PIPE_DESC"
+msgstr "A heavier length of pipe. Every swing hits harder."
+
+#. On screen, and in the dialogue box, when you get an item. {item}: its name.
+msgid "UI_ITEM_RECEIVED"
+msgstr "Received: {item}"
+
+#. Pause menu: the button to the inventory, and the inventory page.
+msgid "UI_PAUSE_INVENTORY"
+msgstr "Inventory"
+
+msgid "UI_INVENTORY_TITLE"
+msgstr "INVENTORY"
+
+#. The inventory with nothing in it.
+msgid "UI_INVENTORY_EMPTY"
+msgstr "Nothing yet."
+
+#. An item you hold more than one of. {item}: its name; {count}: how many.
+msgid "UI_INVENTORY_COUNT"
+msgstr "{item} ×{count}"

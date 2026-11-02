@@ -3,12 +3,17 @@ class_name DialogueLine
 extends Resource
 ## One line of a conversation (see Dialogue): who says it and what, as
 ## translation keys in localization/<language>/dialog.po, and optionally
-## something it gives you as it's shown.
+## something it gives you as it's shown: an item (a "Received" card follows
+## the line) or an ability.
 
 ## Who says it: a name key, e.g. NPC_GUARD. Empty: the NPC you're talking to.
 @export var speaker := ""
 ## What's said: a line key, e.g. DLG_GUARD_HELLO_1.
 @export var text := ""
+## An item it gives you (see Item), e.g. the guard's Strong Pipe. Put gifts
+## in a state's first talk: it's heard once. One you already hold (that you
+## can't have two of) isn't given again.
+@export var give_item: Item
 ## An ability it gives you as the line is shown (e.g. dash). Empty: none.
 @export var give_ability := ""
 

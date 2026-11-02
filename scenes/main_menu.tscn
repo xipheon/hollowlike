@@ -1,7 +1,10 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/main_menu.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/level_button.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/item.gd" id="item_res"]
+[ext_resource type="Resource" path="res://items/dash_boots.tres" id="item_boots"]
+[ext_resource type="Resource" path="res://items/heart_container.tres" id="item_heart"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -103,8 +106,8 @@ layout_mode = 2
 text = "UI_LEVEL_CLIMB_DASH"
 script = ExtResource("2")
 room = "climb"
-abilities = Array[String](["dash"])
 flags = Array[String](["warden_defeated"])
+items = Array[ExtResource("item_res")]([ExtResource("item_boots"), ExtResource("item_heart")])
 
 [node name="Aerie" type="Button" parent="Center/LevelBox/Levels"]
 custom_minimum_size = Vector2(320, 44)
@@ -112,8 +115,8 @@ layout_mode = 2
 text = "UI_LEVEL_AERIE_DASH"
 script = ExtResource("2")
 room = "aerie"
-abilities = Array[String](["dash"])
 flags = Array[String](["warden_defeated"])
+items = Array[ExtResource("item_res")]([ExtResource("item_boots"), ExtResource("item_heart")])
 
 [node name="BackButton" type="Button" parent="Center/LevelBox"]
 unique_name_in_owner = true

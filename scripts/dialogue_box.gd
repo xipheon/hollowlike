@@ -5,7 +5,9 @@ extends CanvasLayer
 ## shows the rest of a line being typed, then goes on to the next; after the
 ## last, the box closes. The game is paused while it's open, but the box (and
 ## the NPC, see npc.tscn) keep animating. A line that gives an ability gives
-## it as it's shown. Laid out in scenes/ui/dialogue_box.tscn; edit it there.
+## it as it's shown; one that gives an item gives it too, and is followed by a
+## "Received" card with its icon. Laid out in scenes/ui/dialogue_box.tscn;
+## edit it there.
 
 ## Emitted once the box has closed and the game carries on.
 signal finished
@@ -19,12 +21,16 @@ signal finished
 @onready var _name: Label = %Name
 @onready var _text: Label = %Text
 @onready var _more: Control = %More
+@onready var _icon: TextureRect = %Icon
+@onready var _name_plate: Control = %NamePlate
 
 var _lines: Array[DialogueLine] = []
 var _index := -1
 var _speaker := ""   # the NPC's name key, for lines with no speaker of their own
 var _typed := 0.0    # characters shown so far
 var _blink := 0.0
+var _received: Item       # given by the line showing: its card comes next
+var _showing_card := false
 
 
 func _ready() -> void:
@@ -56,6 +62,11 @@ func line_index() -> int:
 	return _index if is_open() else -1
 
 
+## Whether a "Received" card is showing (after the line at line_index()).
+func is_showing_card() -> bool:
+	return is_open() and _showing_card
+
+
 ## Whether the line is still typing out.
 func is_typing() -> bool:
 	return _text.visible_characters >= 0 and _text.visible_characters < _text.get_total_character_count()
@@ -65,6 +76,8 @@ func is_typing() -> bool:
 func advance() -> void:
 	if is_typing():
 		_text.visible_characters = -1
+	elif _received != null:
+		_show_card(_received)
 	elif _index + 1 < _lines.size():
 		_show(_index + 1)
 	else:
@@ -75,12 +88,30 @@ func _show(index: int) -> void:
 	_index = index
 	var line := _lines[index]
 	_name.text = tr(line.speaker if line.speaker != "" else _speaker)
-	_text.text = tr(line.text)
+	_name_plate.visible = true
+	_icon.visible = false
+	_showing_card = false
+	_type(tr(line.text))
+	if line.give_ability != "" and not GameState.has_ability(line.give_ability):
+		GameState.unlock(line.give_ability)
+	_received = line.give_item if line.give_item != null and GameState.give_item(line.give_item) else null
+
+
+## The card after a giving line: the item's icon and "Received: <its name>".
+func _show_card(item: Item) -> void:
+	_received = null
+	_showing_card = true
+	_name_plate.visible = false
+	_icon.texture = item.icon
+	_icon.visible = true
+	_type(tr("UI_ITEM_RECEIVED").format({"item": tr(item.name_key)}))
+
+
+func _type(text: String) -> void:
+	_text.text = text
 	_typed = 0.0
 	_text.visible_characters = 0
 	_blink = 0.0
-	if line.give_ability != "" and not GameState.has_ability(line.give_ability):
-		GameState.unlock(line.give_ability)
 
 
 func _process(delta: float) -> void:
@@ -102,6 +133,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _close() -> void:
 	_panel.visible = false
 	_index = -1
+	_showing_card = false
 	set_process(false)
 	# Let the press that closed it go by before the game runs again, so it
 	# isn't also taken as a swing.

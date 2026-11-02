@@ -34,6 +34,10 @@ msgstr "Still here? That thing in the loading bay isn't going anywhere. Neither 
 msgid "DLG_GUARD_AFTER_WARDEN_1"
 msgstr "You took that thing down? I... thank you. Really."
 
+#. The guard hands you a Strong Pipe (a heavier weapon), right after thanking you.
+msgid "DLG_GUARD_AFTER_WARDEN_GIFT"
+msgstr "Here, take this. Found it on my rounds. Hits a lot harder than that rusty thing."
+
 msgid "DLG_GUARD_AFTER_WARDEN_2"
 msgstr "But listen. Up past the climb, something's nesting in the rafters. Feathers like knives."
 

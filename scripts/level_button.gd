@@ -3,7 +3,8 @@ class_name LevelButton
 extends Button
 ## A Level Select entry on the main menu (scenes/main_menu.tscn): pressing it
 ## starts a fresh game in `room` at its PlayerStart, with the starting
-## abilities plus `abilities`, and the progress `flags` already set. Add,
+## abilities plus `abilities`, the progress `flags` already set and `items`
+## held (with what they give, e.g. Dash Boots' dash). Add,
 ## remove, reorder and label them in the editor; only the rooms you add are
 ## listed.
 
@@ -15,11 +16,13 @@ extends Button
 ## Progress already made, e.g. warden_defeated for a room past the Warden (so
 ## NPCs there talk as if you'd beaten it).
 @export var flags: Array[String] = []
+## Items held from the start, e.g. the Warden's drops for a room past it.
+@export var items: Array[Item] = []
 
 
 func _ready() -> void:
 	if not Engine.is_editor_hint():
-		pressed.connect(func() -> void: GameState.start_at_room(room, abilities, flags))
+		pressed.connect(func() -> void: GameState.start_at_room(room, abilities, flags, items))
 
 
 ## Drop-downs: the rooms in LevelData.ROOMS, and the abilities and progress

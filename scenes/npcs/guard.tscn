@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://scripts/dialogue_line.gd" id="3_line"]
 [ext_resource type="Script" path="res://scripts/dialogue.gd" id="4_talk"]
 [ext_resource type="Script" path="res://scripts/dialogue_state.gd" id="5_state"]
+[ext_resource type="Resource" path="res://items/strong_pipe.tres" id="6_pipe"]
 
 [sub_resource type="Resource" id="after_harrier_first_0"]
 script = ExtResource("3_line")
@@ -39,15 +40,20 @@ text = "DLG_GUARD_AFTER_WARDEN_1"
 
 [sub_resource type="Resource" id="after_warden_first_1"]
 script = ExtResource("3_line")
-text = "DLG_GUARD_AFTER_WARDEN_2"
+text = "DLG_GUARD_AFTER_WARDEN_GIFT"
+give_item = ExtResource("6_pipe")
 
 [sub_resource type="Resource" id="after_warden_first_2"]
+script = ExtResource("3_line")
+text = "DLG_GUARD_AFTER_WARDEN_2"
+
+[sub_resource type="Resource" id="after_warden_first_3"]
 script = ExtResource("3_line")
 text = "DLG_GUARD_AFTER_WARDEN_3"
 
 [sub_resource type="Resource" id="after_warden_first"]
 script = ExtResource("4_talk")
-lines = Array[ExtResource("3_line")]([SubResource("after_warden_first_0"), SubResource("after_warden_first_1"), SubResource("after_warden_first_2")])
+lines = Array[ExtResource("3_line")]([SubResource("after_warden_first_0"), SubResource("after_warden_first_1"), SubResource("after_warden_first_2"), SubResource("after_warden_first_3")])
 
 [sub_resource type="Resource" id="after_warden_repeat_0"]
 script = ExtResource("3_line")

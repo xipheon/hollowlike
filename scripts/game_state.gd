@@ -5,6 +5,7 @@ extends Node
 signal ability_unlocked(ability: String)
 signal player_skin_changed(skin_id: String)
 signal flag_set(flag: String)
+signal item_received(item: Item)
 
 const FADE_TIME := 0.25
 const MENU_SCENE := "res://scenes/main_menu.tscn"
@@ -29,6 +30,9 @@ const PROGRESS_FLAGS := ["warden_defeated", "harrier_defeated"]
 ## (BossBase.defeat_flag), an NPC spoken to... Anything can check one with
 ## has_flag(), e.g. an NPC choosing what to say. Wiped by a new game.
 var flags := {}
+## What you hold: item id -> how many, in the order you got them (see Item).
+var items := {}
+var _item_defs := {}   # item id -> its Item
 
 ## Debug-only tools (F1/F2 unlocks, killing the boss from the pause menu).
 ## On when run from the editor or a debug export, off in release exports.
@@ -133,6 +137,55 @@ func set_flag(flag: String) -> void:
 	flag_set.emit(flag)
 
 
+# --------------------------------------------------------------- Items ----
+
+## Adds `item` to what you hold and applies it: the ability it grants, and
+## (through max_health_bonus() and damage_bonus()) its health or damage. Sets
+## got_<id>. False if it's one you already hold and can't have two of.
+func give_item(item: Item) -> bool:
+	if item == null or (not item.stackable and items.has(item.id)):
+		return false
+	items[item.id] = items.get(item.id, 0) + 1
+	_item_defs[item.id] = item
+	set_flag("got_" + item.id)
+	if item.grants_ability != "" and not has_ability(item.grants_ability):
+		unlock(item.grants_ability)
+	item_received.emit(item)
+	return true
+
+
+func has_item(id: String) -> bool:
+	return items.has(id)
+
+
+func item_count(id: String) -> int:
+	return items.get(id, 0)
+
+
+## The items you hold, in the order you got them.
+func held_items() -> Array[Item]:
+	var held: Array[Item] = []
+	for id in items:
+		held.append(_item_defs[id])
+	return held
+
+
+## Health your items add to your most, in half-hearts.
+func max_health_bonus() -> int:
+	var bonus := 0
+	for id in items:
+		bonus += _item_defs[id].max_health_bonus * items[id]
+	return bonus
+
+
+## What your items add to every hit.
+func damage_bonus() -> int:
+	var bonus := 0
+	for id in items:
+		bonus += _item_defs[id].damage_bonus * items[id]
+	return bonus
+
+
 func has_ability(ability: String) -> bool:
 	return abilities.get(ability, false)
 
@@ -170,15 +223,19 @@ func start_new_game() -> void:
 
 
 ## Wipe progress and load any room at its PlayerStart (level select), with
-## the starting abilities plus any in `unlocked`, and the flags in `progress`
-## (a LevelButton's abilities and flags).
-func start_at_room(room: String, unlocked: Array = [], progress: Array = []) -> void:
+## the starting abilities plus any in `unlocked`, the flags in `progress` and
+## the items in `held` (a LevelButton's abilities, flags and items).
+func start_at_room(room: String, unlocked: Array = [], progress: Array = [], held: Array = []) -> void:
 	abilities = STARTING_ABILITIES.duplicate()
 	for ability in unlocked:
 		abilities[ability] = true
 	flags = {}
 	for flag in progress:
 		flags[flag] = true
+	items = {}
+	_item_defs = {}
+	for item in held:
+		give_item(item)
 	bosses_defeated = {}
 	carried_health = -1
 	_fade_to_scene(LevelData.ROOMS[room].scene, "")

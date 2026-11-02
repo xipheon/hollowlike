@@ -55,7 +55,7 @@ const SEGMENTS := {
 	"warden": [
 		"_test_boss_fight_starts_and_gate_shuts", "_test_boss_fight_starts_from_right_side",
 		"_test_boss_attacks_stay_in_arena", "_test_boss_hurts_player", "_test_player_attacks_hurt_boss",
-		"_test_boss_defeat_opens_gate_and_sticks", "_test_warden_damage_split_and_phase_two",
+		"_test_boss_defeat_opens_gate_and_sticks", "_test_boss_drops_wait_for_you", "_test_warden_damage_split_and_phase_two",
 		"_test_warden_charge_stops_at_player", "_test_camera_returns_to_player_after_boss",
 		"_test_warden_attacks_light_up",
 	],
@@ -89,7 +89,11 @@ const SEGMENTS := {
 	# NPC dialogue: lines, conversations and the progress states that pick them (dialogue_*.gd).
 	"dialogue": [
 		"_test_dialogue_states", "_test_npc_talk", "_test_attack_still_swings_near_npc",
-		"_test_guard_art", "_test_guard_talks",
+		"_test_guard_art", "_test_guard_talks", "_test_guard_gives_strong_pipe",
+	],
+	# Items: what they do, the inventory, the pause menu's inventory page (item.gd, item_pickup.gd).
+	"items": [
+		"_test_items_and_effects", "_test_inventory_page",
 	],
 	# Pause menu, main menu, level select, debug tools.
 	"menus": [
@@ -208,7 +212,9 @@ func _spawn_node(room: Node, boss_beaten := false) -> void:
 	GameState.arrived_from = ""
 	GameState.arrive_at = ""
 	GameState.bosses_defeated = {"boss": Vector2(49.5 * TILE, 15 * TILE - WardenBoss.SIZE.y * 0.5)} if boss_beaten else {}
-	GameState.flags = {"warden_defeated": true} if boss_beaten else {}
+	# A beaten Warden's drops count as taken, so none lie about.
+	GameState.flags = {"warden_defeated": true, "picked_boss_0": true, "picked_boss_1": true} if boss_beaten else {}
+	GameState.items = {}
 	GameState.carried_health = -1
 	GameState.player_skin = PlayerSprite.DEFAULT_SKIN
 	GameState.abilities = GameState.STARTING_ABILITIES.duplicate()
@@ -649,7 +655,19 @@ func _test_boss_defeat_opens_gate_and_sticks() -> void:
 	_check(absf(boss.global_position.x - died_at.x) < 8.0, "corpse stayed where it died")
 	_check(not _main._gate_closed and _main._gate_shapes.all(func(s): return s.disabled), "both gates open")
 	_check(not _main._hud.is_boss_shown(), "boss bar hidden")
-	_check(GameState.has_ability("dash"), "dash granted")
+	var drops := _pickups()
+	_check(drops.map(func(d): return d.item.id) == ["dash_boots", "heart_container"] and not GameState.has_ability("dash"),
+			"drops Dash Boots and a Heart Container, not yet picked up %s" % [drops.map(func(d): return d.item.id)])
+	var floor_y := 15 * TILE   # the arena floor's top
+	_check(drops.all(func(d): return absf(d.global_position.y - (floor_y - ItemPickup.HOVER)) < 1.0 and absf(d.global_position.x - died_at.x) <= 40.0),
+			"lying on the floor where it fell")
+	var hearts_before := _player.max_health
+	_player._invuln_timer = 999.0
+	for d in drops:
+		_player.global_position = d.global_position
+		await _frames(3)
+	_check(_pickups().is_empty() and GameState.has_ability("dash") and GameState.has_item("dash_boots"), "walking over them picks them up: dash")
+	_check(_player.max_health == hearts_before + 2 and _player.health == _player.max_health, "and a whole new heart, filled (%d)" % _player.max_health)
 	await _frames(int(_main.CAMERA_RELEASE_TIME * 60) + 10)
 	_check(get_viewport().get_camera_2d() == _player.camera and _main._arena_camera == null,
 			"camera handed back to the player")
@@ -660,7 +678,36 @@ func _test_boss_defeat_opens_gate_and_sticks() -> void:
 	var corpses := _all(room).filter(func(c): return c is WardenBoss) if room != null else []
 	_check(corpses.size() == 1 and corpses[0]._state == WardenBoss.State.DEAD, "corpse is back after reloading")
 	_check(corpses.size() == 1 and absf(corpses[0].global_position.x - died_at.x) < 8.0, "in the same spot")
+	await _frames(2)
+	_check(_pickups().is_empty(), "what was picked up doesn't come back")
 	await _despawn()
+
+
+func _test_boss_drops_wait_for_you() -> void:
+	print("A boss's drops left behind are still there when you come back, and only those")
+	var boss := await _start_boss_fight()
+	for i in boss.max_health:
+		boss.take_hit(1, Vector2.RIGHT)
+	await _frames(3)
+	var drops := _pickups()
+	_check(drops.size() == 2, "two drops")
+	_player._invuln_timer = 999.0
+	_player.global_position = drops[0].global_position   # just the boots
+	await _frames(3)
+	_check(GameState.has_item("dash_boots") and not GameState.has_item("heart_container"), "picked up one")
+	get_tree().reload_current_scene()
+	var room := await _wait_for_room("boss", 30)
+	await _frames(3)
+	var left := _pickups()
+	_check(left.size() == 1 and left[0].item.id == "heart_container", "the other is still there %s" % [left.map(func(d): return d.item.id)])
+	await _despawn()
+
+
+## The item pickups lying in the room, left to right.
+func _pickups() -> Array:
+	var found := get_tree().get_nodes_in_group("item_pickup").filter(func(p): return not p.is_queued_for_deletion())
+	found.sort_custom(func(a, b): return a.global_position.x < b.global_position.x)
+	return found
 
 
 func _test_boss_hallway_door_to_climb_room_and_back() -> void:
@@ -1405,13 +1452,20 @@ func _test_harrier_dazed_recoil() -> void:
 
 
 func _test_harrier_defeat_grants_wall_jump() -> void:
-	print("Beating the Harrier grants wall jump and leaves its body behind")
+	print("Beating the Harrier drops Climbing Spurs (wall jump) and a Heart Container, and leaves its body behind")
 	var boss := await _start_harrier_fight()
 	boss._crash()
 	while boss.health > 0:
 		boss.take_hit(1, Vector2.RIGHT)
 	await _frames(60)
-	_check(GameState.has_ability("wall_jump"), "wall jump granted")
+	var drops := _pickups()
+	_check(drops.map(func(d): return d.item.id) == ["climbing_spurs", "heart_container"] and not GameState.has_ability("wall_jump"),
+			"drops Climbing Spurs and a Heart Container %s" % [drops.map(func(d): return d.item.id)])
+	_player._invuln_timer = 999.0
+	for d in drops:
+		d.collect()
+	await _frames(1)
+	_check(GameState.has_ability("wall_jump") and GameState.item_count("heart_container") == 1, "wall jump granted, and a heart")
 	_check(not _main._gate_closed and not _main._hud.is_boss_shown(), "gate open, bar hidden")
 	_check(boss._state == HarrierBoss.State.DEAD and boss.is_on_floor(), "body lies on the floor")
 	_check(GameState.bosses_defeated.has("aerie"), "defeat recorded")
@@ -1757,7 +1811,8 @@ func _test_debug_kill_boss() -> void:
 	await _frames(2)
 	_check(not menu.is_open() and not get_tree().paused, "menu closed")
 	_check(_main._boss == null and GameState.bosses_defeated.has("boss"), "boss dead")
-	_check(GameState.has_ability("dash"), "dash granted")
+	await _frames(1)
+	_check(_pickups().size() == 2, "its drops are there")
 	_check(not _main._gate_closed, "gates open")
 	await _press_pause()
 	_check(not menu._kill_boss_button.visible, "button hidden once the boss is dead")
@@ -1807,7 +1862,7 @@ func _test_level_select_loads_each_room() -> void:
 	# The buttons are whatever the scene has: read them from a copy of it.
 	var listed: Node = MENU_SCENE.instantiate()
 	var buttons: Array = listed.find_children("*", "Button", true, false).filter(func(b): return b is LevelButton)
-	var entries := buttons.map(func(b): return [b.room, b.abilities.duplicate(), b.flags.duplicate()])
+	var entries := buttons.map(func(b): return [b.room, b.abilities.duplicate(), b.flags.duplicate(), b.items.duplicate()])
 	listed.free()
 	_check(not entries.is_empty() and entries.all(func(e): return LevelData.ROOMS.has(e[0])),
 			"%d level buttons, each for a real room %s" % [entries.size(), entries.map(func(e): return e[0])])
@@ -1815,6 +1870,7 @@ func _test_level_select_loads_each_room() -> void:
 		var room: String = entry[0]
 		var granted: Array = entry[1]
 		var progress: Array = entry[2]
+		var held: Array = entry[3]
 		GameState.unlock("wall_jump")   # progress from before, which a level start wipes
 		GameState.set_flag("harrier_defeated")
 		var menu := MENU_SCENE.instantiate()
@@ -1832,13 +1888,20 @@ func _test_level_select_loads_each_room() -> void:
 			var expected := GameState.STARTING_ABILITIES.duplicate()
 			for a in granted:
 				expected[a] = true
+			for item in held:
+				if item.grants_ability != "":
+					expected[item.grants_ability] = true
 			_check(absf(p.global_position.x - start.global_position.x) < 2.0 and GameState.abilities == expected,
 					"%s: at its PlayerStart (col %.1f), starting abilities plus %s" % [room, p.global_position.x / TILE, granted])
 			var flags_now := GameState.flags.keys()
 			flags_now.sort()
 			var flags_want := progress.duplicate()
+			for item in held:
+				flags_want.append("got_" + item.id)
 			flags_want.sort()
 			_check(flags_now == flags_want, "%s: progress so far %s" % [room, flags_want])
+			_check(held.all(func(i): return GameState.has_item(i.id)) and GameState.items.size() == held.size(),
+					"%s: holding %s" % [room, held.map(func(i): return i.id)])
 		await _frames(30)   # let the fade finish
 		await _despawn()
 	var menu := MENU_SCENE.instantiate()
@@ -3662,13 +3725,13 @@ func _test_guard_talks() -> void:
 	var guard: NPC = guards[0]
 	_check(guard.name_key == "NPC_GUARD" and tr(guard.name_key) == "Security Guard"
 			and guard.sprite.sprite_frames == load("res://art/sprites/guard_frames.tres"), "the Security Guard, in his navy shirt")
-	var gifts := 0
+	var gifts := []
 	for s in guard.states:
 		for talk in [s.first_talk, s.repeat_talk]:
 			for l in talk.lines:
-				if l.give_ability != "":
-					gifts += 1
-	_check(gifts == 0, "he gives nothing")
+				if l.give_ability != "" or l.give_item != null:
+					gifts.append([s.name, talk == s.first_talk, l.give_item.id if l.give_item != null else l.give_ability])
+	_check(gifts == [["after_warden", true, "strong_pipe"]], "his only gift: the Strong Pipe, in his first talk after the Warden %s" % [gifts])
 	var opening := func() -> String:
 		var d: Dialogue = DialogueState.pick(guard.states, "guard")
 		return d.lines[0].text
@@ -3696,3 +3759,118 @@ func _test_guard_talks() -> void:
 	await _frames(3)
 	_check(not box.is_open() and not get_tree().paused and GameState.has_flag("talked_guard_before"), "and ends, remembered")
 	await _despawn()
+
+
+const DASH_BOOTS := preload("res://items/dash_boots.tres")
+const HEART_CONTAINER := preload("res://items/heart_container.tres")
+const CLIMBING_SPURS := preload("res://items/climbing_spurs.tres")
+const STRONG_PIPE := preload("res://items/strong_pipe.tres")
+
+
+func _test_items_and_effects() -> void:
+	print("Items: Dash Boots and Climbing Spurs grant their abilities, Heart Containers stack a heart each, the Strong Pipe hits 1 harder")
+	await _spawn()
+	_check(DASH_BOOTS.grants_ability == "dash" and CLIMBING_SPURS.grants_ability == "wall_jump"
+			and HEART_CONTAINER.max_health_bonus == 2 and HEART_CONTAINER.stackable and STRONG_PIPE.damage_bonus == 1,
+			"what each one does")
+	var base_health := _player.max_health
+	var base_damage := _player.attack_damage
+	_check(GameState.give_item(DASH_BOOTS) and GameState.has_ability("dash") and GameState.has_flag("got_dash_boots"), "Dash Boots: dash")
+	_check(not GameState.give_item(DASH_BOOTS) and GameState.item_count("dash_boots") == 1, "only one pair")
+	_check(GameState.give_item(CLIMBING_SPURS) and GameState.has_ability("wall_jump"), "Climbing Spurs: wall jump")
+	_player.health = 3
+	GameState.give_item(HEART_CONTAINER)
+	_check(_player.max_health == base_health + 2 and _player.health == 5, "a Heart Container: a whole heart more, and it comes full (%d of %d)" % [_player.health, _player.max_health])
+	GameState.give_item(HEART_CONTAINER)
+	_check(GameState.item_count("heart_container") == 2 and _player.max_health == base_health + 4, "a second one stacks (%d)" % _player.max_health)
+	GameState.give_item(STRONG_PIPE)
+	_check(_player.attack_damage == base_damage + 1, "the Strong Pipe: every hit 1 harder (%d)" % _player.attack_damage)
+	var crawler: CrawlerEnemy = _place_enemy(CRAWLER_SCENE, {"max_health": 5}, _player.global_position + Vector2(40, 0))
+	_player.facing = 1
+	await _frames(2)
+	await _tap_attack()
+	await _frames(4)
+	_check(crawler.health == 5 - _player.attack_damage, "a crawler takes %d from one swing (%d left)" % [_player.attack_damage, crawler.health])
+	_check(GameState.held_items().map(func(i): return i.id) == ["dash_boots", "climbing_spurs", "heart_container", "strong_pipe"], "held in the order you got them")
+	await _despawn()
+	var next_room_player := Player.new()   # as the next room makes one
+	add_child(next_room_player)
+	_check(next_room_player.max_health == base_health + 4 and next_room_player.attack_damage == base_damage + 1,
+			"and they carry into the next room (%d health, %d damage)" % [next_room_player.max_health, next_room_player.attack_damage])
+	next_room_player.free()
+	GameState.items = {}
+
+
+func _test_guard_gives_strong_pipe() -> void:
+	print("After the Warden, the guard thanks you and hands you a Strong Pipe, with a Received card; once only")
+	await _spawn()
+	GameState.set_flag("warden_defeated")
+	var guard: NPC = _main.entities_of(NPC)[0]
+	var box: DialogueBox = _main.get_children().filter(func(c): return c is DialogueBox)[0]
+	_player.global_position = guard.global_position + Vector2(-30, -Player.BODY_SIZE.y * 0.5)
+	await _frames(6)
+	var base_damage := _player.attack_damage
+	await _tap_attack()
+	_check(box.is_open() and box._text.text == tr("DLG_GUARD_AFTER_WARDEN_1"), "he thanks you")
+	await _tap_attack()
+	await _tap_attack()
+	_check(box.line_index() == 1 and box._text.text == tr("DLG_GUARD_AFTER_WARDEN_GIFT") and GameState.has_item("strong_pipe"), "then hands it over")
+	_check(_main._hud._message_timer <= 0.0, "the box says what you got, not the HUD too")
+	await _tap_attack()
+	await _tap_attack()
+	_check(box.is_showing_card() and box._icon.visible and box._icon.texture == STRONG_PIPE.icon and not box._name_plate.visible
+			and box._text.text == tr("UI_ITEM_RECEIVED").format({"item": tr("UI_ITEM_STRONG_PIPE")}), "a card: Received: Strong Pipe (%s)" % box._text.text)
+	await _tap_attack()
+	await _tap_attack()
+	_check(box.line_index() == 2 and not box.is_showing_card() and not box._icon.visible and box._name_plate.visible, "then he carries on: the Harrier warning")
+	for i in 12:
+		if not box.is_open():
+			break
+		await _tap_attack()
+	await _frames(3)
+	_check(_player.attack_damage == base_damage + 1, "it hits harder (%d)" % _player.attack_damage)
+	await _tap_attack()
+	_check(box.is_open() and box._text.text == tr("DLG_GUARD_AFTER_WARDEN_AGAIN") and GameState.item_count("strong_pipe") == 1, "talking again: just his thanks, nothing more")
+	for i in 6:
+		if not box.is_open():
+			break
+		await _tap_attack()
+	await _frames(3)
+	await _despawn()
+	GameState.items = {}
+	GameState.flags = {}
+
+
+func _test_inventory_page() -> void:
+	print("The pause menu's Inventory: what you hold, with counts and what it does; empty says so")
+	await _spawn()
+	GameState.items = {}
+	await _press_pause()
+	var menu := _pause_menu()
+	menu._inventory_button.pressed.emit()
+	await _frames(1)
+	_check(menu._inventory_box.visible and not menu._main_box.visible and menu.item_buttons.is_empty() and menu._inventory_empty.visible,
+			"nothing held: Nothing yet")
+	menu.show_main()
+	GameState.give_item(DASH_BOOTS)
+	GameState.give_item(HEART_CONTAINER)
+	GameState.give_item(HEART_CONTAINER)
+	menu._inventory_button.pressed.emit()
+	await _frames(2)
+	var labels: Array = menu.item_buttons.map(func(b): return b.text)
+	_check(labels == [tr("UI_ITEM_DASH_BOOTS"), tr("UI_INVENTORY_COUNT").format({"item": tr("UI_ITEM_HEART_CONTAINER"), "count": 2})]
+			and not menu._inventory_empty.visible, "each item, a count where there's more than one %s" % [labels])
+	_check(menu.item_buttons.all(func(b): return b.icon != null), "with its icon")
+	_check(menu.item_buttons[0].has_focus() and menu._item_description.text == tr("UI_ITEM_DASH_BOOTS_DESC"), "the first highlighted, and what it does")
+	menu.item_buttons[1].grab_focus()
+	await _frames(1)
+	_check(menu._item_description.text == tr("UI_ITEM_HEART_CONTAINER_DESC"), "highlighting another shows its description")
+	var back := InputEventAction.new()
+	back.action = "ui_cancel"
+	back.pressed = true
+	Input.parse_input_event(back)
+	await _frames(1)
+	_check(menu._main_box.visible and menu._inventory_button.has_focus(), "back to the menu")
+	menu.close()
+	await _despawn()
+	GameState.items = {}

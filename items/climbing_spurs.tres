@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="Item" format=3]
+
+[ext_resource type="Script" path="res://scripts/item.gd" id="1_item"]
+[ext_resource type="Texture2D" path="res://art/items/climbing_spurs.png" id="2_icon"]
+
+[resource]
+script = ExtResource("1_item")
+id = "climbing_spurs"
+name_key = "UI_ITEM_CLIMBING_SPURS"
+description_key = "UI_ITEM_CLIMBING_SPURS_DESC"
+icon = ExtResource("2_icon")
+grants_ability = "wall_jump"
