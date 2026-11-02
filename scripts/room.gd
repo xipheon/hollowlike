@@ -31,6 +31,25 @@ const INTRO_TITLE_FADE_TIME := 0.4
 const INTRO_HOLD_TIME := 1.2
 const INTRO_ZOOM_OUT_TIME := 0.8
 const CAMERA_RELEASE_TIME := 0.6
+## The room's look, built in game (_set_look): its dimming (a CanvasModulate),
+## glow on its brightest pixels (a WorldEnvironment), and its colour grade on a
+## layer of its own, over everything in the room and under the HUD (HUD.LAYER)
+## and menus. Glow reaches up to the grade's layer, so the HUD doesn't glow.
+const GRADE_LAYER := 5
+const GRADE_SHADER := preload("res://shaders/color_grade.gdshader")
+const DEFAULT_GRADE := preload("res://art/grades/default_grade.tres")
+const GLOW_THRESHOLD := 0.75   # pixels brighter than this glow: bulbs, signs, acid, slashes
+const GLOW_INTENSITY := 0.9
+const GLOW_BLOOM := 0.0
+## On your last heart (this many half-hearts or fewer), the room drains toward
+## grey: to LAST_HEART_LOW, where it holds LAST_HEART_HOLD seconds, then pulses
+## up to LAST_HEART_HIGH and back, over and over until you heal. It changes at
+## LAST_HEART_SPEED (of the way to grey per second), coming and going too.
+const LAST_HEART := 2
+const LAST_HEART_LOW := 0.4
+const LAST_HEART_HIGH := 0.8
+const LAST_HEART_HOLD := 5.0
+const LAST_HEART_SPEED := 1.0
 
 ## This room's id in LevelData.ROOMS.
 @export var room := ""
@@ -39,6 +58,8 @@ const CAMERA_RELEASE_TIME := 0.6
 ## room should read clearly without them. White: no dimming. The skyline, HUD
 ## and menus aren't dimmed.
 @export var dimming := Color(0.8, 0.82, 0.88)
+## The room's colour grade (see ColorGrade). Empty: art/grades/default_grade.tres.
+@export var grade: ColorGrade
 ## Fills every unpainted cell of the Background layer with brick and windows,
 ## with lights, posters and graffiti on the Props layer (the same each time
 ## for the same room), so you can edit it by hand. Wall you've already painted
@@ -59,6 +80,9 @@ var _gate_shapes: Array[CollisionShape2D] = []
 var _gate_closed := false
 var _arena_center := Vector2.ZERO
 var _arena_camera: Camera2D   # current camera from the boss intro until the boss dies
+var _grade_rect: ColorRect   # the colour grade, over the whole screen
+var _drain_tween: Tween
+var _draining := false   # on your last heart: the grade is pulsing grey
 ## [{rect: Rect2i in cells, target: room id, arrive_at: door name, name: String}]
 var _doors: Array[Dictionary] = []
 
@@ -94,7 +118,7 @@ func _ready() -> void:
 	if Engine.is_editor_hint():
 		return
 	Engine.time_scale = 1.0
-	_dim()
+	_set_look()
 	_load_room()
 	_build_solids()
 	_spawn_player()
@@ -102,6 +126,8 @@ func _ready() -> void:
 	add_child(_hud)
 	_hud.bind_player(_player)
 	_player.died.connect(_on_player_died)
+	_player.health_changed.connect(_on_health_for_grade)
+	_on_health_for_grade(_player.health, _player.max_health)
 	add_child(PAUSE_MENU_SCENE.instantiate())
 	_death_menu = DEATH_MENU_SCENE.instantiate()
 	add_child(_death_menu)
@@ -133,8 +159,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			debug_kill_boss()
 
 
-## Dims the room by `dimming`, all but the skyline.
-func _dim() -> void:
+## The room's look: dimmed by `dimming` (all but the skyline), glowing where
+## it's brightest, and graded by `grade`.
+func _set_look() -> void:
 	var modulate_node := CanvasModulate.new()
 	modulate_node.name = "Dimming"
 	modulate_node.color = dimming
@@ -142,6 +169,77 @@ func _dim() -> void:
 	var skyline := get_node_or_null("Skyline") as Skyline
 	if skyline != null:
 		skyline.undim(dimming)
+
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_CANVAS
+	environment.background_canvas_max_layer = GRADE_LAYER
+	environment.glow_enabled = true
+	environment.glow_hdr_threshold = GLOW_THRESHOLD
+	environment.glow_intensity = GLOW_INTENSITY
+	environment.glow_bloom = GLOW_BLOOM
+	environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
+	var world := WorldEnvironment.new()
+	world.name = "Glow"
+	world.environment = environment
+	add_child(world)
+
+	var layer := CanvasLayer.new()
+	layer.name = "Grade"
+	layer.layer = GRADE_LAYER
+	_grade_rect = ColorRect.new()
+	_grade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_grade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var material := ShaderMaterial.new()
+	material.shader = GRADE_SHADER
+	material.set_shader_parameter("desaturate", 0.0)   # unset, it reads back as null
+	_grade_rect.material = material
+	layer.add_child(_grade_rect)
+	add_child(layer)
+	apply_grade(grade if grade != null else DEFAULT_GRADE)
+
+
+## Shows `look` as the room's colour grade.
+func apply_grade(look: ColorGrade) -> void:
+	var material := _grade_rect.material as ShaderMaterial
+	material.set_shader_parameter("brightness", look.brightness)
+	material.set_shader_parameter("contrast", look.contrast)
+	material.set_shader_parameter("saturation", look.saturation)
+	material.set_shader_parameter("shadow_tint", look.shadow_tint)
+	material.set_shader_parameter("highlight_tint", look.highlight_tint)
+	material.set_shader_parameter("use_lut", look.lut != null)
+	material.set_shader_parameter("lut", look.lut)
+	material.set_shader_parameter("lut_strength", look.lut_strength)
+
+
+## The grade drains toward grey on your last heart, pulsing, and comes back
+## with health.
+func _on_health_for_grade(current: int, _maximum: int) -> void:
+	var draining := current > 0 and current <= LAST_HEART
+	if draining == _draining:
+		return
+	_draining = draining
+	if _drain_tween != null:
+		_drain_tween.kill()
+	_drain_tween = create_tween()
+	_drain_to(_drain_tween, LAST_HEART_LOW if draining else 0.0)
+	if draining:
+		_drain_tween.tween_callback(_pulse_drain)
+
+
+## Holds at LAST_HEART_LOW, then up to LAST_HEART_HIGH and back, on a loop.
+func _pulse_drain() -> void:
+	_drain_tween = create_tween().set_loops()
+	_drain_tween.tween_interval(LAST_HEART_HOLD)
+	_drain_to(_drain_tween, LAST_HEART_HIGH, LAST_HEART_LOW)
+	_drain_to(_drain_tween, LAST_HEART_LOW, LAST_HEART_HIGH)
+
+
+## Adds a step to `tween` taking the grade's drain to `target` at
+## LAST_HEART_SPEED, from `from` (or wherever it is now).
+func _drain_to(tween: Tween, target: float, from := -1.0) -> void:
+	var material := _grade_rect.material as ShaderMaterial
+	var start: float = from if from >= 0.0 else material.get_shader_parameter("desaturate")
+	tween.tween_property(material, "shader_parameter/desaturate", target, absf(target - start) / LAST_HEART_SPEED)
 
 
 ## A moment after you die, the death screen: what killed you, Respawn or Quit.

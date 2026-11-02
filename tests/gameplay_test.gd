@@ -25,7 +25,7 @@ const SEGMENTS := {
 		"_test_door_to_boss_room_and_back",
 		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
 		"_test_pink_crawler_kill_heals", "_test_crawler_sludge", "_test_ceiling_crawler", "_test_room_lights_flicker",
-		"_test_room_dimming", "_test_bulb_shadows",
+		"_test_room_dimming", "_test_bulb_shadows", "_test_glow_and_grade", "_test_last_heart_drain",
 	],
 	# The tilesets' terrain brushes and tile data (tools/make_tilesets.gd, room_art.gd), the room template.
 	"tilesets": [
@@ -1998,6 +1998,92 @@ func _casts_shadows(bulb: FlickerLight) -> bool:
 	return real.range_item_cull_mask == FlickerLight.MASK_WALL and real.shadow_color == FlickerLight.SHADOW_COLOR \
 			and twin.range_item_cull_mask == FlickerLight.MASK_TERRAIN and twin.shadow_color == FlickerLight.TERRAIN_SHADOW_COLOR \
 			and twin.shadow_filter == Light2D.SHADOW_FILTER_NONE and twin.shadow_item_cull_mask == FlickerLight.LIT_ALL
+
+
+func _test_glow_and_grade() -> void:
+	print("Glow on the brightest pixels and a colour grade, over the room but under the HUD and menus")
+	await _spawn()
+	var glow: WorldEnvironment = _main.get_node("Glow")
+	var env := glow.environment
+	_check(env.glow_enabled and env.background_mode == Environment.BG_CANVAS and is_equal_approx(env.glow_hdr_threshold, Room.GLOW_THRESHOLD),
+			"bright pixels glow (over %.2f)" % Room.GLOW_THRESHOLD)
+	var grade: CanvasLayer = _main.get_node("Grade")
+	var pause: CanvasLayer = _main.get_children().filter(func(c): return c is PauseMenu)[0]
+	_check(grade.layer == Room.GRADE_LAYER and env.background_canvas_max_layer == Room.GRADE_LAYER
+			and Room.GRADE_LAYER < HUD.LAYER and _main._hud.layer == HUD.LAYER and Room.GRADE_LAYER < pause.layer
+			and Room.GRADE_LAYER < _main._death_menu.layer,
+			"the grade and glow stop at layer %d, under the HUD (%d) and menus" % [Room.GRADE_LAYER, HUD.LAYER])
+	var rect: ColorRect = grade.get_child(0)
+	var material := rect.material as ShaderMaterial
+	var look: ColorGrade = Room.DEFAULT_GRADE
+	_check(material.shader == Room.GRADE_SHADER and rect.anchor_right == 1.0 and rect.anchor_bottom == 1.0
+			and rect.mouse_filter == Control.MOUSE_FILTER_IGNORE, "a full-screen grade that lets clicks through")
+	_check(_main.grade == null and is_equal_approx(material.get_shader_parameter("saturation"), look.saturation)
+			and material.get_shader_parameter("shadow_tint") == look.shadow_tint and not material.get_shader_parameter("use_lut"),
+			"a room with no grade set uses the default one")
+	await _despawn()
+	# A room's own grade, from the Inspector, with a lookup table.
+	var room := _build_editor_room()
+	var own := ColorGrade.new()
+	own.brightness = 1.1
+	own.contrast = 0.9
+	own.highlight_tint = Color(1.0, 0.9, 0.8)
+	own.lut = load("res://art/grades/neutral_lut.png")
+	own.lut_strength = 0.5
+	room.grade = own
+	await _spawn_node(room)
+	material = (_main.get_node("Grade").get_child(0) as ColorRect).material
+	_check(is_equal_approx(material.get_shader_parameter("brightness"), 1.1) and is_equal_approx(material.get_shader_parameter("contrast"), 0.9)
+			and material.get_shader_parameter("highlight_tint") == Color(1.0, 0.9, 0.8) and material.get_shader_parameter("use_lut")
+			and material.get_shader_parameter("lut") == own.lut and is_equal_approx(material.get_shader_parameter("lut_strength"), 0.5),
+			"each room can set its own, lookup table and all")
+	await _despawn()
+	# The neutral lookup table maps every colour to itself.
+	var lut := (load("res://art/grades/neutral_lut.png") as Texture2D).get_image()
+	var off := 0
+	for b in 16:
+		for g in 16:
+			for r in 16:
+				var c := lut.get_pixel(b * 16 + r, g)
+				if not c.is_equal_approx(Color(r / 15.0, g / 15.0, b / 15.0)):
+					off += 1
+	_check(lut.get_size() == Vector2i(256, 16) and off == 0, "the neutral lookup table changes nothing (%d off)" % off)
+
+
+func _test_last_heart_drain() -> void:
+	print("On your last heart the room drains toward grey and pulses: holds at low, up to high and back; heals back to colour")
+	await _spawn()
+	_player._invuln_timer = 999.0   # nothing else hurts it while we watch
+	var material := (_main.get_node("Grade").get_child(0) as ColorRect).material as ShaderMaterial
+	var drain := func() -> float: return material.get_shader_parameter("desaturate")
+	_check(is_zero_approx(drain.call()), "full colour at full health")
+	_player.health = Room.LAST_HEART + 1
+	_player._invuln_timer = 0.0
+	_player.take_damage(1, _player.global_position, false)
+	_player._invuln_timer = 999.0
+	# Watch two cycles, sampling each frame.
+	var fade_in := Room.LAST_HEART_LOW / Room.LAST_HEART_SPEED
+	var swing := (Room.LAST_HEART_HIGH - Room.LAST_HEART_LOW) / Room.LAST_HEART_SPEED
+	var cycle := Room.LAST_HEART_HOLD + 2.0 * swing
+	var samples: Array[float] = []
+	for i in int((fade_in + 2.0 * cycle) * 60) + 5:
+		await _frames(1)
+		samples.append(drain.call())
+	var at := func(t: float) -> float: return samples[clampi(int(t * 60), 0, samples.size() - 1)]
+	_check(_player.health == Room.LAST_HEART and is_equal_approx(snappedf(at.call(fade_in + 0.1), 0.01), Room.LAST_HEART_LOW),
+			"fades in to %.2f at %d half-hearts, in %.1f s" % [at.call(fade_in + 0.1), _player.health, fade_in])
+	_check(absf(at.call(fade_in + Room.LAST_HEART_HOLD - 0.1) - Room.LAST_HEART_LOW) < 0.01, "holds there %.0f s" % Room.LAST_HEART_HOLD)
+	var top: float = samples.max()
+	_check(is_equal_approx(snappedf(top, 0.01), Room.LAST_HEART_HIGH) and samples.min() >= 0.0, "pulses up to %.2f" % top)
+	var second: float = samples.slice(int((fade_in + cycle + Room.LAST_HEART_HOLD - 0.5) * 60)).max()
+	_check(absf(at.call(fade_in + cycle + 0.1) - Room.LAST_HEART_LOW) < 0.02 and is_equal_approx(snappedf(second, 0.01), Room.LAST_HEART_HIGH),
+			"and back down, then up again after another hold (%.2f, then %.2f)" % [at.call(fade_in + cycle + 0.1), second])
+	_player.heal(2)
+	await _frames(int(Room.LAST_HEART_HIGH / Room.LAST_HEART_SPEED * 60) + 5)
+	_check(is_zero_approx(drain.call()), "back to full colour after healing")
+	await _frames(int(Room.LAST_HEART_HOLD * 60))
+	_check(is_zero_approx(drain.call()), "and stays there")
+	await _despawn()
 
 
 func _test_room_dimming() -> void:

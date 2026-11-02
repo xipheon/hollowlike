@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="ColorGrade" format=3]
+
+[ext_resource type="Script" path="res://scripts/color_grade.gd" id="1_grade"]
+
+[resource]
+script = ExtResource("1_grade")
+saturation = 0.92
+shadow_tint = Color(0.96, 1, 1.06, 1)
+highlight_tint = Color(1.06, 1, 0.94, 1)

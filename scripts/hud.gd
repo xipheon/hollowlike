@@ -33,6 +33,8 @@ class BossBar extends Control:
 		draw_rect(Rect2(2, 2, maxf(fill - 4, 0), size.y - 4), Color(0.85, 0.25, 0.25))
 
 const SCREEN_WIDTH := 960.0
+## Above the room's colour grade (Room.GRADE_LAYER), so it isn't graded.
+const LAYER := 10
 const BOSS_TITLE_FONT_SIZE := 44
 const BOSS_TITLE_HEIGHT := 60.0
 const BOSS_TITLE_REVEAL_Y := 200.0   # text centre while revealed
@@ -50,6 +52,7 @@ var _message_timer := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS   # animates during the paused boss intro
+	layer = LAYER
 	_health_bar = HealthBar.new()
 	_health_bar.position = Vector2(20, 20)
 	add_child(_health_bar)
