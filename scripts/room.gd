@@ -12,8 +12,8 @@ extends Node2D
 ##   Entities    placed enemies and bosses, a PlayerStart, RoomDoors, Arenas
 ## Paint from the room's top-left (0, 0). What each tile does comes from its
 ## custom data `kind` (see tools/make_tilesets.gd); the room reads the tiles
-## into a grid of layout characters ("#" solid, "=" platform, "^" spikes,
-## "~" sewer water, "|" gate, ">" door). Does nothing while editing.
+## into a grid of RoomArt.Kind (solid, platform, spikes, sewer water, gate,
+## door). Does nothing while editing.
 
 const TILE := 32
 const PAUSE_MENU_SCENE := preload("res://scenes/ui/pause_menu.tscn")
@@ -27,8 +27,6 @@ const INTRO_TITLE_FADE_TIME := 0.4
 const INTRO_HOLD_TIME := 1.2
 const INTRO_ZOOM_OUT_TIME := 0.8
 const CAMERA_RELEASE_TIME := 0.6
-## A painted tile's `kind` as a layout character.
-const KIND_CHARS := {"solid": "#", "platform": "=", "spikes": "^", "acid": "~", "door": ">", "gate": "|"}
 
 ## This room's id in LevelData.ROOMS.
 @export var room := ""
@@ -39,7 +37,7 @@ const KIND_CHARS := {"solid": "#", "platform": "=", "spikes": "^", "acid": "~", 
 ## through. Save the scene to keep it.
 @export_tool_button("Decorate wall", "TileMapLayer") var decorate_wall_action: Callable = decorate_wall
 
-var _grid := {}   # Vector2i -> layout character
+var _grid := {}   # Vector2i -> RoomArt.Kind (EMPTY cells left out)
 var _art: RoomArt
 var _w := 0
 var _h := 0
@@ -126,17 +124,17 @@ func _on_player_died() -> void:
 
 # ------------------------------------------------------------ Layout ----
 
-## What's at (x, y) as a layout character; anything outside the room is solid.
-func _ch(x: int, y: int) -> String:
+## What's at (x, y); anything outside the room is solid.
+func _kind_at(x: int, y: int) -> RoomArt.Kind:
 	if x < 0 or y < 0 or x >= _w or y >= _h:
-		return "#"
-	return _grid.get(Vector2i(x, y), " ")
+		return RoomArt.Kind.SOLID
+	return _grid.get(Vector2i(x, y), RoomArt.Kind.EMPTY)
 
 
 ## The Inspector's "Decorate wall" button (see decorate_wall_action).
 func decorate_wall() -> void:
 	_read_painted_grid()
-	RoomArt.new(_ch, _w, _h).decorate_unpainted(room, background())
+	RoomArt.new(_kind_at, _w, _h).decorate_unpainted(room, background())
 	if Engine.is_editor_hint() and Engine.has_singleton("EditorInterface"):
 		Engine.get_singleton("EditorInterface").mark_scene_as_unsaved()
 
@@ -153,15 +151,15 @@ func _read_painted_grid() -> void:
 	for layer in [terrain(), gates()]:
 		for cell in layer.get_used_cells():
 			var kind: String = layer.get_cell_tile_data(cell).get_custom_data("kind")
-			if KIND_CHARS.has(kind):
-				_grid[cell] = KIND_CHARS[kind]
+			if RoomArt.TILE_KINDS.has(kind):
+				_grid[cell] = RoomArt.TILE_KINDS[kind]
 
 
 ## The grid comes from the painted tiles' kinds, and doors and bosses from the
 ## nodes under Entities.
 func _load_room() -> void:
 	_read_painted_grid()
-	_art = RoomArt.new(_ch, _w, _h)
+	_art = RoomArt.new(_kind_at, _w, _h)
 	_art.dress(self, background(), terrain(), gates())
 	for door in entities_of(RoomDoor):
 		var at := Vector2i((to_local(door.global_position) / TILE).round())
@@ -182,13 +180,13 @@ func _build_solids() -> void:
 	for y in range(-1, _h + 1):
 		var x := -1
 		while x <= _w:
-			var c := _ch(x, y)
-			if c == "#" or c == "=":
+			var kind := _kind_at(x, y)
+			if kind == RoomArt.Kind.SOLID or kind == RoomArt.Kind.PLATFORM:
 				var start := x
-				while x <= _w and _ch(x, y) == c:
+				while x <= _w and _kind_at(x, y) == kind:
 					x += 1
 				var rect := Rect2(start * TILE, y * TILE, (x - start) * TILE, TILE)
-				if c == "=":
+				if kind == RoomArt.Kind.PLATFORM:
 					rect.size.y = 10.0
 					_add_shape(platforms, rect, true)
 				else:
@@ -198,12 +196,12 @@ func _build_solids() -> void:
 
 	for y in _h:
 		for x in _w:
-			match _ch(x, y):
-				"^":
+			match _kind_at(x, y):
+				RoomArt.Kind.SPIKES:
 					_add_spikes(x, y)
-				"~":
-					_add_acid(x, y, _ch(x, y - 1) == "~")
-				"|":
+				RoomArt.Kind.ACID:
+					_add_acid(x, y, _kind_at(x, y - 1) == RoomArt.Kind.ACID)
+				RoomArt.Kind.GATE:
 					_add_gate(x, y)
 	for door in _doors:
 		_add_door(door)

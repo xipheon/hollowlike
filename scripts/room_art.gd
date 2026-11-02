@@ -11,6 +11,14 @@ extends RefCounted
 ## room name, so a room decorates the same way every time.
 
 const TILE := 32
+## What's in a cell of a room's layout, as the room reads it from its tiles.
+enum Kind { EMPTY, SOLID, PLATFORM, SPIKES, ACID, GATE, DOOR }
+## A tile's `kind` custom data (see tools/make_tilesets.gd) as a layout Kind.
+## Kinds not listed here (track, and the background's) don't affect the layout.
+const TILE_KINDS := {
+	"solid": Kind.SOLID, "platform": Kind.PLATFORM, "spikes": Kind.SPIKES,
+	"acid": Kind.ACID, "gate": Kind.GATE, "door": Kind.DOOR,
+}
 ## Built by tools/make_tilesets.gd; every tile says what it is in its custom data.
 const FOREGROUND_TILES := preload("res://art/tiles/foreground_tileset.tres")
 const BACKGROUND_TILES := preload("res://art/tiles/background_tileset.tres")
@@ -63,6 +71,20 @@ const PIPE_H := Vector2i(5, 0)
 const PIPE_V := Vector2i(6, 0)
 const GIRDER := Vector2i(7, 0)
 const PIPE_JUNCTION := Vector2i(0, 3)
+# Pipe ends (tools/make_pipe_end_tiles.gd), named by the side the end is on:
+# going into the wall behind a bolted flange, or broken off.
+const PIPE_H_WALL_LEFT := Vector2i(0, 6)
+const PIPE_H_WALL_RIGHT := Vector2i(1, 6)
+const PIPE_H_BROKEN_LEFT := Vector2i(2, 6)
+const PIPE_H_BROKEN_RIGHT := Vector2i(3, 6)
+const PIPE_V_WALL_TOP := Vector2i(4, 6)
+const PIPE_V_WALL_BOTTOM := Vector2i(5, 6)
+const PIPE_V_BROKEN_TOP := Vector2i(6, 6)
+const PIPE_V_BROKEN_BOTTOM := Vector2i(7, 6)
+const PIPE_ENDS := [
+	PIPE_H_WALL_LEFT, PIPE_H_WALL_RIGHT, PIPE_H_BROKEN_LEFT, PIPE_H_BROKEN_RIGHT,
+	PIPE_V_WALL_TOP, PIPE_V_WALL_BOTTOM, PIPE_V_BROKEN_TOP, PIPE_V_BROKEN_BOTTOM,
+]
 const WINDOW_SMALL := [Vector2i(0, 1), Vector2i(2, 2)]
 const WINDOW_LARGE := [Vector2i(2, 1), Vector2i(3, 2)]
 const POSTERS := [Vector2i(5, 1), Vector2i(2, 1)]
@@ -82,18 +104,17 @@ const LIGHT_LIT_CHANCE := 0.65
 const WALL_ART_CHANCE := 0.04    # chance per spot for a poster or graffiti
 const WALL_ART_GAP := 24         # tiles after one before the next can go up
 
-var _cell: Callable
+var _kind: Callable
 var _w := 0
 var _h := 0
 var _rng := RandomNumberGenerator.new()
 var _gates: TileMapLayer
 
 
-## `cell` answers what's at (x, y) as a layout character ("#" solid, "="
-## platform, "^" spikes, "~" sewer, "|" gate, ">" door, " " empty), with
-## anything outside the room solid.
-func _init(cell: Callable, width: int, height: int) -> void:
-	_cell = cell
+## `kind_at` answers what's at (x, y) as a Kind, with anything outside the
+## room SOLID (Room._kind_at).
+func _init(kind_at: Callable, width: int, height: int) -> void:
+	_kind = kind_at
 	_w = width
 	_h = height
 
@@ -179,21 +200,21 @@ func _add_light(parent: Node2D, cell: Vector2i, kind: FlickerLight.Kind, lit: Ca
 	parent.add_child(light)
 
 
-## Shows the arena gates (`|`) shut, or raised with only their teeth showing.
+## Shows the arena gates shut, or raised with only their teeth showing.
 func set_gates_closed(closed: bool) -> void:
 	_gates.clear()
 	for y in _h:
 		for x in _w:
-			if _ch(x, y) != "|":
+			if _kind_at(x, y) != Kind.GATE:
 				continue
 			if closed:
-				_gates.set_cell(Vector2i(x, y), 0, GATE_END if _ch(x, y + 1) != "|" else GATE)
-			elif _ch(x, y - 1) != "|":
+				_gates.set_cell(Vector2i(x, y), 0, GATE_END if _kind_at(x, y + 1) != Kind.GATE else GATE)
+			elif _kind_at(x, y - 1) != Kind.GATE:
 				_gates.set_cell(Vector2i(x, y), 0, GATE_UP)
 
 
-func _ch(x: int, y: int) -> String:
-	return _cell.call(x, y)
+func _kind_at(x: int, y: int) -> Kind:
+	return _kind.call(x, y)
 
 
 func _pick_wall() -> Vector2i:
@@ -219,7 +240,7 @@ func _fits(cells: Dictionary, at: Vector2i, size: Vector2i, margin: int, used: D
 	for y in range(at.y - margin, at.y + size.y + margin):
 		for x in range(at.x - margin, at.x + size.x + margin):
 			var c := Vector2i(x, y)
-			if _ch(x, y) == "#" or not cells.has(c) or used.has(c):
+			if _kind_at(x, y) == Kind.SOLID or not cells.has(c) or used.has(c):
 				return false
 	return true
 
@@ -250,7 +271,7 @@ func _decorate(cells: Dictionary) -> void:
 		for x in _w:
 			since_light += 1
 			var c := Vector2i(x, y)
-			if since_light >= LIGHT_SPACING and _ch(x, y - 1) == "#" and _ch(x, y) != "#" and not used.has(c):
+			if since_light >= LIGHT_SPACING and _kind_at(x, y - 1) == Kind.SOLID and _kind_at(x, y) != Kind.SOLID and not used.has(c):
 				since_light = _rng.randi_range(0, 3)
 				if _rng.randf() < LIGHT_SKIP_CHANCE:
 					continue
@@ -260,7 +281,7 @@ func _decorate(cells: Dictionary) -> void:
 	for y in range(0, _h - 2):
 		var x := 0
 		while x < _w - 1:
-			if _ch(x, y + 2) != "#" or _ch(x + 1, y + 2) != "#" or _rng.randf() > WALL_ART_CHANCE:
+			if _kind_at(x, y + 2) != Kind.SOLID or _kind_at(x + 1, y + 2) != Kind.SOLID or _rng.randf() > WALL_ART_CHANCE:
 				x += 1
 				continue
 			var piece: Array = POSTERS if _rng.randf() < 0.5 else GRAFFITI

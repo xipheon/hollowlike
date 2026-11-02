@@ -62,8 +62,9 @@ Rooms are scenes made in the Godot editor. Each tile you paint says what it is (
 5. **Paint the Gates layer** where a boss arena's gates go, with the shut gate tiles. They show raised until a fight starts, then drop shut.
 6. **Paint the wall (Background layer).** The game shows exactly what you paint here. Any cell left empty is open, and the skyline shows through it.
    - Press **Decorate wall** in the root's Inspector to fill every empty cell with brick, windows, lights, posters and graffiti. Cells you've already painted are kept. Then edit the result by hand.
-   - Or paint the wall yourself. Use the **wall** brush (Terrains tab) for brick: it gives a crumbled edge wherever brick meets an empty cell.
-   - Props come from the **Tiles** tab. Each one is a whole tile with its own brick behind it, so it takes the place of a brick cell. For a prop more than one tile big (graffiti, windows), drag across all of its tiles in the picker, then click once in the room.
+   - Or paint the wall yourself. Use the **wall** brush (Terrains tab) for brick: it gives a crumbled edge only where brick meets an empty cell. Props count as wall, so painting brick around them leaves them alone and adds no edges.
+   - Props come from the **Tiles** tab. Each one is a whole tile with its own brick behind it, so it takes the place of a brick cell. For a prop more than one tile big (graffiti, windows), drag across all of its tiles in the picker, then click once in the room. The large rusty window is also in the **Patterns** tab: click it, then click once in the room.
+   - Pipes: lengths, a junction, and ends (bottom row of the sheet). Each end either goes into the wall behind a flange or is broken off, and comes in left, right, top and bottom.
    - Window glass is see-through. In the editor the skyline is repeated down the whole room so every window shows the city. In game the skyline stays at screen height.
 
    Save the scene to keep the wall.

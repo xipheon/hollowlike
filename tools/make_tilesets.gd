@@ -15,7 +15,10 @@ extends SceneTree
 ##   foreground: concrete, catwalk, spikes, sewer, track (all Match Sides)
 ##   background: wall (Match Sides): plain brick in weighted random variants,
 ##               and the crumbled edge facing any unpainted (open) side.
-## Rerun after changing a sheet's layout. Once rooms are painted, prefer
+##               Props (decor, windows, lights) count as wall to it, so
+##               only a really empty cell gets an edge.
+## Patterns (the TileMap panel's Patterns tab): the large window, whole.
+## Rerun after changing a sheet's layout (it keeps each file's ID). Once rooms are painted, prefer
 ## editing the .tres in Godot over rerunning this (it rebuilds from scratch).
 
 const FOREGROUND_PATH := "res://art/tiles/foreground_tileset.tres"
@@ -42,8 +45,12 @@ func _init() -> void:
 	quit()
 
 
+## Saves over the old file, keeping its ID so scenes still find it.
 func _save(tileset: TileSet, path: String) -> void:
+	var uid := ResourceLoader.get_resource_uid(path) if ResourceLoader.exists(path) else ResourceUID.INVALID_ID
 	var err := ResourceSaver.save(tileset, path)
+	if err == OK and uid != ResourceUID.INVALID_ID:
+		err = ResourceSaver.set_uid(path, uid)
 	print("Wrote %s (%s)" % [path, error_string(err)])
 
 
@@ -162,16 +169,36 @@ func _background() -> TileSet:
 			if n & (1 << b) == 0:
 				sides += "NESW"[b]
 		_terrain(_tile(ts, RoomArt.EDGE_ORIGIN + Vector2i(n % 8, n / 8), "wall"), WALL, sides)
-	# Decor, windows and lights: painted tile by tile.
-	for coords in [RoomArt.HAZARD, RoomArt.PIPE_H, RoomArt.PIPE_V, RoomArt.GIRDER, RoomArt.PIPE_JUNCTION]:
-		_tile(ts, coords, "decor")
+	# Decor, windows and lights: painted tile by tile (or the large window as a
+	# pattern). Each is wall to the brush (see _wall_prop).
+	for coords in [RoomArt.HAZARD, RoomArt.PIPE_H, RoomArt.PIPE_V, RoomArt.GIRDER, RoomArt.PIPE_JUNCTION] + RoomArt.PIPE_ENDS:
+		_wall_prop(_tile(ts, coords, "decor"))
 	for piece in [RoomArt.POSTERS, RoomArt.GRAFFITI]:
 		_piece(ts, piece, "decor")
 	for piece in [RoomArt.WINDOW_SMALL, RoomArt.WINDOW_LARGE]:
 		_piece(ts, piece, "window")
-	_tile(ts, RoomArt.LIGHT_LIT, "light", "steady")
-	_tile(ts, RoomArt.LIGHT_DEAD, "light", "broken")
+	_wall_prop(_tile(ts, RoomArt.LIGHT_LIT, "light", "steady"))
+	_wall_prop(_tile(ts, RoomArt.LIGHT_DEAD, "light", "broken"))
+	ts.add_pattern(_piece_pattern(RoomArt.WINDOW_LARGE))
 	return ts
+
+
+## A prop on the wall (a poster, a pipe, a window, a light) counts as wall to
+## the wall brush: brick painted next to it stays plain, and only an empty cell
+## gets a crumbled edge. Probability 0: the brush never paints one itself.
+func _wall_prop(data: TileData) -> void:
+	_terrain(data, WALL, "NESW", 0.0)
+
+
+## A multi-tile piece as a pattern (the TileMap panel's Patterns tab), to place
+## it whole in one click.
+func _piece_pattern(piece: Array) -> TileMapPattern:
+	var pattern := TileMapPattern.new()
+	var size: Vector2i = piece[1]
+	for y in size.y:
+		for x in size.x:
+			pattern.set_cell(Vector2i(x, y), 0, piece[0] + Vector2i(x, y), 0)   # alternative 0: its default is -1 (no tile)
+	return pattern
 
 
 ## Every cell of a multi-tile piece ([top-left, size in tiles]).
@@ -180,4 +207,4 @@ func _piece(ts: TileSet, piece: Array, kind: String) -> void:
 	var size: Vector2i = piece[1]
 	for y in size.y:
 		for x in size.x:
-			_tile(ts, origin + Vector2i(x, y), kind)
+			_wall_prop(_tile(ts, origin + Vector2i(x, y), kind))

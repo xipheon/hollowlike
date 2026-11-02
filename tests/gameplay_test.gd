@@ -2147,6 +2147,44 @@ func _test_terrain_brushes() -> void:
 	_check(bad.is_empty(), "wall brush: brick inside, crumbled edges at holes (%d of %d wrong)" % [bad.size(), bricks.size()])
 	wall.free()
 
+	# Props on the wall count as wall: brick painted around a poster, the large
+	# window and a pipe end stays plain, and they stay put.
+	var props := TileMapLayer.new()
+	props.tile_set = RoomArt.BACKGROUND_TILES
+	var placed := {Vector2i(3, 3): RoomArt.POSTERS[0], Vector2i(9, 7): RoomArt.PIPE_H_WALL_LEFT}
+	for dy in 2:
+		for dx in 3:
+			placed[Vector2i(6 + dx, 2 + dy)] = RoomArt.WINDOW_LARGE[0] + Vector2i(dx, dy)
+	for c in placed:
+		props.set_cell(c, 0, placed[c])
+	var around: Array[Vector2i] = []
+	for y in range(1, 9):
+		for x in range(1, 11):
+			if not placed.has(Vector2i(x, y)):
+				around.append(Vector2i(x, y))
+	props.set_cells_terrain_connect(around, 0, 0)
+	var inside := around.filter(func(c): return c.x > 1 and c.y > 1 and c.x < 10 and c.y < 8)
+	var edged := inside.filter(func(c): return not props.get_cell_atlas_coords(c) in RoomArt.WALLS)
+	var moved := placed.keys().filter(func(c): return props.get_cell_atlas_coords(c) != placed[c])
+	_check(edged.is_empty() and moved.is_empty(),
+			"wall brush: props count as wall (%d bricks edged beside them, %d props changed)" % [edged.size(), moved.size()])
+	props.free()
+	var window: TileMapPattern = RoomArt.BACKGROUND_TILES.get_pattern(0) if RoomArt.BACKGROUND_TILES.get_patterns_count() > 0 else null
+	_check(window != null and window.get_size() == RoomArt.WINDOW_LARGE[1]
+			and window.get_cell_atlas_coords(Vector2i.ZERO) == RoomArt.WINDOW_LARGE[0],
+			"the large window is a pattern, placed whole")
+	# Every pattern cell must be a real tile: alternative -1 (TileMapPattern's
+	# default) crashes the editor's Patterns tab.
+	var broken := []
+	for i in RoomArt.BACKGROUND_TILES.get_patterns_count():
+		var pattern := RoomArt.BACKGROUND_TILES.get_pattern(i)
+		for c in pattern.get_used_cells():
+			var source: TileSetAtlasSource = RoomArt.BACKGROUND_TILES.get_source(pattern.get_cell_source_id(c))
+			var at := pattern.get_cell_atlas_coords(c)
+			if not source.has_tile(at) or not source.has_alternative_tile(at, pattern.get_cell_alternative_tile(c)):
+				broken.append([i, c])
+	_check(broken.is_empty(), "every pattern cell is a real tile%s" % ("" if broken.is_empty() else ": not %s" % [broken]))
+
 
 ## A small room made the editor way, from the template: 30x14 tiles, concrete
 ## painted with the terrain brush (floor, ceiling, right wall, and a left wall
@@ -2207,7 +2245,8 @@ func _test_editor_room_plays() -> void:
 	await _frames(30)
 	_check(_player.is_on_floor() and absf(_player.global_position.x - 4.5 * TILE) < 2.0,
 			"player starts at the PlayerStart, on the painted floor (col %.1f)" % (_player.global_position.x / TILE))
-	_check(_main._grid.get(Vector2i(6, 11)) == "^" and _main._grid.get(Vector2i(10, 9)) == "|" and _main._grid.get(Vector2i(0, 10)) == ">",
+	_check(_main._kind_at(6, 11) == RoomArt.Kind.SPIKES and _main._kind_at(10, 9) == RoomArt.Kind.GATE
+			and _main._kind_at(0, 10) == RoomArt.Kind.DOOR,
 			"spikes, gate and door read from the tiles' kinds")
 	_check(not _main._gate_closed and _main.gates().get_used_cells().size() == 1, "the gate starts raised (teeth only)")
 	var crawler: CrawlerEnemy = _main.entities().get_node("Crawler")
@@ -2598,7 +2637,7 @@ func _test_moving_platform_travel() -> void:
 			"side to side: the deck stays between the track's ends %s" % [across.travel()])
 	_check(upright.on_track() and upright.travel() == [Vector2(25.5 * TILE, 3 * TILE), Vector2(25.5 * TILE, 12 * TILE)],
 			"up and down: the deck follows the rail %s" % [upright.travel()])
-	_check(not _main._grid.has(Vector2i(8, 8)), "track tiles aren't solid")
+	_check(_main._kind_at(8, 8) == RoomArt.Kind.EMPTY, "track tiles aren't part of the layout")
 	var loose_at := loose.position
 	var min_x := INF
 	var max_x := -INF
