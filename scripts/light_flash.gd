@@ -17,6 +17,7 @@ static func flash(parent: Node, at: Vector2, colour: Color, radius: int, peak_en
 	light.texture = FlickerLight.light_texture(radius)
 	light.color = colour
 	light.height = HEIGHT
+	light.range_item_cull_mask = FlickerLight.LIT_ALL
 	light.position = at
 	light.peak = peak_energy
 	light.time = fade

@@ -206,11 +206,7 @@ func _ready() -> void:
 	GameState.player_skin_changed.connect(sprite.apply_skin)
 	slash = SlashEffect.new()
 	add_child(slash)
-	light = PointLight2D.new()
-	light.texture = FlickerLight.light_texture(light_radius)
-	light.energy = light_energy
-	light.color = light_color
-	light.height = light_height
+	light = FlickerLight.make_light(light_radius, light_color, light_energy, light_height)
 	add_child(light)
 
 

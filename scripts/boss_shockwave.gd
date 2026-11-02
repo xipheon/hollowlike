@@ -27,11 +27,7 @@ func _ready() -> void:
 	shape.shape = rect
 	shape.position = Vector2(0, -SIZE.y * 0.5)
 	add_child(shape)
-	light = PointLight2D.new()
-	light.texture = FlickerLight.light_texture(LIGHT_RADIUS)
-	light.color = COLOR
-	light.energy = LIGHT_ENERGY
-	light.height = LIGHT_HEIGHT
+	light = FlickerLight.make_light(LIGHT_RADIUS, COLOR, LIGHT_ENERGY, LIGHT_HEIGHT)
 	light.position = Vector2(0, -SIZE.y * 0.5)
 	add_child(light)
 

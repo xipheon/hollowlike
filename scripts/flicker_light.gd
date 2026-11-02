@@ -11,7 +11,10 @@ extends Node2D
 ## light (a PointLight2D, `light_radius` px, `light_energy` at full, hanging
 ## `light_height` px out from the wall) shines on the room around it, following
 ## the same brightness. Its height is what lets the normal maps shade: a light
-## level with the wall would only graze a flat surface. Optional
+## level with the wall would only graze a flat surface. With `shadows` on (the
+## ceiling bulbs), solid ground and shut gates cast shadows from it: soft ones
+## on the wall, and hard ones on the terrain itself, which only catches the
+## light on a rim of its face (RoomArt.LIT_RIM); see MASK_WALL. Optional
 ## `lit_overlay` is shown at the current brightness (the lit bulb drawn over a
 ## dead one); optional `dim_overlay` is shown at the opposite (a dark box over
 ## a sign's letters when it's out).
@@ -19,6 +22,19 @@ extends Node2D
 enum Kind { STEADY, SIGN, BROKEN }
 
 const GLOW_BANDS := 4
+## Light masks. Most things (the wall, props, characters) are MASK_WALL; the
+## room puts its Terrain and Gates layers on MASK_TERRAIN. A light that casts
+## shadows lights MASK_WALL with soft shadows, and has a twin lighting
+## MASK_TERRAIN with hard ones; every other light (make_light()) lights both,
+## shadowless.
+const MASK_WALL := 1
+const MASK_TERRAIN := 2
+const LIT_ALL := MASK_WALL | MASK_TERRAIN
+## On the wall: soft, light shadows that add depth without hiding anything.
+const SHADOW_COLOR := Color(0, 0, 0, 0.6)
+const SHADOW_SMOOTH := 3.0
+## On the terrain: past its lit rim, a sharp drop to none of this light.
+const TERRAIN_SHADOW_COLOR := Color(0, 0, 0, 1)
 
 static var _glow_textures := {}   # Vector2i size -> banded radial texture
 static var _light_textures := {}  # int radius -> soft radial texture
@@ -30,7 +46,9 @@ var glow_strength := 0.35
 var light_radius := 96
 var light_energy := 0.6
 var light_height := 64.0
+var shadows := false
 var light: PointLight2D   # the real light, made in _ready
+var terrain_light: PointLight2D   # with shadows: its twin, on the terrain and gates
 var lit_overlay: CanvasItem
 var dim_overlay: CanvasItem
 var brightness := 1.0
@@ -48,11 +66,23 @@ func _ready() -> void:
 	material = CanvasItemMaterial.new()
 	material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	light = PointLight2D.new()
-	light.texture = light_texture(light_radius)
-	light.color = glow_color
-	light.height = light_height
+	light = make_light(light_radius, glow_color, light_energy, light_height)
 	add_child(light)
+	if shadows:
+		light.range_item_cull_mask = MASK_WALL
+		light.shadow_enabled = true
+		light.shadow_color = SHADOW_COLOR
+		light.shadow_filter = Light2D.SHADOW_FILTER_PCF13
+		light.shadow_filter_smooth = SHADOW_SMOOTH
+		terrain_light = make_light(light_radius, glow_color, light_energy, light_height)
+		terrain_light.range_item_cull_mask = MASK_TERRAIN
+		terrain_light.shadow_enabled = true
+		terrain_light.shadow_color = TERRAIN_SHADOW_COLOR
+		terrain_light.shadow_filter = Light2D.SHADOW_FILTER_NONE
+		# Godot shadows an item only if this mask covers both the occluders
+		# (on MASK_WALL, the tileset's default) and the item itself.
+		terrain_light.shadow_item_cull_mask = LIT_ALL
+		add_child(terrain_light)
 	# Start part-way into a cycle so lights in a room don't keep time together.
 	match kind:
 		Kind.BROKEN:
@@ -115,9 +145,10 @@ func _apply(value: float) -> void:
 		lit_overlay.modulate.a = brightness
 	if dim_overlay != null:
 		dim_overlay.modulate.a = 1.0 - brightness
-	if light != null:
-		light.energy = light_energy * brightness
-		light.enabled = brightness > 0.0
+	for real in [light, terrain_light]:
+		if real != null:
+			real.energy = light_energy * brightness
+			real.enabled = brightness > 0.0
 	queue_redraw()
 
 
@@ -148,6 +179,18 @@ static func _glow_texture(size: Vector2i) -> Texture2D:
 	tex.height = size.y
 	_glow_textures[size] = tex
 	return tex
+
+
+## A light with no shadows, lighting everything (LIT_ALL): `radius` px,
+## `colour`, `energy`, hanging `height` px out from the wall.
+static func make_light(radius: int, colour: Color, energy: float, height: float) -> PointLight2D:
+	var real := PointLight2D.new()
+	real.texture = light_texture(radius)
+	real.color = colour
+	real.energy = energy
+	real.height = height
+	real.range_item_cull_mask = LIT_ALL
+	return real
 
 
 ## A soft radial falloff for a real light (these, LightFlash, the player's):

@@ -25,6 +25,12 @@ extends SceneTree
 ##               crossings joined up as you paint, ends going into the wall,
 ##               and now and then a broken-off end.
 ## Patterns (the TileMap panel's Patterns tab): the large window, whole.
+## Occlusion: solid ground and shut gates block light, so the ceiling bulbs
+## cast shadows (FlickerLight.shadows). Each tile's occluder is inset by
+## RoomArt.LIT_RIM on its open sides (those facing air, from its terrain
+## connections), so a bulb lights that rim of the face toward it and the
+## rest is in shadow; sides against more solid stay flush, so no light leaks
+## between tiles.
 ## Each sheet is used as its CanvasTexture (<sheet>_canvas.tres, with its
 ## normal map; tools/make_normal_maps.gd), so the room's lights shade the tiles.
 ## Rerun after changing a sheet's layout (it keeps each file's ID). Once rooms are painted, prefer
@@ -87,6 +93,25 @@ func _new_tileset(sheet_path: String, data_layers: Array, terrains: Array) -> Ti
 	return ts
 
 
+## The sides ("NESW" letters) a tile connecting on `connected` doesn't.
+func _open_sides(connected: String) -> String:
+	var open := ""
+	for s in "NESW":
+		if not s in connected:
+			open += s
+	return open
+
+
+## Blocks light over the tile (occlusion layer 0), but for RoomArt.LIT_RIM
+## along each of its `open` sides.
+func _occluder(data: TileData, open: String) -> void:
+	var polygon := OccluderPolygon2D.new()
+	var rect := RoomArt.occluder_rect(open)
+	polygon.polygon = PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
+	data.set_occluder_polygons_count(0, 1)
+	data.set_occluder_polygon(0, 0, polygon)
+
+
 ## A sheet with its normal map, as tools/make_normal_maps.gd pairs them.
 func _lit(sheet_path: String) -> Texture2D:
 	return load(sheet_path.get_basename() + "_canvas.tres")
@@ -137,10 +162,13 @@ func _foreground() -> TileSet:
 		["spikes", Color(0.6, 0.85, 0.8)], ["sewer", Color(0.45, 0.5, 0.05)],
 		["track", Color(0.85, 0.7, 0.2)],
 	])
+	ts.add_occlusion_layer()
 	# Concrete: the 4x4 block, each tile connecting on the sides it's solid on.
 	for r in RoomArt.TERRAIN.size():
 		for c in RoomArt.TERRAIN[r].size():
-			_terrain(_tile(ts, Vector2i(c, r), "solid"), CONCRETE, RoomArt.TERRAIN[r][c])
+			var data := _tile(ts, Vector2i(c, r), "solid")
+			_terrain(data, CONCRETE, RoomArt.TERRAIN[r][c])
+			_occluder(data, _open_sides(RoomArt.TERRAIN[r][c]))
 	# Catwalk: ends and middle connect sideways only.
 	_terrain(_tile(ts, RoomArt.PLAT_L, "platform"), CATWALK, "E")
 	_terrain(_tile(ts, RoomArt.PLAT_MID, "platform"), CATWALK, "EW")
@@ -167,7 +195,11 @@ func _foreground() -> TileSet:
 		_terrain(_tile(ts, RoomArt.TRACK_V + Vector2i(0, i), "track"), TRACK, ["S", "NS", "N"][i])
 	# Gates and doors: painted tile by tile.
 	for coords in [RoomArt.GATE, RoomArt.GATE_END, RoomArt.GATE_UP]:
-		_tile(ts, coords, "gate")
+		var gate := _tile(ts, coords, "gate")
+		if coords != RoomArt.GATE_UP:
+			# Shut, it blocks light; raised, just its teeth show. Open to the
+			# sides, and under its bottom tile.
+			_occluder(gate, "ESW" if coords == RoomArt.GATE_END else "EW")
 	_tile(ts, RoomArt.DOOR, "door")
 	_tile(ts, RoomArt.DOOR_TOP, "door", "sign")
 	return ts

@@ -25,7 +25,7 @@ const SEGMENTS := {
 		"_test_door_to_boss_room_and_back",
 		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
 		"_test_pink_crawler_kill_heals", "_test_crawler_sludge", "_test_ceiling_crawler", "_test_room_lights_flicker",
-		"_test_room_dimming",
+		"_test_room_dimming", "_test_bulb_shadows",
 	],
 	# The tilesets' terrain brushes and tile data (tools/make_tilesets.gd, room_art.gd), the room template.
 	"tilesets": [
@@ -1919,6 +1919,85 @@ func _test_room_lights_flicker() -> void:
 			"a dead bulb sputters on (%d flashes) but is dark %.0f%% of the time" % [broken.flashes, 100.0 - 100.0 * broken.on / frames])
 	_check(out_of_step == 0, "the real lights flicker in step with the glows (%d frames out)" % out_of_step)
 	await _despawn()
+
+
+func _test_bulb_shadows() -> void:
+	print("Shadows: solid ground and shut gates block light; bulbs light a rim of their faces, then a sharp drop; soft shadows on the wall")
+	# The tiles: solid tiles and shut gates block light, all but a LIT_RIM
+	# along each side open to the air; nothing else blocks light.
+	var source: TileSetAtlasSource = RoomArt.FOREGROUND_TILES.get_source(0)
+	var wrong := []
+	for i in source.get_tiles_count():
+		var at := source.get_tile_id(i)
+		var data := source.get_tile_data(at, 0)
+		var open := _open_sides_of(at)
+		var count := data.get_occluder_polygons_count(0)
+		if (open == "-") != (count == 0) or (count > 0 and (count != 1 or _occluder_rect(data) != RoomArt.occluder_rect(open))):
+			wrong.append(at)
+	_check(RoomArt.FOREGROUND_TILES.get_occlusion_layers_count() == 1 and wrong.is_empty(),
+			"solid tiles and shut gates block light but for a %d px rim facing the air%s" % [RoomArt.LIT_RIM, "" if wrong.is_empty() else ", not %s" % [wrong]])
+	var floor_top := RoomArt.occluder_rect("N")
+	_check(is_equal_approx(floor_top.position.y, -RoomArt.TILE * 0.5 + RoomArt.TILE / 4.0) and floor_top.size.x == RoomArt.TILE,
+			"a floor's rim is a quarter of a tile deep, and runs its full width")
+	# The room: bulbs cast soft shadows on the wall, and hard ones on the terrain and gates.
+	await _spawn()
+	_check(_main.terrain().light_mask == FlickerLight.MASK_TERRAIN and _main.gates().light_mask == FlickerLight.MASK_TERRAIN,
+			"the terrain and gates are lit by the bulbs' terrain light")
+	var lights := _main.get_children().filter(func(c): return c is FlickerLight)
+	var bulbs := lights.filter(func(l): return l.kind != FlickerLight.Kind.SIGN)
+	var signs := lights.filter(func(l): return l.kind == FlickerLight.Kind.SIGN)
+	var unshaded := bulbs.filter(func(l): return not _casts_shadows(l))
+	_check(not bulbs.is_empty() and unshaded.is_empty(),
+			"every bulb casts soft shadows on the wall and hard ones on the terrain (%d of %d)" % [bulbs.size() - unshaded.size(), bulbs.size()])
+	_check(FlickerLight.SHADOW_COLOR.a < 1.0, "the wall's shadows are partial, never black (%.2f)" % FlickerLight.SHADOW_COLOR.a)
+	_check(FlickerLight.TERRAIN_SHADOW_COLOR.a == 1.0, "past the rim the bulb's light is gone")
+	_check(signs.all(func(l): return not l.light.shadow_enabled and l.light.range_item_cull_mask == FlickerLight.LIT_ALL and l.terrain_light == null),
+			"EXIT signs cast none, and light everything")
+	_check(_player.light.range_item_cull_mask == FlickerLight.LIT_ALL and not _player.light.shadow_enabled, "the player's light lights everything, shadowless")
+	# The twin follows its bulb's flicker.
+	var bulb: FlickerLight = bulbs[0]
+	bulb._apply(0.4)
+	_check(is_equal_approx(bulb.terrain_light.energy, bulb.light.energy) and is_equal_approx(bulb.light.energy, bulb.light_energy * 0.4),
+			"the terrain light flickers with its bulb")
+	await _despawn()
+
+
+## The sides of a foreground tile open to the air, as its occluder should
+## see them: "-" for a tile that shouldn't block light at all.
+func _open_sides_of(at: Vector2i) -> String:
+	var connected := ""
+	if at.y < RoomArt.TERRAIN.size() and at.x < RoomArt.TERRAIN[at.y].size():
+		connected = RoomArt.TERRAIN[at.y][at.x]
+	elif at == RoomArt.GATE:
+		connected = "NS"
+	elif at == RoomArt.GATE_END:
+		connected = "N"
+	else:
+		return "-"
+	var open := ""
+	for s in "NESW":
+		if not s in connected:
+			open += s
+	return open
+
+
+func _occluder_rect(data: TileData) -> Rect2:
+	var points := data.get_occluder_polygon(0, 0).polygon
+	var rect := Rect2(points[0], Vector2.ZERO)
+	for p in points:
+		rect = rect.expand(p)
+	return rect if points.size() == 4 else Rect2()
+
+
+## A bulb's light casts soft shadows on MASK_WALL, and its twin hard ones on MASK_TERRAIN.
+func _casts_shadows(bulb: FlickerLight) -> bool:
+	var real := bulb.light
+	var twin := bulb.terrain_light
+	if twin == null or not real.shadow_enabled or not twin.shadow_enabled:
+		return false
+	return real.range_item_cull_mask == FlickerLight.MASK_WALL and real.shadow_color == FlickerLight.SHADOW_COLOR \
+			and twin.range_item_cull_mask == FlickerLight.MASK_TERRAIN and twin.shadow_color == FlickerLight.TERRAIN_SHADOW_COLOR \
+			and twin.shadow_filter == Light2D.SHADOW_FILTER_NONE and twin.shadow_item_cull_mask == FlickerLight.LIT_ALL
 
 
 func _test_room_dimming() -> void:

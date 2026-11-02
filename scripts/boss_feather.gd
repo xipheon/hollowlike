@@ -47,11 +47,10 @@ func _ready() -> void:
 	rect.size = Vector2(LENGTH, 8) if not homing else Vector2(18, 18)
 	shape.shape = rect
 	add_child(shape)
-	light = PointLight2D.new()
-	light.texture = FlickerLight.light_texture(HOMING_LIGHT_RADIUS if homing else LIGHT_RADIUS)
-	light.color = HOMING_COLOR if homing else COLOR
-	light.energy = HOMING_LIGHT_ENERGY if homing else LIGHT_ENERGY
-	light.height = LIGHT_HEIGHT
+	if homing:
+		light = FlickerLight.make_light(HOMING_LIGHT_RADIUS, HOMING_COLOR, HOMING_LIGHT_ENERGY, LIGHT_HEIGHT)
+	else:
+		light = FlickerLight.make_light(LIGHT_RADIUS, COLOR, LIGHT_ENERGY, LIGHT_HEIGHT)
 	add_child(light)
 	rotation = direction.angle()
 

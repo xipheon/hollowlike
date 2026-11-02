@@ -68,6 +68,9 @@ const SIGN_GLOW_STRENGTH := 0.3
 const SIGN_LIGHT_RADIUS := 64
 const SIGN_LIGHT_ENERGY := 0.6
 const SIGN_LIGHT_HEIGHT := 32.0
+## Px of a solid tile's open face (one toward air) a bulb lights, before a
+## sharp drop into shadow: its occluder starts this far in (tools/make_tilesets.gd).
+const LIT_RIM := TILE / 4
 const SIGN_LETTERS := Rect2(8, 9, 16, 7)   # inside the sign's frame (tools/make_door_tiles.gd)
 const SIGN_OFF := Color8(52, 10, 14)        # the sign box's colour, covering the letters when it's out
 const ACID_FRAMES := 4
@@ -127,6 +130,17 @@ var _w := 0
 var _h := 0
 var _rng := RandomNumberGenerator.new()
 var _gates: TileMapLayer
+
+
+## A solid tile's occluder, centred on the tile: the whole tile, less
+## LIT_RIM along each of its `open` sides ("NESW" letters).
+static func occluder_rect(open: String) -> Rect2:
+	var h := TILE * 0.5
+	var left := -h + (LIT_RIM if "W" in open else 0)
+	var right := h - (LIT_RIM if "E" in open else 0)
+	var top := -h + (LIT_RIM if "N" in open else 0)
+	var bottom := h - (LIT_RIM if "S" in open else 0)
+	return Rect2(left, top, right - left, bottom - top)
 
 
 ## `kind_at` answers what's at (x, y) as a Kind, with anything outside the
@@ -225,6 +239,7 @@ func _add_light(parent: Node2D, cell: Vector2i, kind: FlickerLight.Kind, lit: Ca
 		light.light_radius = BULB_LIGHT_RADIUS
 		light.light_energy = BULB_LIGHT_ENERGY
 		light.light_height = BULB_LIGHT_HEIGHT
+		light.shadows = true
 		light.z_index = -1
 	parent.add_child(light)
 

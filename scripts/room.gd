@@ -188,6 +188,9 @@ func _read_painted_grid() -> void:
 func _load_room() -> void:
 	_read_painted_grid()
 	_art = RoomArt.new(_kind_at, _w, _h)
+	# The terrain and gates get the bulbs' hard shadows (FlickerLight.MASK_TERRAIN).
+	for layer in [terrain(), gates()]:
+		layer.light_mask = FlickerLight.MASK_TERRAIN
 	_art.dress(self, props(), terrain(), gates())
 	for door in entities_of(RoomDoor):
 		var at := Vector2i((to_local(door.global_position) / TILE).round())
