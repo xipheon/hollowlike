@@ -1,0 +1,18 @@
+[gd_resource type="TileSet" format=3 uid="uid://d4ew55mdk4v5b"]
+
+[ext_resource type="Texture2D" uid="uid://df0jjfi51r1je" path="res://art/tiles/props.png" id="1_eiggu"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_dllfp"]
+texture = ExtResource("1_eiggu")
+texture_region_size = Vector2i(32, 32)
+0:0/0 = 0
+0:0/0/custom_data_0 = "decor"
+1:0/0 = 0
+1:0/0/custom_data_0 = "decor"
+
+[resource]
+tile_size = Vector2i(32, 32)
+terrain_set_0/mode = 2
+custom_data_layer_0/name = "kind"
+custom_data_layer_0/type = 4
+sources/0 = SubResource("TileSetAtlasSource_dllfp")

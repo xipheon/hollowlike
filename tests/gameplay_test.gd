@@ -29,6 +29,7 @@ const SEGMENTS := {
 	# The tilesets' terrain brushes and tile data (tools/make_tilesets.gd, room_art.gd), the room template.
 	"tilesets": [
 		"_test_terrain_brushes", "_test_tiles_say_what_they_are", "_test_room_template",
+		"_test_props_layer",
 	],
 	# Rooms made in the editor: painted layers, helper nodes, decoration (room.gd, room_art.gd).
 	"editor_rooms": [
@@ -2147,11 +2148,11 @@ func _test_terrain_brushes() -> void:
 	_check(bad.is_empty(), "wall brush: brick inside, crumbled edges at holes (%d of %d wrong)" % [bad.size(), bricks.size()])
 	wall.free()
 
-	# Props on the wall count as wall: brick painted around a poster, the large
+	# Props on the wall count as wall: brick painted around graffiti, the large
 	# window and a pipe end stays plain, and they stay put.
 	var props := TileMapLayer.new()
 	props.tile_set = RoomArt.BACKGROUND_TILES
-	var placed := {Vector2i(3, 3): RoomArt.POSTERS[0], Vector2i(9, 7): RoomArt.PIPE_H_WALL_LEFT}
+	var placed := {Vector2i(3, 3): RoomArt.GRAFFITI[0], Vector2i(9, 7): RoomArt.PIPE_H_WALL_LEFT}
 	for dy in 2:
 		for dx in 3:
 			placed[Vector2i(6 + dx, 2 + dy)] = RoomArt.WINDOW_LARGE[0] + Vector2i(dx, dy)
@@ -2299,6 +2300,8 @@ func _test_decorate_wall_button() -> void:
 	for c in baked.background().get_used_cells():
 		tiles[c] = baked.background().get_cell_atlas_coords(c)
 	_check(tiles.values().any(func(t): return t in [RoomArt.WINDOW_SMALL[0], RoomArt.WINDOW_LARGE[0]]), "with windows in it")
+	var bare := baked.props().get_used_cells().filter(func(c): return not baked.background().get_cell_atlas_coords(c) in RoomArt.WALLS)
+	_check(bare.is_empty(), "posters go on the Props layer, over plain brick (%d of %d not)" % [bare.size(), baked.props().get_used_cells().size()])
 	var again := _build_editor_room()
 	again.background().set_cell(hand_cell, 0, RoomArt.HAZARD)
 	again.decorate_wall_action.call()
@@ -2326,6 +2329,9 @@ func _test_room_template() -> void:
 	add_child(room)
 	await _frames(1)
 	_check(room.background().tile_set == RoomArt.BACKGROUND_TILES and room.background().z_index == -1, "Background: wall tiles, behind")
+	_check(room.props().tile_set == RoomArt.PROPS_TILES and room.props().z_index == -1
+			and room.background().get_index() < room.props().get_index() and room.props().get_index() < room.terrain().get_index(),
+			"Props: props tiles, over the wall and behind the terrain")
 	_check(room.terrain().tile_set == RoomArt.FOREGROUND_TILES and room.gates().tile_set == RoomArt.FOREGROUND_TILES,
 			"Terrain and Gates: foreground tiles")
 	var skyline: Skyline = room.get_node("Skyline")
@@ -2352,7 +2358,7 @@ func _test_tiles_say_what_they_are() -> void:
 	print("Every painted tile carries its kind; lights come from tile data")
 	await _spawn()
 	var counts := {}
-	for layer_name in ["Terrain", "Background", "Gates"]:
+	for layer_name in ["Terrain", "Background", "Props", "Gates"]:
 		var layer := _layer_named(layer_name)
 		for cell in layer.get_used_cells():
 			var kind: String = layer.get_cell_tile_data(cell).get_custom_data("kind")
@@ -2368,6 +2374,37 @@ func _test_tiles_say_what_they_are() -> void:
 	_check(gates.get_used_cells().size() > 0 and gates.get_used_cells().all(
 			func(c): return gates.get_cell_tile_data(c).get_custom_data("kind") == "gate"), "the boss room's gates are gate tiles")
 	await _despawn()
+
+
+func _test_props_layer() -> void:
+	print("Props layer: posters on their own sheet with no brick behind, over brick in every room")
+	# The posters' cells keep only the poster: the sheet is see-through around it.
+	var sheet := (load("res://art/tiles/props.png") as Texture2D).get_image()
+	var size: Vector2i = RoomArt.POSTERS[1] * TILE
+	var cut := sheet.get_region(Rect2i(RoomArt.POSTERS[0] * TILE, size))
+	var clear := 0
+	for y in size.y:
+		for x in size.x:
+			if cut.get_pixel(x, y).a == 0.0:
+				clear += 1
+	_check(clear > 0 and clear < size.x * size.y, "the posters have no brick behind them (%d of %d pixels clear)" % [clear, size.x * size.y])
+	var source: TileSetAtlasSource = RoomArt.PROPS_TILES.get_source(0)
+	_check(source.has_tile(RoomArt.POSTERS[0]) and source.get_tile_data(RoomArt.POSTERS[0], 0).get_custom_data("kind") == "decor",
+			"a poster is a decor tile on the props sheet")
+	# Each room: every Props cell is a real tile with wall behind it, and every
+	# Background cell is still a real tile now the posters have left that sheet.
+	for room_id in LevelData.ROOMS:
+		var room: Room = load(LevelData.ROOMS[room_id].scene).instantiate()
+		var missing := []
+		for layer in [room.background(), room.props()]:
+			var atlas: TileSetAtlasSource = layer.tile_set.get_source(0)
+			for c in layer.get_used_cells():
+				if not atlas.has_tile(layer.get_cell_atlas_coords(c)):
+					missing.append(c)
+		var bare := room.props().get_used_cells().filter(func(c): return room.background().get_cell_source_id(c) == -1)
+		_check(missing.is_empty() and bare.is_empty(),
+				"%s: props over wall, every tile real (%d missing, %d props on open wall)" % [room_id, missing.size(), bare.size()])
+		room.free()
 
 
 ## An enemy scene set up as if placed and edited in the Inspector.

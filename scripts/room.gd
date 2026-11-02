@@ -7,6 +7,7 @@ extends Node2D
 ## scenes/rooms/room_template.tscn):
 ##   Skyline     the far city, behind everything
 ##   Background  the wall behind the room (background_tileset.tres)
+##   Props       things on the wall, over its brick (props_tileset.tres)
 ##   Terrain     what you stand on and what hurts (foreground_tileset.tres)
 ##   Gates       arena gates, shut during a boss fight (foreground_tileset.tres)
 ##   Entities    placed enemies and bosses, a PlayerStart, RoomDoors, Arenas
@@ -33,7 +34,7 @@ const CAMERA_RELEASE_TIME := 0.6
 ## This room's id in LevelData.ROOMS.
 @export var room := ""
 ## Fills every unpainted cell of the Background layer with brick, windows,
-## lights, posters and graffiti (the same each time for the same room), so you
+## lights and graffiti, with posters on the Props layer (the same each time for the same room), so you
 ## can edit it by hand. Wall you've already painted is kept. The room shows
 ## exactly what's painted: unpainted wall is open, and the skyline shows
 ## through. Save the scene to keep it.
@@ -58,6 +59,10 @@ var _doors: Array[Dictionary] = []
 
 func background() -> TileMapLayer:
 	return get_node_or_null("Background")
+
+
+func props() -> TileMapLayer:
+	return get_node_or_null("Props")
 
 
 func terrain() -> TileMapLayer:
@@ -139,7 +144,7 @@ func _kind_at(x: int, y: int) -> RoomArt.Kind:
 ## The Inspector's "Decorate wall" button (see decorate_wall_action).
 func decorate_wall() -> void:
 	_read_painted_grid()
-	RoomArt.new(_kind_at, _w, _h).decorate_unpainted(room, background())
+	RoomArt.new(_kind_at, _w, _h).decorate_unpainted(room, background(), props())
 	if Engine.is_editor_hint() and Engine.has_singleton("EditorInterface"):
 		Engine.get_singleton("EditorInterface").mark_scene_as_unsaved()
 

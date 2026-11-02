@@ -22,6 +22,7 @@ const TILE_KINDS := {
 ## Built by tools/make_tilesets.gd; every tile says what it is in its custom data.
 const FOREGROUND_TILES := preload("res://art/tiles/foreground_tileset.tres")
 const BACKGROUND_TILES := preload("res://art/tiles/background_tileset.tres")
+const PROPS_TILES := preload("res://art/tiles/props_tileset.tres")
 const BACKGROUND := preload("res://art/tiles/background.png")
 
 # Solid neighbours (N, E, S, W) of each cell in the tileset's 4x4 terrain block,
@@ -87,13 +88,16 @@ const PIPE_ENDS := [
 ]
 const WINDOW_SMALL := [Vector2i(0, 1), Vector2i(2, 2)]
 const WINDOW_LARGE := [Vector2i(2, 1), Vector2i(3, 2)]
-const POSTERS := [Vector2i(5, 1), Vector2i(2, 1)]
 const GRAFFITI := [Vector2i(5, 2), Vector2i(2, 1)]
 const LIGHT_LIT := Vector2i(7, 1)
 const LIGHT_DEAD := Vector2i(7, 2)
 # Broken wall around a hole: tile n has bit 1 = N open, 2 = E, 4 = S, 8 = W,
 # at EDGE_ORIGIN + (n % 8, n / 8). See tools/make_background_tiles.gd.
 const EDGE_ORIGIN := Vector2i(0, 4)
+
+# Props sheet cells (art/tiles/props.png, tools/make_prop_tiles.gd): props with
+# nothing behind them, for the Props layer, over the Background's brick.
+const POSTERS := [Vector2i(0, 0), Vector2i(2, 1)]
 
 # Automatic decoration spacing, in tiles.
 const WINDOW_ROW_STEP := 9       # rows between window bands
@@ -129,7 +133,8 @@ func dress(parent: Node2D, background: TileMapLayer, terrain: TileMapLayer, gate
 
 ## Paints brick, windows, lights, posters and graffiti into every cell of the
 ## room's wall that isn't painted yet. Seeded by `room`: the same every time.
-func decorate_unpainted(room: String, background: TileMapLayer) -> void:
+## Posters go on the `props` layer, over brick.
+func decorate_unpainted(room: String, background: TileMapLayer, props: TileMapLayer) -> void:
 	_rng.seed = hash(room)
 	var cells := {}
 	for y in _h:
@@ -137,9 +142,13 @@ func decorate_unpainted(room: String, background: TileMapLayer) -> void:
 			var c := Vector2i(x, y)
 			if background.get_cell_source_id(c) == -1:
 				cells[c] = _pick_wall()
-	_decorate(cells)
+	var hung := {}
+	_decorate(cells, hung)
 	for c in cells:
 		background.set_cell(c, 0, cells[c])
+	for c in hung:
+		if props.get_cell_source_id(c) == -1:
+			props.set_cell(c, 0, hung[c])
 
 
 ## Glows for every tile whose `light` data says it has one: lit bulbs, dead
@@ -251,7 +260,9 @@ func _mark(used: Dictionary, at: Vector2i, size: Vector2i) -> void:
 			used[at + Vector2i(x, y)] = true
 
 
-func _decorate(cells: Dictionary) -> void:
+## Fills `cells` (wall cell -> background tile) with windows, lights and
+## graffiti, and `hung` (cell -> props tile) with posters.
+func _decorate(cells: Dictionary, hung: Dictionary) -> void:
 	var used := {}
 	# Windows: bands of them up the room, high enough to clear the floor.
 	for y in range(1 + _rng.randi_range(0, 2), _h - 3, WINDOW_ROW_STEP):
@@ -284,9 +295,10 @@ func _decorate(cells: Dictionary) -> void:
 			if _kind_at(x, y + 2) != Kind.SOLID or _kind_at(x + 1, y + 2) != Kind.SOLID or _rng.randf() > WALL_ART_CHANCE:
 				x += 1
 				continue
-			var piece: Array = POSTERS if _rng.randf() < 0.5 else GRAFFITI
+			var poster := _rng.randf() < 0.5
+			var piece: Array = POSTERS if poster else GRAFFITI
 			if _fits(cells, Vector2i(x, y), piece[1], 0, used) and _fits(cells, Vector2i(x, y + 1), Vector2i(2, 1), 0, used):
-				_put(cells, Vector2i(x, y), piece)
+				_put(hung if poster else cells, Vector2i(x, y), piece)
 				_mark(used, Vector2i(x, y), piece[1])
 				x += WALL_ART_GAP
 			x += 1

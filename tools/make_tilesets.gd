@@ -1,15 +1,18 @@
 extends SceneTree
-## Builds the two TileSet resources rooms are painted with, from the tile
-## sheets (art/tiles/tileset.png and background.png). Run from the project folder:
+## Builds the TileSet resources rooms are painted with, from the tile sheets
+## (art/tiles/tileset.png, background.png and props.png). Run from the project folder:
 ##   godot --headless --path . --script res://tools/make_tilesets.gd
 ##
 ## foreground_tileset.tres: terrain, one-way platforms, spikes, sewer water,
 ## gates, doors and moving platform tracks. background_tileset.tres: the brick
-## wall, windows, decor, lights and broken-wall edges. Every tile carries custom
+## wall, windows, decor, lights and broken-wall edges. props_tileset.tres:
+## things on the wall with nothing behind them (posters), for the Props layer
+## over the brick. Every tile carries custom
 ## data saying what it is, so the game reads behaviour from the tile, not from
 ## where it sits on a sheet:
 ##   kind   foreground: solid, platform, spikes, acid, gate, door, track
 ##          background: wall, window, decor, light
+##          props: decor
 ##   light  steady, broken or sign (a glow the room adds; FlickerLight)
 ## Terrain sets let the editor's terrain brush pick tiles by their neighbours:
 ##   foreground: concrete, catwalk, spikes, sewer, track (all Match Sides)
@@ -23,6 +26,7 @@ extends SceneTree
 
 const FOREGROUND_PATH := "res://art/tiles/foreground_tileset.tres"
 const BACKGROUND_PATH := "res://art/tiles/background_tileset.tres"
+const PROPS_PATH := "res://art/tiles/props_tileset.tres"
 const TILE := Vector2i(32, 32)
 
 # Terrain indexes in each tileset's terrain set 0.
@@ -42,6 +46,7 @@ const SIDES := {
 func _init() -> void:
 	_save(_foreground(), FOREGROUND_PATH)
 	_save(_background(), BACKGROUND_PATH)
+	_save(_props(), PROPS_PATH)
 	quit()
 
 
@@ -173,8 +178,7 @@ func _background() -> TileSet:
 	# pattern). Each is wall to the brush (see _wall_prop).
 	for coords in [RoomArt.HAZARD, RoomArt.PIPE_H, RoomArt.PIPE_V, RoomArt.GIRDER, RoomArt.PIPE_JUNCTION] + RoomArt.PIPE_ENDS:
 		_wall_prop(_tile(ts, coords, "decor"))
-	for piece in [RoomArt.POSTERS, RoomArt.GRAFFITI]:
-		_piece(ts, piece, "decor")
+	_piece(ts, RoomArt.GRAFFITI, "decor")
 	for piece in [RoomArt.WINDOW_SMALL, RoomArt.WINDOW_LARGE]:
 		_piece(ts, piece, "window")
 	_wall_prop(_tile(ts, RoomArt.LIGHT_LIT, "light", "steady"))
@@ -183,7 +187,17 @@ func _background() -> TileSet:
 	return ts
 
 
-## A prop on the wall (a poster, a pipe, a window, a light) counts as wall to
+func _props() -> TileSet:
+	var ts := _new_tileset("res://art/tiles/props.png", ["kind"], [])
+	var origin: Vector2i = RoomArt.POSTERS[0]
+	var size: Vector2i = RoomArt.POSTERS[1]
+	for y in size.y:
+		for x in size.x:
+			_tile(ts, origin + Vector2i(x, y), "decor")
+	return ts
+
+
+## A prop on the wall (a graffiti, a pipe, a window, a light) counts as wall to
 ## the wall brush: brick painted next to it stays plain, and only an empty cell
 ## gets a crumbled edge. Probability 0: the brush never paints one itself.
 func _wall_prop(data: TileData) -> void:

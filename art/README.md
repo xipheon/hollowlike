@@ -42,7 +42,7 @@ You don't have to finish a sheet in one go. Placeholder frames are fine: a few r
 Tell Claude when a sheet is in place, and it will be wired in:
 
 - **Characters.** An `AnimatedSprite2D` replaces the `_draw()` placeholder. It is built straight from the sheet using the layout in SHEETS.md, and each state plays the matching row. Flashes and tints (damage, the phase-two colour, telegraph colours) stay in code as `modulate`.
-- **Tiles.** `tiles/foreground_tileset.tres` and `tiles/background_tileset.tres`, built by `tools/make_tilesets.gd`, with *Match Sides* terrain brushes. Rooms are painted with them in the editor (see Making rooms below). Collisions come from code, from each tile's `kind`.
+- **Tiles.** `tiles/foreground_tileset.tres`, `tiles/background_tileset.tres` and `tiles/props_tileset.tres`, built by `tools/make_tilesets.gd`, with *Match Sides* terrain brushes. Rooms are painted with them in the editor (see Making rooms below). Collisions come from code, from each tile's `kind`.
 
 The layouts are fixed, so a sheet can be swapped or redrawn later without touching the game code. Only resizing a frame or adding a row needs a code change. To do that, edit `SHEETS` in `tools/make_art_templates.gd`, rerun it, and update your drawing to match.
 
@@ -61,21 +61,22 @@ Rooms are scenes made in the Godot editor. Each tile you paint says what it is (
    Platforms go back and forth and pause at each end. Set `width_tiles`, `speed` and `end_pause` in the Inspector. A platform placed off a track stays still.
 5. **Paint the Gates layer** where a boss arena's gates go, with the shut gate tiles. They show raised until a fight starts, then drop shut.
 6. **Paint the wall (Background layer).** The game shows exactly what you paint here. Any cell left empty is open, and the skyline shows through it.
-   - Press **Decorate wall** in the root's Inspector to fill every empty cell with brick, windows, lights, posters and graffiti. Cells you've already painted are kept. Then edit the result by hand.
+   - Press **Decorate wall** in the root's Inspector to fill every empty cell with brick, windows, lights and graffiti, with posters on the Props layer. Cells you've already painted are kept. Then edit the result by hand.
    - Or paint the wall yourself. Use the **wall** brush (Terrains tab) for brick: it gives a crumbled edge only where brick meets an empty cell. Props count as wall, so painting brick around them leaves them alone and adds no edges.
    - Props come from the **Tiles** tab. Each one is a whole tile with its own brick behind it, so it takes the place of a brick cell. For a prop more than one tile big (graffiti, windows), drag across all of its tiles in the picker, then click once in the room. The large rusty window is also in the **Patterns** tab: click it, then click once in the room.
    - Pipes: lengths, a junction, and ends (bottom row of the sheet). Each end either goes into the wall behind a flange or is broken off, and comes in left, right, top and bottom.
    - Window glass is see-through. In the editor the skyline is repeated down the whole room so every window shows the city. In game the skyline stays at screen height.
 
    Save the scene to keep the wall.
-7. **Place things under Entities** by dragging scenes onto it from the FileSystem dock:
+7. **Hang props on the wall (Props layer)** with `art/tiles/props_tileset.tres`: posters, so far. Props have nothing behind them, so paint brick on the Background first, then the prop over it on Props. For a poster, drag across both of its tiles in the picker, then click once. Props are moving here from the background sheet one kind at a time; the rest are still Background tiles with brick of their own.
+8. **Place things under Entities** by dragging scenes onto it from the FileSystem dock:
    - **Enemies:** the crawlers, one scene per colour: `scenes/enemies/crawler_sewer.tscn`, `crawler_sickly.tscn` and `crawler_pink.tscn` (the pink one heals you when killed). Then `thug.tscn`, which blocks and pauses on patrol (its block reduction, patrol and pause times are in the Inspector). In the Inspector, every enemy can set its health, damage, heal on kill and hit recoil, and a crawler can start on the ceiling.
    - **Bosses:** `scenes/bosses/warden.tscn` and `harrier.tscn`. Each needs an **Arena** node (`scripts/arena.gd`). Its origin is the arena's top-left corner, and `size_tiles` is its size. Point its `boss` at the boss node. The fight starts a few tiles past a gate, and the camera frames the arena.
    - **PlayerStart** (`scripts/player_start.gd`): where a fresh game starts, at the player's feet. Players coming through a door arrive at the door instead.
    - **RoomDoor** (`scripts/room_door.gd`): put it over the door tiles, with its origin at the doorway's top-left corner. Set its `height` in tiles, and choose `target_room` from the list. `arrive_at` names the door to arrive at in that room. Leave it empty to arrive at the door there that leads back.
 
    PlayerStart, RoomDoor and Arena show labels in the editor and are hidden in the game.
-8. **Play it.** Press F6 to run just this scene. Without a PlayerStart, the player appears at a door. Run the tests too (see `tests/gameplay_test.gd`).
+9. **Play it.** Press F6 to run just this scene. Without a PlayerStart, the player appears at a door. Run the tests too (see `tests/gameplay_test.gd`).
 
 To add a new enemy, make a scene whose script extends `EnemyBase`. It shows up with the same Inspector settings, and can be placed in any room.
 
