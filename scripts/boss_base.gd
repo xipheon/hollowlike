@@ -2,8 +2,9 @@ class_name BossBase
 extends CharacterBody2D
 ## What every arena boss shares. room.gd only talks to bosses through this:
 ## it sets the arena bounds, calls activate() after the intro, shows boss_name,
-## and on `defeated` grants reward_ability and saves where the corpse lies.
-## Subclasses set boss_name / reward_ability / max_health in _init() and
+## and on `defeated` grants reward_ability, sets defeat_flag and saves where
+## the corpse lies.
+## Subclasses set boss_name / reward_ability / defeat_flag / max_health in _init() and
 ## implement activate(), take_hit(), debug_kill() and become_corpse(). They can
 ## also define on_hit_player(), which the player calls when their contact
 ## hitbox lands a hit.
@@ -13,6 +14,8 @@ signal defeated
 
 var boss_name := "BOSS"
 var reward_ability := ""
+## The progress flag set when it's beaten (GameState.set_flag), e.g. "warden_defeated".
+var defeat_flag := ""
 var max_health := 20
 ## How hard hitting this pushes the player away, in px/s (see EnemyBase.hit_recoil).
 ## Each boss sets its own on its scene's root (warden.tscn: 180).

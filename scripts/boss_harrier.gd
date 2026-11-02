@@ -80,6 +80,7 @@ var _hit_shape: CollisionShape2D
 
 func _init() -> void:
 	boss_name = "UI_BOSS_HARRIER"   # a translation key (localization/<language>/ui.po)
+	defeat_flag = "harrier_defeated"
 	reward_ability = "wall_jump"
 	max_health = 32
 

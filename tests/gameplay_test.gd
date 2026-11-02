@@ -91,6 +91,7 @@ const SEGMENTS := {
 		"_test_debug_kill_boss", "_test_debug_kill_boss_off_outside_debug_mode",
 		"_test_main_menu_starts_game", "_test_level_select_loads_each_room",
 		"_test_pause_menu_quits_to_main_menu", "_test_pause_menu_skins", "_test_death_screen",
+		"_test_progress_flags",
 	],
 }
 
@@ -201,6 +202,7 @@ func _spawn_node(room: Node, boss_beaten := false) -> void:
 	GameState.arrived_from = ""
 	GameState.arrive_at = ""
 	GameState.bosses_defeated = {"boss": Vector2(49.5 * TILE, 15 * TILE - WardenBoss.SIZE.y * 0.5)} if boss_beaten else {}
+	GameState.flags = {"warden_defeated": true} if boss_beaten else {}
 	GameState.carried_health = -1
 	GameState.player_skin = PlayerSprite.DEFAULT_SKIN
 	GameState.abilities = GameState.STARTING_ABILITIES.duplicate()
@@ -631,6 +633,7 @@ func _test_boss_defeat_opens_gate_and_sticks() -> void:
 	var died_at := boss.global_position
 	await _frames(3)
 	_check(GameState.bosses_defeated.get("boss") is Vector2, "defeat recorded with where it fell")
+	_check(GameState.has_flag("warden_defeated") and boss.defeat_flag == "warden_defeated", "progress flag warden_defeated set")
 	_check(_main._boss == null and not get_tree().get_nodes_in_group("enemy").any(func(e): return e is WardenBoss), "boss no longer an enemy")
 	_check(is_instance_valid(boss) and boss._state == WardenBoss.State.DEAD, "corpse left in the arena")
 	var hp_before := boss.health
@@ -1406,6 +1409,7 @@ func _test_harrier_defeat_grants_wall_jump() -> void:
 	_check(not _main._gate_closed and not _main._hud.is_boss_shown(), "gate open, bar hidden")
 	_check(boss._state == HarrierBoss.State.DEAD and boss.is_on_floor(), "body lies on the floor")
 	_check(GameState.bosses_defeated.has("aerie"), "defeat recorded")
+	_check(GameState.has_flag("harrier_defeated") and boss.defeat_flag == "harrier_defeated", "progress flag harrier_defeated set")
 	await _frames(int(_main.CAMERA_RELEASE_TIME * 60))
 	_check(get_viewport().get_camera_2d() == _player.camera, "camera handed back")
 	get_tree().reload_current_scene()
@@ -1797,14 +1801,16 @@ func _test_level_select_loads_each_room() -> void:
 	# The buttons are whatever the scene has: read them from a copy of it.
 	var listed: Node = MENU_SCENE.instantiate()
 	var buttons: Array = listed.find_children("*", "Button", true, false).filter(func(b): return b is LevelButton)
-	var entries := buttons.map(func(b): return [b.room, b.abilities.duplicate()])
+	var entries := buttons.map(func(b): return [b.room, b.abilities.duplicate(), b.flags.duplicate()])
 	listed.free()
 	_check(not entries.is_empty() and entries.all(func(e): return LevelData.ROOMS.has(e[0])),
 			"%d level buttons, each for a real room %s" % [entries.size(), entries.map(func(e): return e[0])])
 	for entry in entries:
 		var room: String = entry[0]
 		var granted: Array = entry[1]
+		var progress: Array = entry[2]
 		GameState.unlock("wall_jump")   # progress from before, which a level start wipes
+		GameState.set_flag("harrier_defeated")
 		var menu := MENU_SCENE.instantiate()
 		get_tree().root.add_child(menu)
 		get_tree().current_scene = menu
@@ -1822,6 +1828,11 @@ func _test_level_select_loads_each_room() -> void:
 				expected[a] = true
 			_check(absf(p.global_position.x - start.global_position.x) < 2.0 and GameState.abilities == expected,
 					"%s: at its PlayerStart (col %.1f), starting abilities plus %s" % [room, p.global_position.x / TILE, granted])
+			var flags_now := GameState.flags.keys()
+			flags_now.sort()
+			var flags_want := progress.duplicate()
+			flags_want.sort()
+			_check(flags_now == flags_want, "%s: progress so far %s" % [room, flags_want])
 		await _frames(30)   # let the fade finish
 		await _despawn()
 	var menu := MENU_SCENE.instantiate()
@@ -3345,6 +3356,31 @@ func _wait_for_death_screen(room: Node, max_frames: int) -> bool:
 		if room._death_menu.is_open():
 			return true
 	return false
+
+
+func _test_progress_flags() -> void:
+	print("Progress flags: set once, checked by name; each boss sets its own when beaten; the menu offers the fixed ones")
+	GameState.flags = {}
+	var fired: Array[String] = []
+	var watch := func(flag: String) -> void: fired.append(flag)
+	GameState.flag_set.connect(watch)
+	GameState.set_flag("talked_test")
+	GameState.set_flag("talked_test")
+	GameState.set_flag("")
+	GameState.flag_set.disconnect(watch)
+	_check(GameState.has_flag("talked_test") and not GameState.has_flag("warden_defeated") and fired == ["talked_test"],
+			"set once, announced once, an empty name ignored (%s)" % [fired])
+	var bosses := [load("res://scenes/bosses/warden.tscn").instantiate(), load("res://scenes/bosses/harrier.tscn").instantiate()]
+	var named := bosses.map(func(b): return b.defeat_flag)
+	_check(named == ["warden_defeated", "harrier_defeated"] and named.all(func(f): return f in GameState.PROGRESS_FLAGS),
+			"each boss names its defeat flag, and the drop-downs offer it %s" % [named])
+	for b in bosses:
+		b.free()
+	var button := LevelButton.new()
+	var prop: Array = button.get_property_list().filter(func(p): return p.name == "flags")
+	_check(prop.size() == 1 and prop[0].hint_string.ends_with(":" + ",".join(GameState.PROGRESS_FLAGS)), "a Level Select button picks its flags from a list")
+	button.free()
+	GameState.flags = {}
 
 
 func _test_death_screen() -> void:

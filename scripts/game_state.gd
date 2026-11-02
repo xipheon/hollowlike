@@ -1,9 +1,10 @@
 extends Node
 ## Autoload. Persists across scene reloads (death/respawn).
-## Later: save/load, checkpoints, map discovery, boss flags all live here.
+## Later: save/load, checkpoints, map discovery all live here.
 
 signal ability_unlocked(ability: String)
 signal player_skin_changed(skin_id: String)
+signal flag_set(flag: String)
 
 const FADE_TIME := 0.25
 const MENU_SCENE := "res://scenes/main_menu.tscn"
@@ -19,6 +20,15 @@ const STARTING_ABILITIES := {
 }
 
 var abilities := STARTING_ABILITIES.duplicate()
+
+## Progress flags with a fixed name, offered in drop-downs (a LevelButton's
+## flags, and later an NPC's dialogue states). Other flags are made as they're
+## needed, e.g. "talked_guard" once you've spoken to the guard.
+const PROGRESS_FLAGS := ["warden_defeated", "harrier_defeated"]
+## What has happened this game, as flags (flag -> true): a boss beaten
+## (BossBase.defeat_flag), an NPC spoken to... Anything can check one with
+## has_flag(), e.g. an NPC choosing what to say. Wiped by a new game.
+var flags := {}
 
 ## Debug-only tools (F1/F2 unlocks, killing the boss from the pause menu).
 ## On when run from the editor or a debug export, off in release exports.
@@ -111,6 +121,18 @@ func language_button_text() -> String:
 	return tr("UI_MENU_LANGUAGE").format({"language": TranslationServer.get_locale_name(language())})
 
 
+func has_flag(flag: String) -> bool:
+	return flags.has(flag)
+
+
+## Records that `flag` has happened (once; flag_set fires the first time).
+func set_flag(flag: String) -> void:
+	if flag == "" or flags.has(flag):
+		return
+	flags[flag] = true
+	flag_set.emit(flag)
+
+
 func has_ability(ability: String) -> bool:
 	return abilities.get(ability, false)
 
@@ -148,11 +170,15 @@ func start_new_game() -> void:
 
 
 ## Wipe progress and load any room at its PlayerStart (level select), with
-## the starting abilities plus any in `unlocked` (a LevelButton's abilities).
-func start_at_room(room: String, unlocked: Array = []) -> void:
+## the starting abilities plus any in `unlocked`, and the flags in `progress`
+## (a LevelButton's abilities and flags).
+func start_at_room(room: String, unlocked: Array = [], progress: Array = []) -> void:
 	abilities = STARTING_ABILITIES.duplicate()
 	for ability in unlocked:
 		abilities[ability] = true
+	flags = {}
+	for flag in progress:
+		flags[flag] = true
 	bosses_defeated = {}
 	carried_health = -1
 	_fade_to_scene(LevelData.ROOMS[room].scene, "")

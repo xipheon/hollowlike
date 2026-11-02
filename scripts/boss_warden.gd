@@ -37,6 +37,7 @@ var _hitbox: Area2D
 
 func _init() -> void:
 	boss_name = "UI_BOSS_WARDEN"   # a translation key (localization/<language>/ui.po)
+	defeat_flag = "warden_defeated"
 	reward_ability = "dash"
 	max_health = 40
 

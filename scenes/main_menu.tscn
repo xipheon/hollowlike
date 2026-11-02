@@ -104,6 +104,7 @@ text = "UI_LEVEL_CLIMB_DASH"
 script = ExtResource("2")
 room = "climb"
 abilities = Array[String](["dash"])
+flags = Array[String](["warden_defeated"])
 
 [node name="Aerie" type="Button" parent="Center/LevelBox/Levels"]
 custom_minimum_size = Vector2(320, 44)
@@ -112,6 +113,7 @@ text = "UI_LEVEL_AERIE_DASH"
 script = ExtResource("2")
 room = "aerie"
 abilities = Array[String](["dash"])
+flags = Array[String](["warden_defeated"])
 
 [node name="BackButton" type="Button" parent="Center/LevelBox"]
 unique_name_in_owner = true

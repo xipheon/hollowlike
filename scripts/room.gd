@@ -553,6 +553,7 @@ func _on_boss_defeated() -> void:
 	_set_gate_closed(false)
 	_hud.hide_boss()
 	GameState.unlock(beaten.reward_ability)
+	GameState.set_flag(beaten.defeat_flag)
 	_hud.show_message(tr("UI_HUD_BOSS_FALLS").format({"boss": tr(beaten.boss_name),
 			"ability": GameState.ability_name(beaten.reward_ability)}), 3.5)
 	_player.shake(10.0, 0.5)
