@@ -18,6 +18,7 @@ const LAYER_WORLD := 1
 const LAYER_GROUND := 1 | 32   # world solids + one-way platforms
 const PLATFORM_LAYER_NUMBER := 6
 const SAFE_GROUND_DELAY := 0.1
+const BLOW_UNKNOWN := "UI_DEATH_BY_UNKNOWN"   # a hit with no "blow" meta
 const DEFAULT_HIT_DAMAGE := 2   # one full heart, in half-hearts, for hitboxes with no "damage" meta
 const PLATFORM_DROP_TIME := 0.25
 const DASH_STICK_THRESHOLD := 0.4   # how far a stick must lean on an axis to dash along it
@@ -116,6 +117,10 @@ var _platform_drop_timer := 0.0
 var _sprint_exhausted := false   # ran dry: let go of sprint before it works again
 var _hitstop_active := false
 var _dead := false
+## What dealt the final blow, as the death screen's message (a translation
+## key; see blow_of()). Set when you die.
+var killed_by := ""
+var _last_blow := BLOW_UNKNOWN   # what hit you last
 
 # Animation
 const LAND_ANIM_TIME := 0.15
@@ -489,7 +494,7 @@ func _start_attack(input_y: float, on_floor: bool) -> void:
 	_attack_cooldown_timer = attack_cooldown
 	_hit_this_swing.clear()
 
-	var size := Vector2(60, 40)
+	var size := SlashEffect.SIDE_FITS   # the side attack, which the slash art fits
 	var offset := Vector2.ZERO
 	if input_y < -0.5:
 		_attack_dir = Vector2.UP
@@ -564,15 +569,18 @@ func _check_hurtbox() -> void:
 	# Lethal hazards (acid) kill instantly, even through invulnerability frames.
 	for area in _hurtbox.get_overlapping_areas():
 		if area.is_in_group("lethal_hazard"):
+			_last_blow = blow_of(area)
 			kill()
 			return
 	if _invuln_timer > 0.0:
 		return
 	for area in _hurtbox.get_overlapping_areas():
 		if area.is_in_group("hazard"):
+			_last_blow = blow_of(area)
 			take_damage(damage_of(area), area.global_position, true)
 			return
 		if area.is_in_group("enemy_hitbox"):
+			_last_blow = blow_of(area)
 			if take_damage(damage_of(area), area.global_position, false):
 				_notify_hit(area)
 			return
@@ -589,6 +597,12 @@ func _notify_hit(area: Area2D) -> void:
 	var source: Node = area if area.has_method("on_hit_player") else area.get_parent()
 	if source != null and source.has_method("on_hit_player"):
 		source.on_hit_player()
+
+
+## What a hitbox is, for the death screen: its "blow" meta, a translation key
+## for the whole message ("Impaled on the spikes"), set by whatever made it.
+static func blow_of(area: Area2D) -> String:
+	return area.get_meta("blow", BLOW_UNKNOWN)
 
 
 ## How hard a hitbox hits, in half-hearts. Enemies and hazards set it as a
@@ -637,6 +651,7 @@ func _apply_damage(amount: int, source_position: Vector2, is_hazard: bool) -> bo
 
 	if health <= 0:
 		_dead = true
+		killed_by = _last_blow
 		visible = false
 		died.emit()
 		return true

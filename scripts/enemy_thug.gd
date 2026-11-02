@@ -1,9 +1,10 @@
 class_name ThugEnemy
 extends EnemyBase
 ## Street thug, as tall as the player. Patrols, now and then stopping for a
-## moment, walks toward you when it sees you, and when you're in reach raises
-## its guard (glowing orange) then throws a punch. The punch is slow to start:
-## step back, or hit it first.
+## moment, walks toward you when it sees you, and once you're inside its
+## punch's reach (punch_size) raises its guard (glowing orange) then throws the
+## punch, a red swoosh showing exactly how far it reaches. The punch is slow to
+## start: step back, or hit it first.
 ## It blocks with its guard up (the first frame of its punch): while paused,
 ## while winding up, and while standing still watching you from a ledge. A hit
 ## then does block_reduction less damage, and its flash is blue-grey. Walking,
@@ -14,7 +15,8 @@ extends EnemyBase
 ## tools/make_thug_sheet.gd).
 
 const SIZE := Vector2(24, 44)
-const PUNCH_SIZE := Vector2(46, 28)   # its reach, in front of it
+const PUNCH_BLOW := "UI_DEATH_BY_THUG_PUNCH"   # the death screen's message for the punch
+const PUNCH_EFFECT_COLOR := Color(1.0, 0.25, 0.2)   # the player's slash, in red
 const FLASH := Color(2.5, 2.5, 2.5)          # hit: brightens towards white
 const BLOCK_FLASH := Color(0.6, 0.8, 1.6)    # blocked hit: a cold blue-grey
 const TELEGRAPH := Color(1.6, 1.0, 0.45)     # winding up: orange
@@ -24,7 +26,9 @@ enum State { PATROL, PAUSE, WINDUP, SWING, RECOVER }
 @export var walk_speed := 90.0
 @export var gravity := 1800.0
 @export var sight_range := 220.0     ## starts walking toward you within this
-@export var attack_range := 90.0     ## starts a punch when you're this close
+## The punch's reach: its hit box in front of it, which its red swoosh fills. It
+## starts a punch only once you're inside it.
+@export var punch_size := Vector2(46, 28)
 @export var windup_time := 0.30
 @export var swing_time := 0.15
 @export var recover_time := 0.8
@@ -37,6 +41,7 @@ enum State { PATROL, PAUSE, WINDUP, SWING, RECOVER }
 
 var swings := 0   # punches started; handy for tests and debugging
 var sprite: AnimatedSprite2D
+var punch_effect: SlashEffect   # the red swoosh over the punch's reach
 
 var _state := State.PATROL
 var _timer := 0.0
@@ -59,10 +64,15 @@ func _ready() -> void:
 	add_child(shape)
 
 	add_child(make_contact_hitbox(SIZE - Vector2(4, 4)))
-	var punch := make_contact_hitbox(PUNCH_SIZE)
+	var punch := make_contact_hitbox(punch_size)
+	punch.set_meta("blow", PUNCH_BLOW)
 	_punch_shape = punch.get_child(0)
 	_punch_shape.disabled = true
 	add_child(punch)
+	punch_effect = SlashEffect.new()
+	punch_effect.modulate = PUNCH_EFFECT_COLOR
+	punch_effect.scale = punch_size / SlashEffect.SIDE_FITS
+	add_child(punch_effect)
 
 	_ledge_ray = RayCast2D.new()
 	_ledge_ray.target_position = Vector2(0, SIZE.y * 0.5 + 10)
@@ -88,7 +98,7 @@ func _physics_process(delta: float) -> void:
 			var speed := walk_speed
 			if sees_player:
 				_set_dir(int(signf(player.global_position.x - global_position.x)))
-				if absf(player.global_position.x - global_position.x) <= attack_range:
+				if in_punch_reach(player):
 					_enter(State.WINDUP, windup_time)
 					speed = 0.0
 			var wall_ahead := is_on_wall() and get_wall_normal().x * _dir < 0.0
@@ -150,6 +160,7 @@ func _enter(state: State, time: float) -> void:
 	_timer = time
 	if state == State.SWING:
 		sprite.play("punch")
+		punch_effect.swing(Vector2(_dir, 0), _punch_shape.position, _dir)
 
 
 func _next_patrol() -> float:
@@ -162,12 +173,20 @@ func _set_dir(dir: int) -> void:
 	_dir = dir
 	_ledge_ray.position.x = _dir * (SIZE.x * 0.5 + 4)
 	_ledge_ray.force_raycast_update()
-	_punch_shape.position = Vector2(_dir * (SIZE.x * 0.5 + PUNCH_SIZE.x * 0.5 - 4), -4)
+	_punch_shape.position = Vector2(_dir * (SIZE.x * 0.5 + punch_size.x * 0.5 - 4), -4)
 
 
 func _find_player() -> Node2D:
 	var players := get_tree().get_nodes_in_group("player")
 	return players[0] if not players.is_empty() and players[0].visible else null
+
+
+## Whether the player's body is inside the punch's reach (its hit box, facing
+## the way it faces now).
+func in_punch_reach(player: Node2D) -> bool:
+	var reach := Rect2(global_position + _punch_shape.position - punch_size * 0.5, punch_size)
+	var body := Rect2(player.global_position - Player.BODY_SIZE * 0.5, Player.BODY_SIZE)
+	return reach.intersects(body)
 
 
 # Roughly level with us and within sight range.

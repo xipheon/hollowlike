@@ -25,6 +25,9 @@ const LAYER_HAZARD := 16
 ## this to them: struck from above, that bounces them up (a high value is a
 ## pogo); from the side, it shoves them back. 0: no push.
 @export var hit_recoil := 300.0
+## The death screen's message when its contact kills you (a translation key in
+## localization/<language>/ui.po); each type sets its own in its scene.
+@export var blow_message := "UI_DEATH_BY_ENEMY"
 
 var health := 0
 var _flash_timer := 0.0
@@ -104,6 +107,7 @@ func make_contact_hitbox(size: Vector2, offset := Vector2.ZERO) -> Area2D:
 	var hitbox := Area2D.new()
 	hitbox.add_to_group("enemy_hitbox")
 	hitbox.set_meta("damage", damage)
+	hitbox.set_meta("blow", blow_message)
 	hitbox.collision_layer = LAYER_HAZARD   # the hazard layer, which the player's hurtbox watches
 	hitbox.collision_mask = 0
 	hitbox.monitoring = false

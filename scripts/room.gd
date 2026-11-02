@@ -17,6 +17,8 @@ extends Node2D
 
 const TILE := 32
 const PAUSE_MENU_SCENE := preload("res://scenes/ui/pause_menu.tscn")
+const DEATH_MENU_SCENE := preload("res://scenes/ui/death_menu.tscn")
+const DEATH_MENU_DELAY := 1.0   # seconds after you die before the death screen
 const LAYER_WORLD := 1
 const LAYER_PLATFORMS := 32
 const SPIKE_HEIGHT := 24.0   # damage area: the bottom of the tile, up to the spike tips
@@ -43,6 +45,7 @@ var _w := 0
 var _h := 0
 var _player: Player
 var _hud: HUD
+var _death_menu: DeathMenu
 var _boss: BossBase
 var _boss_fight_started := false
 var _gate_shapes: Array[CollisionShape2D] = []
@@ -88,6 +91,8 @@ func _ready() -> void:
 	_hud.bind_player(_player)
 	_player.died.connect(_on_player_died)
 	add_child(PAUSE_MENU_SCENE.instantiate())
+	_death_menu = DEATH_MENU_SCENE.instantiate()
+	add_child(_death_menu)
 
 
 func _physics_process(_delta: float) -> void:
@@ -116,10 +121,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			debug_kill_boss()
 
 
+## A moment after you die, the death screen: what killed you, Respawn or Quit.
 func _on_player_died() -> void:
-	_hud.show_message(tr("UI_HUD_YOU_DIED"), 3.0)
-	await get_tree().create_timer(1.5).timeout
-	get_tree().reload_current_scene()
+	await get_tree().create_timer(DEATH_MENU_DELAY).timeout
+	_death_menu.open(_player.killed_by)
 
 
 # ------------------------------------------------------------ Layout ----
@@ -228,6 +233,7 @@ func _add_shape(body: StaticBody2D, rect: Rect2, one_way: bool) -> void:
 func _add_spikes(x: int, y: int) -> void:
 	var area := Area2D.new()
 	area.add_to_group("hazard")
+	area.set_meta("blow", "UI_DEATH_BY_SPIKES")   # the death screen's message
 	area.collision_layer = 16
 	area.collision_mask = 0
 	area.monitoring = false
@@ -245,6 +251,7 @@ func _add_spikes(x: int, y: int) -> void:
 func _add_acid(x: int, y: int, submerged: bool) -> void:
 	var area := Area2D.new()
 	area.add_to_group("lethal_hazard")
+	area.set_meta("blow", "UI_DEATH_BY_ACID")   # the death screen's message
 	area.collision_layer = 16
 	area.collision_mask = 0
 	area.monitoring = false

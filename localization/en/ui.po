@@ -103,9 +103,6 @@ msgstr ", "
 msgid "UI_HUD_UNLOCKED"
 msgstr "Unlocked: {ability}"
 
-msgid "UI_HUD_YOU_DIED"
-msgstr "YOU DIED"
-
 #. On screen when a boss is beaten. {boss}: its name; {ability}: what it gave you.
 msgid "UI_HUD_BOSS_FALLS"
 msgstr ""
@@ -131,3 +128,52 @@ msgstr "THE WARDEN"
 
 msgid "UI_BOSS_HARRIER"
 msgstr "THE HARRIER"
+
+#. Death screen: its title and buttons.
+msgid "UI_DEATH_TITLE"
+msgstr "YOU DIED"
+
+msgid "UI_DEATH_RESPAWN"
+msgstr "Respawn"
+
+msgid "UI_DEATH_QUIT_TO_MENU"
+msgstr "Quit to Main Menu"
+
+#. Death screen: what dealt the final blow, under YOU DIED. One sentence each.
+msgid "UI_DEATH_BY_SPIKES"
+msgstr "Impaled on the spikes"
+
+msgid "UI_DEATH_BY_ACID"
+msgstr "Dissolved in the sewer water"
+
+msgid "UI_DEATH_BY_CRAWLER"
+msgstr "Smothered by a crawler"
+
+#. Walking into a thug (not its punch).
+msgid "UI_DEATH_BY_THUG"
+msgstr "Shoved down by a thug"
+
+msgid "UI_DEATH_BY_THUG_PUNCH"
+msgstr "Knocked out by a thug's punch"
+
+#. The Warden's body: walking into it, or its charge.
+msgid "UI_DEATH_BY_WARDEN"
+msgstr "Trampled by The Warden"
+
+msgid "UI_DEATH_BY_WARDEN_SHOCKWAVE"
+msgstr "Flattened by The Warden's shockwave"
+
+#. The Harrier's body: walking into it, or its swoop.
+msgid "UI_DEATH_BY_HARRIER"
+msgstr "Torn down by The Harrier"
+
+msgid "UI_DEATH_BY_HARRIER_FEATHER"
+msgstr "Pierced by The Harrier's feather"
+
+#. An enemy that doesn't say what it is.
+msgid "UI_DEATH_BY_ENEMY"
+msgstr "Killed by an enemy"
+
+#. Something that doesn't say what it is.
+msgid "UI_DEATH_BY_UNKNOWN"
+msgstr "Struck down"

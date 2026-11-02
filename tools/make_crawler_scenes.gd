@@ -4,8 +4,9 @@ extends SceneTree
 ## game. For each colour it saves the sprite's animations as
 ## art/sprites/crawler_<colour>_frames.tres and a scene,
 ## scenes/enemies/crawler_<colour>.tscn: the colour's crawler script, its slime
-## colour, its hit_recoil, and a Sprite (scripts/crawler_sprite.gd) using those
-## frames. Run from the project folder after redrawing the sheets:
+## colour, its hit_recoil and death message, and a Sprite
+## (scripts/crawler_sprite.gd) using those frames. Run from the project folder
+## after redrawing the sheets:
 ##   godot --headless --path . --script res://tools/make_crawler_scenes.gd
 ## Untyped on purpose: the crawler scripts use autoloads, which a --script run
 ## can't compile against up front.
@@ -41,6 +42,7 @@ func _init() -> void:
 		# The trail matches the walk frame's body, low down.
 		crawler.set("slime_color", sheet.get_image().get_pixel(FRAME.x / 2, FRAME.y - 2))
 		crawler.set("hit_recoil", HIT_RECOIL)
+		crawler.set("blow_message", "UI_DEATH_BY_CRAWLER")
 		_add_sprite(crawler, colour)
 		_save_scene(crawler, SCENE_PATH % colour)
 	quit()

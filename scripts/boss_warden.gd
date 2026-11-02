@@ -52,6 +52,7 @@ func _ready() -> void:
 	_hitbox = Area2D.new()
 	_hitbox.add_to_group("enemy_hitbox")
 	_hitbox.set_meta("damage", body_damage)   # read by the player's hurtbox
+	_hitbox.set_meta("blow", "UI_DEATH_BY_WARDEN")   # the death screen's message
 	_hitbox.collision_layer = 16   # hazard layer, which the player's hurtbox watches
 	_hitbox.collision_mask = 0
 	_hitbox.monitoring = false
@@ -181,6 +182,7 @@ func _shockwave() -> void:
 		wave.direction = dir
 		wave.speed = shockwave_speed * _speed()
 		wave.set_meta("damage", shockwave_damage + _damage_bonus())
+		wave.set_meta("blow", "UI_DEATH_BY_WARDEN_SHOCKWAVE")
 		wave.position = feet + Vector2(dir * SIZE.x * 0.5, 0)
 		get_parent().add_child(wave)
 

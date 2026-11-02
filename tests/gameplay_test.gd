@@ -60,7 +60,7 @@ const SEGMENTS := {
 	"climb": [
 		"_test_climb_route_jumps", "_test_thugs_are_slow", "_test_thug_punch_hurts",
 		"_test_thug_punch_can_be_dodged", "_test_thug_kill_doesnt_heal",
-		"_test_thug_blocks", "_test_thug_pauses",
+		"_test_thug_blocks", "_test_thug_pauses", "_test_thug_punch_reach",
 		"_test_climb_top_door_to_aerie_and_back",
 	],
 	# The Harrier fight (boss_harrier.gd, boss_feather.gd).
@@ -87,7 +87,7 @@ const SEGMENTS := {
 		"_test_pause_menu_toggles", "_test_pause_ignored_during_boss_intro",
 		"_test_debug_kill_boss", "_test_debug_kill_boss_off_outside_debug_mode",
 		"_test_main_menu_starts_game", "_test_level_select_loads_each_room",
-		"_test_pause_menu_quits_to_main_menu", "_test_pause_menu_skins",
+		"_test_pause_menu_quits_to_main_menu", "_test_pause_menu_skins", "_test_death_screen",
 	],
 }
 
@@ -2942,3 +2942,84 @@ func _test_language_switch() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SETTINGS_PATH))
 	else:
 		FileAccess.open(GameState.SETTINGS_PATH, FileAccess.WRITE).store_buffer(saved)
+
+
+## Waits (through a pause) for the death screen to open, up to `max_frames`.
+func _wait_for_death_screen(room: Node, max_frames: int) -> bool:
+	for i in max_frames:
+		await _frames(1)
+		if not is_instance_valid(room):
+			return false
+		if room._death_menu.is_open():
+			return true
+	return false
+
+
+func _test_death_screen() -> void:
+	print("Death screen: says what dealt the final blow; Respawn restarts the room, Quit goes to the main menu")
+	await _spawn()
+	var room := _main
+	_place(75, 15)   # over the acid
+	var opened := await _wait_for_death_screen(room, int(room.DEATH_MENU_DELAY * 60) + 90)
+	var menu: DeathMenu = room._death_menu
+	_check(opened and get_tree().paused and menu.respawn_button.has_focus(), "opens after you die, paused, Respawn focused")
+	_check(menu._cause.text == "UI_DEATH_BY_ACID" and tr(menu._cause.text) == "Dissolved in the sewer water",
+			"names the sewer water (%s)" % tr(menu._cause.text))
+	menu.respawn_button.pressed.emit()
+	var again := await _wait_for_room("first_test_room", 60)
+	_check(again != null and again != room and not again._player._dead and again._player.health == again._player.max_health
+			and not get_tree().paused, "Respawn restarts the room, alive and unpaused")
+	await _despawn()
+
+	# A thug's punch, then Quit.
+	await _spawn(CLIMB_SCENE)
+	room = _main
+	var thug := await _lone_thug()
+	_player.health = 1
+	_player.global_position = thug.global_position + Vector2(-50, 0)
+	_player.velocity = Vector2.ZERO
+	opened = await _wait_for_death_screen(room, 240)
+	menu = room._death_menu
+	_check(opened and _player.killed_by == ThugEnemy.PUNCH_BLOW and menu._cause.text == ThugEnemy.PUNCH_BLOW,
+			"names the thug's punch (%s)" % tr(menu._cause.text))
+	menu.quit_to_menu_button.pressed.emit()
+	var at_menu := false
+	for i in 120:
+		await _frames(1)
+		var scene := get_tree().current_scene
+		if scene != null and scene.scene_file_path == MENU_SCENE.resource_path:
+			at_menu = true
+			break
+	_check(at_menu and not get_tree().paused, "Quit to Main Menu goes to the main menu, unpaused")
+	await _despawn()
+
+
+func _test_thug_punch_reach() -> void:
+	print("Thugs start a punch only once you're inside its reach, which a red swoosh fills")
+	await _spawn(CLIMB_SCENE)
+	var thug := await _lone_thug()
+	thug.patrol_time = Vector2(999, 999)
+	_player._invuln_timer = 999.0
+	_player.global_position = thug.global_position + Vector2(-150, 0)
+	_player.velocity = Vector2.ZERO
+	var reach_at_windup := false
+	var effect_ok := false
+	for i in 240:
+		var was := thug._state
+		await _frames(1)
+		if was != ThugEnemy.State.WINDUP and thug._state == ThugEnemy.State.WINDUP:
+			reach_at_windup = thug.in_punch_reach(_player)
+		if thug._state == ThugEnemy.State.SWING and thug.punch_effect.visible:
+			var e := thug.punch_effect
+			effect_ok = e.modulate == ThugEnemy.PUNCH_EFFECT_COLOR and e.position == thug._punch_shape.position \
+					and (e.scale * SlashEffect.SIDE_FITS).is_equal_approx(thug.punch_size) and e.flip_h == (thug._dir < 0)
+			break
+	_check(thug.swings >= 1 and reach_at_windup, "it walked up and wound up with you in reach")
+	_check(effect_ok, "the punch shows a red swoosh the size of its reach (%s), facing its way" % thug.punch_size)
+	# Just outside the reach: no punch.
+	var edge := thug.global_position.x + thug._dir * (ThugEnemy.SIZE.x * 0.5 + thug.punch_size.x - 4.0)
+	_player.global_position.x = edge + thug._dir * (Player.BODY_SIZE.x * 0.5 + 2.0)
+	_check(not thug.in_punch_reach(_player), "2 px past the edge of the reach is out of it")
+	_player.global_position.x -= thug._dir * 4.0
+	_check(thug.in_punch_reach(_player), "2 px inside it is in")
+	await _despawn()

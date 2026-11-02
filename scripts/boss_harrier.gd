@@ -99,6 +99,7 @@ func _ready() -> void:
 	_hitbox = Area2D.new()
 	_hitbox.add_to_group("enemy_hitbox")
 	_hitbox.set_meta("damage", damage)   # read by the player's hurtbox
+	_hitbox.set_meta("blow", "UI_DEATH_BY_HARRIER")   # the death screen's message
 	_hitbox.collision_layer = 16   # hazard layer, which the player's hurtbox watches
 	_hitbox.collision_mask = 0
 	_hitbox.monitoring = false
@@ -302,6 +303,7 @@ func _spawn_feather(direction: Vector2, speed: float, homing: bool) -> HarrierFe
 	if homing:
 		feather.lifetime = 7.0   # a safety net; walls, floor, you or an attack end it first
 	feather.set_meta("damage", shot_damage)
+	feather.set_meta("blow", "UI_DEATH_BY_HARRIER_FEATHER")
 	feather.position = global_position
 	get_parent().add_child(feather)
 	return feather

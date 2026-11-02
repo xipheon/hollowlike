@@ -8,6 +8,7 @@ script = ExtResource("1")
 max_health = 5
 damage = 8
 hit_recoil = 180.0
+blow_message = "UI_DEATH_BY_THUG"
 
 [node name="Sprite" type="AnimatedSprite2D" parent="."]
 texture_filter = 1

@@ -1,0 +1,56 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/death_menu.gd" id="1"]
+
+[node name="DeathMenu" type="CanvasLayer"]
+process_mode = 3
+layer = 60
+script = ExtResource("1")
+
+[node name="Panel" type="ColorRect" parent="."]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.12, 0, 0, 0.72)
+
+[node name="Center" type="CenterContainer" parent="Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Box" type="VBoxContainer" parent="Panel/Center"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Panel/Center/Box"]
+modulate = Color(1, 0.35, 0.3, 1)
+layout_mode = 2
+theme_override_font_sizes/font_size = 52
+text = "UI_DEATH_TITLE"
+horizontal_alignment = 1
+
+[node name="Cause" type="Label" parent="Panel/Center/Box"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.8)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "UI_DEATH_BY_UNKNOWN"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="Panel/Center/Box"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="RespawnButton" type="Button" parent="Panel/Center/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 44)
+layout_mode = 2
+text = "UI_DEATH_RESPAWN"
+
+[node name="QuitToMenuButton" type="Button" parent="Panel/Center/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 44)
+layout_mode = 2
+text = "UI_DEATH_QUIT_TO_MENU"

@@ -8,6 +8,7 @@
 script = ExtResource("1_yekdp")
 slime_color = Color(0.1764706, 0.16470589, 0.0627451, 1)
 hit_recoil = 500.0
+blow_message = "UI_DEATH_BY_CRAWLER"
 
 [node name="Sprite" type="AnimatedSprite2D" parent="." unique_id=197606893]
 texture_filter = 1

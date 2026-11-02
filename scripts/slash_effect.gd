@@ -7,6 +7,9 @@ extends AnimatedSprite2D
 const SHEET := preload("res://art/sprites/player_effects.png")
 const FRAME := Vector2i(64, 64)
 const FPS := 24.0
+## The hit area the side slash is drawn to cover: the player's side attack.
+## Scale the effect by (your hit area / this) to cover another one.
+const SIDE_FITS := Vector2(60, 40)
 ## Row of each slash on the sheet, and its frame count.
 const SLASHES := {"slash_side": [0, 4], "slash_up": [1, 4], "slash_down": [2, 4]}
 
