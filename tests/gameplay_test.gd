@@ -30,7 +30,7 @@ const SEGMENTS := {
 	# The tilesets' terrain brushes and tile data (tools/make_tilesets.gd, room_art.gd), the room template.
 	"tilesets": [
 		"_test_terrain_brushes", "_test_tiles_say_what_they_are", "_test_room_template",
-		"_test_props_layer", "_test_pipe_brush",
+		"_test_props_layer", "_test_pipe_brush", "_test_normal_maps",
 	],
 	# Rooms made in the editor: painted layers, helper nodes, decoration (room.gd, room_art.gd).
 	"editor_rooms": [
@@ -57,6 +57,7 @@ const SEGMENTS := {
 		"_test_boss_attacks_stay_in_arena", "_test_boss_hurts_player", "_test_player_attacks_hurt_boss",
 		"_test_boss_defeat_opens_gate_and_sticks", "_test_warden_damage_split_and_phase_two",
 		"_test_warden_charge_stops_at_player", "_test_camera_returns_to_player_after_boss",
+		"_test_warden_attacks_light_up",
 	],
 	# Climb room route, thugs (enemy_thug.gd), and the door up to the Aerie.
 	"climb": [
@@ -71,14 +72,14 @@ const SEGMENTS := {
 		"_test_harrier_swoops_ignore_player_height", "_test_harrier_phase_two_cycle",
 		"_test_harrier_feathers", "_test_homing_feather_limits", "_test_harrier_pulls_up_after_hitting_you",
 		"_test_harrier_crashes_when_it_misses", "_test_harrier_armor_except_dazed", "_test_harrier_dazed_recoil",
-		"_test_harrier_defeat_grants_wall_jump",
+		"_test_harrier_defeat_grants_wall_jump", "_test_harrier_feathers_glow",
 	],
 	# Damage numbers and armor, sprint and stamina (player.gd, enemy damage settings).
 	"player": [
 		"_test_double_jump", "_test_player_animations", "_test_attack_buffer", "_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
 		"_test_sprint_is_faster_and_drains_stamina", "_test_stamina_refills_only_on_ground",
 		"_test_dash_needs_stamina", "_test_dash_eight_directions", "_test_wall_jump_needs_stamina",
-		"_test_hit_recoil",
+		"_test_hit_recoil", "_test_player_light",
 	],
 	# Translations: localization/<language>/<feature>.po, keys in use, switching language (game_state.gd).
 	"localization": [
@@ -891,6 +892,22 @@ func _test_warden_damage_split_and_phase_two() -> void:
 	await _despawn()
 
 
+func _test_warden_attacks_light_up() -> void:
+	print("Warden: the slam flashes orange at its feet, and its shockwaves glow as they go")
+	var boss := await _start_boss_fight()
+	boss._shockwave()
+	var flashes := _all(_main).filter(func(c): return c is LightFlash)
+	_check(flashes.size() == 1 and flashes[0].color == WardenShockwave.COLOR and is_equal_approx(flashes[0].energy, boss.slam_flash_energy)
+			and flashes[0].global_position.is_equal_approx(boss.global_position + Vector2(0, WardenBoss.SIZE.y * 0.5)),
+			"one flash at its feet, in the shockwaves' colour")
+	var waves := _all(_main).filter(func(c): return c is WardenShockwave)
+	_check(waves.size() == 2 and waves.all(func(w): return w.light.color == WardenShockwave.COLOR and is_equal_approx(w.light.energy, WardenShockwave.LIGHT_ENERGY)),
+			"each shockwave carries its own light")
+	await _frames(int(boss.slam_flash_time * 60) + 2)
+	_check(flashes.size() == 1 and not is_instance_valid(flashes[0]), "the flash is gone after %.2f s" % boss.slam_flash_time)
+	await _despawn()
+
+
 func _test_warden_charge_stops_at_player() -> void:
 	for running_away in [false, true]:
 		print("Warden: a charge stops when it hits you, without the daze (%s)" % ["running away" if running_away else "standing"])
@@ -1112,6 +1129,18 @@ func _test_harrier_phase_two_cycle() -> void:
 			"2 fans, homing, 2 shallow swoops, a full swoop, then back to fans")
 	_check(fan_sizes.size() >= 2 and fan_sizes.all(func(n): return n == 3), "each fan is 3 feathers %s" % [fan_sizes])
 	_check(not homing_alive_at_shallow, "waited for the homing feathers before swooping")
+	await _despawn()
+
+
+func _test_harrier_feathers_glow() -> void:
+	print("Harrier feathers glow in their colour; homing ones brighter")
+	var boss := await _start_harrier_fight()
+	var plain := boss._spawn_feather(Vector2.DOWN, boss.shot_speed, false)
+	var homing := boss._spawn_feather(Vector2.DOWN, boss.homing_speed, true)
+	await _frames(1)
+	_check(plain.light.color == HarrierFeather.COLOR and is_equal_approx(plain.light.energy, HarrierFeather.LIGHT_ENERGY), "a plain feather glows its colour")
+	_check(homing.light.color == HarrierFeather.HOMING_COLOR and is_equal_approx(homing.light.energy, HarrierFeather.HOMING_LIGHT_ENERGY)
+			and homing.light.energy > plain.light.energy, "a homing feather glows brighter, in its own colour")
 	await _despawn()
 
 
@@ -2478,6 +2507,42 @@ func _test_pipe_brush() -> void:
 	layer.free()
 
 
+func _test_normal_maps() -> void:
+	print("Normal maps: every lit sheet has one, the same size, and everything draws the sheet with it")
+	var tool: GDScript = load("res://tools/make_normal_maps.gd")
+	var bad := []
+	for sheet in tool.SHEETS:
+		var canvas := load(tool.canvas_path(sheet)) as CanvasTexture
+		var size := (load(sheet) as Texture2D).get_size()
+		if canvas == null or canvas.diffuse_texture != load(sheet) or canvas.normal_texture == null 				or canvas.normal_texture.resource_path != tool.normal_path(sheet) or canvas.normal_texture.get_size() != size:
+			bad.append(sheet.get_file())
+	_check(bad.is_empty(), "%d sheets, each paired with a normal map its size%s" % [tool.SHEETS.size(), "" if bad.is_empty() else ", not %s" % [bad]])
+	# What draws them: the tilesets, the sprite frames, the player's skins, the moving platform.
+	var users := {}
+	for tileset in [RoomArt.FOREGROUND_TILES, RoomArt.BACKGROUND_TILES, RoomArt.PROPS_TILES]:
+		for i in tileset.get_source_count():
+			var source: TileSetAtlasSource = tileset.get_source(tileset.get_source_id(i))
+			users[source.texture.resource_path] = source.texture
+	for scene in [THUG_SCENE, CRAWLER_SCENE, PINK_CRAWLER_SCENE]:
+		var enemy: Node = scene.instantiate()
+		var frames: SpriteFrames = enemy.get_node("Sprite").sprite_frames
+		var atlas: AtlasTexture = frames.get_frame_texture(frames.get_animation_names()[0], 0)
+		users[scene.resource_path.get_file()] = atlas.atlas
+		enemy.free()
+	for skin in PlayerSprite.SKINS:
+		users[skin.id] = load(skin.sheet)
+	users["moving platform"] = MovingPlatform.SHEET
+	var flat := users.keys().filter(func(k): return not (users[k] is CanvasTexture and users[k].normal_texture != null))
+	_check(flat.is_empty(), "tiles, enemies, the player and platforms draw with their normal maps%s" % ("" if flat.is_empty() else ", not %s" % [flat]))
+	# The room's lights hang out from the wall, so they shade a flat normal map
+	# rather than grazing it.
+	var light := FlickerLight.new()
+	add_child(light)
+	_check(light.light.height > 0.0 and RoomArt.BULB_LIGHT_HEIGHT > 0.0 and RoomArt.SIGN_LIGHT_HEIGHT > 0.0,
+			"lights hang out from the wall (bulbs %d px, signs %d px)" % [RoomArt.BULB_LIGHT_HEIGHT, RoomArt.SIGN_LIGHT_HEIGHT])
+	light.free()
+
+
 ## The sides a pipes-sheet tile runs out of: from the block's layout, or the
 ## wall end a broken end stands in for.
 func _pipe_sides(at: Vector2i) -> String:
@@ -2943,6 +3008,28 @@ func _swing_at(scene: PackedScene, size_y: float, direction: String, offset: Vec
 	await _frames(20)
 	_player._invuln_timer = 0.0
 	return result
+
+
+func _test_player_light() -> void:
+	print("The player carries a faint light; each swing flashes over the slash")
+	await _spawn()
+	_check(_player.light != null and is_equal_approx(_player.light.energy, _player.light_energy) and _player.light.color == _player.light_color
+			and is_equal_approx(_player.light.height, _player.light_height) and _player.light.texture.get_width() == _player.light_radius * 2,
+			"a light on the player, as set in its Light settings")
+	_player.facing = 1
+	Input.action_press("attack")
+	await _frames(2)
+	Input.action_release("attack")
+	var flashes := _player.get_children().filter(func(c): return c is LightFlash)
+	_check(flashes.size() == 1 and flashes[0].color == _player.slash_flash_color and flashes[0].position == _player.slash.position,
+			"a swing throws a flash over the slash")
+	if flashes.size() == 1:
+		var first: float = flashes[0].energy
+		await _frames(3)
+		_check(flashes[0].energy < first and first <= _player.slash_flash_energy, "which fades (%.2f, then %.2f)" % [first, flashes[0].energy])
+		await _frames(int(_player.slash_flash_time * 60) + 2)
+		_check(not is_instance_valid(flashes[0]), "and is gone after %.2f s" % _player.slash_flash_time)
+	await _despawn()
 
 
 func _test_hit_recoil() -> void:

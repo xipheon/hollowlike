@@ -58,10 +58,12 @@ func _init() -> void:
 	quit()
 
 
-## The animations, cut from the sheet as written (loaded from the image, so
-## this works on the first run before Godot has imported the new sheet).
+## The animations, cut from the sheet with its normal map (its CanvasTexture,
+## from tools/make_normal_maps.gd), or from the image as written if that isn't
+## made yet (then rerun this after make_normal_maps.gd).
 func _save_frames(sheet: Image) -> void:
-	var texture: Texture2D = load(SHEET_PATH) if ResourceLoader.exists(SHEET_PATH) else ImageTexture.create_from_image(sheet)
+	var lit := SHEET_PATH.get_basename() + "_canvas.tres"
+	var texture: Texture2D = load(lit) if ResourceLoader.exists(lit) else ImageTexture.create_from_image(sheet)
 	var frames := SpriteFrames.new()
 	frames.remove_animation("default")
 	for anim in ANIMATIONS:

@@ -1,10 +1,10 @@
 [gd_resource type="TileSet" format=3 uid="uid://d4ew55mdk4v5b"]
 
-[ext_resource type="Texture2D" uid="uid://df0jjfi51r1je" path="res://art/tiles/props.png" id="1_eiggu"]
-[ext_resource type="Texture2D" uid="uid://xc8h3ghvtguk" path="res://art/tiles/pipes.png" id="2_dllfp"]
+[ext_resource type="Texture2D" path="res://art/tiles/props_canvas.tres" id="1_dllfp"]
+[ext_resource type="Texture2D" path="res://art/tiles/pipes_canvas.tres" id="2_5o86t"]
 
-[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_5o86t"]
-texture = ExtResource("1_eiggu")
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_2vicb"]
+texture = ExtResource("1_dllfp")
 texture_region_size = Vector2i(32, 32)
 0:0/0 = 0
 0:0/0/custom_data_0 = "decor"
@@ -25,8 +25,8 @@ texture_region_size = Vector2i(32, 32)
 6:0/0/custom_data_0 = "light"
 6:0/0/custom_data_1 = "broken"
 
-[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_2vicb"]
-texture = ExtResource("2_dllfp")
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_gaxvx"]
+texture = ExtResource("2_5o86t")
 texture_region_size = Vector2i(32, 32)
 0:0/0 = 0
 0:0/0/terrain_set = 0
@@ -162,5 +162,5 @@ custom_data_layer_0/name = "kind"
 custom_data_layer_0/type = 4
 custom_data_layer_1/name = "light"
 custom_data_layer_1/type = 4
-sources/0 = SubResource("TileSetAtlasSource_5o86t")
-sources/1 = SubResource("TileSetAtlasSource_2vicb")
+sources/0 = SubResource("TileSetAtlasSource_2vicb")
+sources/1 = SubResource("TileSetAtlasSource_gaxvx")

@@ -25,6 +25,18 @@ const DASH_STICK_THRESHOLD := 0.4   # how far a stick must lean on an axis to da
 const DEFAULT_HIT_RECOIL := 300.0   # px/s, for things you hit that set no hit_recoil
 const RECOIL_MOSTLY := 0.5   # a recoil pointing this far up refreshes air moves; this far sideways locks steering
 
+@export_group("Light")
+## A faint light that goes with you, so you always read against the wall.
+@export var light_radius := 96
+@export var light_energy := 0.3
+@export var light_color := Color(1.0, 0.95, 0.85)
+@export var light_height := 40.0            ## px out from the wall (see FlickerLight)
+## Each swing throws a brief flash over the slash.
+@export var slash_flash_radius := 80
+@export var slash_flash_energy := 0.6
+@export var slash_flash_time := 0.12
+@export var slash_flash_color := Color(0.85, 0.95, 1.0)
+
 @export_group("Run")
 @export var run_speed := 320.0
 @export var ground_accel := 3200.0
@@ -128,6 +140,7 @@ const WALL_JUMP_ANIM_TIME := 0.3
 const DOUBLE_JUMP_ANIM_TIME := 0.25
 var sprite: PlayerSprite
 var slash: SlashEffect
+var light: PointLight2D   # the faint light that goes with you
 var _wall_sliding := false
 var _sprinting := false
 var _was_on_floor := true
@@ -193,6 +206,12 @@ func _ready() -> void:
 	GameState.player_skin_changed.connect(sprite.apply_skin)
 	slash = SlashEffect.new()
 	add_child(slash)
+	light = PointLight2D.new()
+	light.texture = FlickerLight.light_texture(light_radius)
+	light.energy = light_energy
+	light.color = light_color
+	light.height = light_height
+	add_child(light)
 
 
 func _physics_process(delta: float) -> void:
@@ -516,6 +535,7 @@ func _start_attack(input_y: float, on_floor: bool) -> void:
 	_attack_anim_timer = PlayerSprite.length(_attack_anim)
 	_attack_anim_restart = true
 	slash.swing(_attack_dir, offset, facing)
+	LightFlash.flash(self, offset, slash_flash_color, slash_flash_radius, slash_flash_energy, slash_flash_time)
 
 
 func _on_attack_body_entered(body: Node) -> void:

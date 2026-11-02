@@ -60,12 +60,14 @@ const BULB_GLOW_SIZE := Vector2i(56, 56)
 const BULB_GLOW_STRENGTH := 0.22
 const BULB_LIGHT_RADIUS := 144
 const BULB_LIGHT_ENERGY := 0.8
+const BULB_LIGHT_HEIGHT := 72.0   # px out from the wall: how steeply it falls on the normal maps
 const SIGN_GLOW := Color(1.0, 0.25, 0.25)
 const SIGN_GLOW_CENTRE := Vector2(16, 12)
 const SIGN_GLOW_SIZE := Vector2i(40, 24)
 const SIGN_GLOW_STRENGTH := 0.3
 const SIGN_LIGHT_RADIUS := 64
 const SIGN_LIGHT_ENERGY := 0.6
+const SIGN_LIGHT_HEIGHT := 32.0
 const SIGN_LETTERS := Rect2(8, 9, 16, 7)   # inside the sign's frame (tools/make_door_tiles.gd)
 const SIGN_OFF := Color8(52, 10, 14)        # the sign box's colour, covering the letters when it's out
 const ACID_FRAMES := 4
@@ -214,6 +216,7 @@ func _add_light(parent: Node2D, cell: Vector2i, kind: FlickerLight.Kind, lit: Ca
 		light.glow_strength = SIGN_GLOW_STRENGTH
 		light.light_radius = SIGN_LIGHT_RADIUS
 		light.light_energy = SIGN_LIGHT_ENERGY
+		light.light_height = SIGN_LIGHT_HEIGHT
 	else:
 		light.position = Vector2(cell * TILE) + BULB_GLOW_CENTRE
 		light.glow_size = BULB_GLOW_SIZE
@@ -221,6 +224,7 @@ func _add_light(parent: Node2D, cell: Vector2i, kind: FlickerLight.Kind, lit: Ca
 		light.glow_strength = BULB_GLOW_STRENGTH
 		light.light_radius = BULB_LIGHT_RADIUS
 		light.light_energy = BULB_LIGHT_ENERGY
+		light.light_height = BULB_LIGHT_HEIGHT
 		light.z_index = -1
 	parent.add_child(light)
 

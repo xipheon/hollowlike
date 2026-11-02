@@ -1,11 +1,11 @@
 [gd_resource type="TileSet" format=3 uid="uid://00at4qbp0e2p"]
 
-[ext_resource type="Texture2D" uid="uid://hy36txqfbeya" path="res://art/tiles/background.png" id="1_vq45w"]
+[ext_resource type="Texture2D" path="res://art/tiles/background_canvas.tres" id="1_vq45w"]
 
-[sub_resource type="TileMapPattern" id="TileMapPattern_vq45w"]
+[sub_resource type="TileMapPattern" id="TileMapPattern_s5fx1"]
 tile_data = PackedInt32Array(0, 131072, 1, 1, 196608, 1, 2, 262144, 1, 65536, 131072, 2, 65537, 196608, 2, 65538, 262144, 2)
 
-[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_s5fx1"]
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_r6e4m"]
 texture = ExtResource("1_vq45w")
 texture_region_size = Vector2i(32, 32)
 0:0/0 = 0
@@ -232,5 +232,5 @@ custom_data_layer_0/name = "kind"
 custom_data_layer_0/type = 4
 custom_data_layer_1/name = "light"
 custom_data_layer_1/type = 4
-sources/0 = SubResource("TileSetAtlasSource_s5fx1")
-pattern_0 = SubResource("TileMapPattern_vq45w")
+sources/0 = SubResource("TileSetAtlasSource_r6e4m")
+pattern_0 = SubResource("TileMapPattern_s5fx1")

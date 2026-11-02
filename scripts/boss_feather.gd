@@ -9,6 +9,15 @@ extends Area2D
 ## "damage" meta the Harrier sets.
 
 const LENGTH := 22.0
+const COLOR := Color(0.6, 0.95, 1.0)
+const HOMING_COLOR := Color(0.85, 0.65, 1.0)
+const HOMING_GLOW := Color(0.75, 0.5, 1.0, 0.45)
+## Its light: a homing feather glows brighter, as it's drawn.
+const LIGHT_RADIUS := 48
+const LIGHT_ENERGY := 0.45
+const HOMING_LIGHT_RADIUS := 64
+const HOMING_LIGHT_ENERGY := 0.7
+const LIGHT_HEIGHT := 24.0
 const MAX_TILT := 70.0 * PI / 180.0   ## homing: furthest from straight down it will fly
 
 var direction := Vector2.RIGHT
@@ -18,6 +27,7 @@ var turn_rate := 2.2               ## radians per second, homing only
 var min_turn_radius := 150.0       ## px; homing, once it has seen the player
 var lifetime := 3.0
 var hit_recoil := 500.0             ## px/s the player is pushed back by striking it (see EnemyBase)
+var light: PointLight2D
 
 var _age := 0.0
 var _seen_player := false
@@ -37,6 +47,12 @@ func _ready() -> void:
 	rect.size = Vector2(LENGTH, 8) if not homing else Vector2(18, 18)
 	shape.shape = rect
 	add_child(shape)
+	light = PointLight2D.new()
+	light.texture = FlickerLight.light_texture(HOMING_LIGHT_RADIUS if homing else LIGHT_RADIUS)
+	light.color = HOMING_COLOR if homing else COLOR
+	light.energy = HOMING_LIGHT_ENERGY if homing else LIGHT_ENERGY
+	light.height = LIGHT_HEIGHT
+	add_child(light)
 	rotation = direction.angle()
 
 
@@ -103,11 +119,11 @@ func _draw() -> void:
 	if homing:
 		# Bigger, glowing, pulsing: clearly a different (hittable) thing.
 		var pulse := 1.0 + 0.15 * sin(_age * 10.0)
-		draw_circle(Vector2.ZERO, 10.0 * pulse, Color(0.75, 0.5, 1.0, 0.45))
+		draw_circle(Vector2.ZERO, 10.0 * pulse, HOMING_GLOW)
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(half, 0), Vector2(-half * 0.2, -6), Vector2(-half, 0), Vector2(-half * 0.2, 6)]),
-			Color(0.85, 0.65, 1.0))
+			HOMING_COLOR)
 		return
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(half, 0), Vector2(-half * 0.2, -4), Vector2(-half, 0), Vector2(-half * 0.2, 4)]),
-		Color(0.6, 0.95, 1.0))
+		COLOR)

@@ -12,7 +12,7 @@ extends AnimatableBody2D
 const TILE := 32
 const LAYER_PLATFORMS := 32
 const DECK_HEIGHT := 10.0   # collision at the top of the deck, as on a painted platform
-const SHEET := preload("res://art/tiles/tileset.png")
+const SHEET := preload("res://art/tiles/tileset_canvas.tres")   # with its normal map
 
 ## Deck width in tiles.
 @export_range(1, 8) var width_tiles := 3:

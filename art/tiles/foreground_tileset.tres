@@ -1,8 +1,8 @@
 [gd_resource type="TileSet" format=3 uid="uid://rm55alkb3j7e"]
 
-[ext_resource type="Texture2D" uid="uid://cbhrdlam64jbi" path="res://art/tiles/tileset.png" id="1_4jhso"]
+[ext_resource type="Texture2D" path="res://art/tiles/tileset_canvas.tres" id="1_4jhso"]
 
-[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_4jhso"]
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_xafsd"]
 texture = ExtResource("1_4jhso")
 texture_region_size = Vector2i(32, 32)
 0:0/0 = 0
@@ -374,4 +374,4 @@ custom_data_layer_0/name = "kind"
 custom_data_layer_0/type = 4
 custom_data_layer_1/name = "light"
 custom_data_layer_1/type = 4
-sources/0 = SubResource("TileSetAtlasSource_4jhso")
+sources/0 = SubResource("TileSetAtlasSource_xafsd")

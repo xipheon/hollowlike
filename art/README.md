@@ -81,6 +81,59 @@ Rooms are scenes made in the Godot editor. Each tile you paint says what it is (
 
 To add a new enemy, make a scene whose script extends `EnemyBase`. It shows up with the same Inspector settings, and can be placed in any room.
 
+## Normal maps
+
+The room's lights shade the art using normal maps. A normal map is a second image, the same size as a sheet, whose colours say which way each pixel of the sheet faces. A light then brightens the pixels that face it and darkens those that face away, so a pipe looks round and a brick's top edge catches a bulb above it.
+
+**The files.** Every lit sheet has one beside it, named `<sheet>_n.png`: `tiles/background_n.png` belongs to `tiles/background.png`, `sprites/thug_n.png` to `sprites/thug.png`, and so on.
+- Lit sheets: `tileset`, `background`, `props` and `pipes` in `tiles/`, and `player`, `player_pink`, `thug` and the three `crawler_*` sheets in `sprites/`. The skyline and the slash effects aren't lit, so they have none.
+- They start blank: every pixel flat, facing straight out of the screen, which lights everything evenly, as if there were no normal map.
+- Each pixel of `_n.png` describes the pixel at the same spot on the sheet, so keep the same size and layout. Where the sheet is transparent, the normal map doesn't matter; leave it flat.
+- `<sheet>_canvas.tres` pairs a sheet with its normal map. Don't edit it. `tools/make_normal_maps.gd` makes both for any sheet in its list that lacks them, and never overwrites one, so your drawings are safe. Delete a normal map to get a blank one back.
+
+**The colours.** Each channel is one direction, from 0 to 255, with 128 meaning "neither way":
+- **Red:** facing left (0) or right (255).
+- **Green:** facing down (0) or up (255). This is the "OpenGL" or "Y+" convention; if a tool asks, pick that one.
+- **Blue:** how much the pixel faces you: 255 is flat on, lower is turned further away. Never below 128.
+
+A useful palette, for surfaces turned about 45° (the usual edge bevel):
+
+| Facing | Colour (R, G, B) |
+|---|---|
+| Flat, straight at you | 128, 128, 255 |
+| Up | 128, 218, 218 |
+| Down | 128, 38, 218 |
+| Left | 38, 128, 218 |
+| Right | 218, 128, 218 |
+| Up-left | 64, 192, 218 |
+| Up-right | 192, 192, 218 |
+| Down-left | 64, 64, 218 |
+| Down-right | 192, 64, 218 |
+
+For a steeper slope, move further from 128 and lower the blue: straight up, edge-on, is 128, 255, 128. For a gentle one, stay closer to flat. The exact rule is `colour = (direction × 0.5 + 0.5) × 255` for a direction of length 1.
+
+**Drawing them.**
+1. Open the sheet and its `_n.png` together, as two layers in your editor, with the sheet on top at partial opacity so you can see what you're shading. Or draw on a copy of the sheet and fill each shape with palette colours.
+2. Fill everything flat first. Then pick the shapes: for each, decide which way its surfaces face and paint those pixels with the matching colour.
+   - **Bricks:** top row of each brick up, bottom row down, left and right columns left and right, the face flat. Mortar lines flat, or pushed slightly back.
+   - **Pipes:** across a horizontal pipe, the top rows up, the middle flat, the bottom rows down. Up a vertical one, left to right. Collars and flanges are boxes with bevelled edges.
+   - **Concrete blocks:** bevel the edges; chips and cracks face into the hole.
+   - **Characters:** shade them like round shapes lit from all sides: a head, an arm and a torso are each a ball or a tube. Draw them facing the way the sheet faces. Godot should mirror the normals when a sprite turns around. If a turned character lights from the wrong side, that's a bug to report, not something to draw around.
+3. Keep it to a few colours per shape, like the pixel art itself. Hard steps between directions look crisp; smooth gradients look soft and blurry at this scale.
+4. Save as a plain PNG: no colour profile, no premultiplied alpha, no dithering, no resizing. Godot reimports it as soon as you save.
+
+**Tools.**
+- **Aseprite** (or the free LibreSprite): its colour wheel has a *Normal Map* mode that picks a direction by clicking where the surface points.
+- **Laigter** (free) generates a normal map from a sprite's shading, as a starting point to clean up by hand.
+- **PixelLab** has a normal-map generator too.
+
+Generated maps guess from brightness, so a dark stain can look like a dent. Check and fix them.
+
+**Seeing the result.** Run a room with F6: lights only exist in game, not in the editor.
+- A shape that lights from the wrong side has a channel flipped. Green is the usual culprit when a map comes from a tool using the other convention: invert the green channel.
+- Effects too subtle or too harsh: tune the lights in `scripts/room_art.gd` (`BULB_LIGHT_*` and `SIGN_LIGHT_*`). Height is how far out from the wall a light hangs. Lower makes the light rake across the surface and exaggerates the shading; higher flattens it.
+- After a sheet's layout changes, its normal map has to change to match. The test suite checks that each one is still the sheet's size.
+
 ## Suggested order
 
 1. **Tileset terrain block plus one platform.** Changes the whole look fastest, and it's a quick test of the pipeline.

@@ -8,8 +8,10 @@ extends Node2D
 ##           burst of fast flashes, sometimes catching and buzzing for a
 ##           moment before it dies again.
 ## The glow is banded rings drawn additively, so it stays pixel art. A real
-## light (a PointLight2D, `light_radius` px, `light_energy` at full) shines on
-## the room around it, following the same brightness. Optional
+## light (a PointLight2D, `light_radius` px, `light_energy` at full, hanging
+## `light_height` px out from the wall) shines on the room around it, following
+## the same brightness. Its height is what lets the normal maps shade: a light
+## level with the wall would only graze a flat surface. Optional
 ## `lit_overlay` is shown at the current brightness (the lit bulb drawn over a
 ## dead one); optional `dim_overlay` is shown at the opposite (a dark box over
 ## a sign's letters when it's out).
@@ -27,6 +29,7 @@ var glow_size := Vector2i(48, 48)
 var glow_strength := 0.35
 var light_radius := 96
 var light_energy := 0.6
+var light_height := 64.0
 var light: PointLight2D   # the real light, made in _ready
 var lit_overlay: CanvasItem
 var dim_overlay: CanvasItem
@@ -46,8 +49,9 @@ func _ready() -> void:
 	material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	light = PointLight2D.new()
-	light.texture = _light_texture(light_radius)
+	light.texture = light_texture(light_radius)
 	light.color = glow_color
+	light.height = light_height
 	add_child(light)
 	# Start part-way into a cycle so lights in a room don't keep time together.
 	match kind:
@@ -146,9 +150,9 @@ static func _glow_texture(size: Vector2i) -> Texture2D:
 	return tex
 
 
-## A soft radial falloff for the real light: full in the middle, fading to
-## nothing at `radius`.
-static func _light_texture(radius: int) -> Texture2D:
+## A soft radial falloff for a real light (these, LightFlash, the player's):
+## full in the middle, fading to nothing at `radius`.
+static func light_texture(radius: int) -> Texture2D:
 	if _light_textures.has(radius):
 		return _light_textures[radius]
 	var gradient := Gradient.new()

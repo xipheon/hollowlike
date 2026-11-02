@@ -25,6 +25,8 @@ extends SceneTree
 ##               crossings joined up as you paint, ends going into the wall,
 ##               and now and then a broken-off end.
 ## Patterns (the TileMap panel's Patterns tab): the large window, whole.
+## Each sheet is used as its CanvasTexture (<sheet>_canvas.tres, with its
+## normal map; tools/make_normal_maps.gd), so the room's lights shade the tiles.
 ## Rerun after changing a sheet's layout (it keeps each file's ID). Once rooms are painted, prefer
 ## editing the .tres in Godot over rerunning this (it rebuilds from scratch).
 
@@ -79,10 +81,15 @@ func _new_tileset(sheet_path: String, data_layers: Array, terrains: Array) -> Ti
 		ts.set_terrain_name(0, i, terrains[i][0])
 		ts.set_terrain_color(0, i, terrains[i][1])
 	var source := TileSetAtlasSource.new()
-	source.texture = load(sheet_path)
+	source.texture = _lit(sheet_path)
 	source.texture_region_size = TILE
 	ts.add_source(source, 0)
 	return ts
+
+
+## A sheet with its normal map, as tools/make_normal_maps.gd pairs them.
+func _lit(sheet_path: String) -> Texture2D:
+	return load(sheet_path.get_basename() + "_canvas.tres")
 
 
 ## Creates a tile and sets its custom data; returns its TileData.
@@ -202,7 +209,7 @@ func _props() -> TileSet:
 	# Pipes: the 4x4 block, each piece joining on the sides it runs out of,
 	# and the broken ends as rarer stand-ins for the wall ends.
 	var pipes := TileSetAtlasSource.new()
-	pipes.texture = load("res://art/tiles/pipes.png")
+	pipes.texture = _lit("res://art/tiles/pipes.png")
 	pipes.texture_region_size = TILE
 	ts.add_source(pipes, RoomArt.PIPES_SOURCE)
 	for r in RoomArt.TERRAIN.size():

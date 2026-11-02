@@ -2,11 +2,17 @@ class_name WardenShockwave
 extends Area2D
 ## Ground wave from the Warden's slam. Travels along the floor until it hits a
 ## wall. Low enough to jump over. Position = its bottom-centre on the floor.
+## It glows, lighting the floor and wall as it goes.
 
 const SIZE := Vector2(20, 26)
+const COLOR := Color(1.0, 0.7, 0.3)
+const LIGHT_RADIUS := 64
+const LIGHT_ENERGY := 0.7
+const LIGHT_HEIGHT := 24.0
 
 var direction := 1
 var speed := 380.0
+var light: PointLight2D
 
 
 func _ready() -> void:
@@ -21,6 +27,13 @@ func _ready() -> void:
 	shape.shape = rect
 	shape.position = Vector2(0, -SIZE.y * 0.5)
 	add_child(shape)
+	light = PointLight2D.new()
+	light.texture = FlickerLight.light_texture(LIGHT_RADIUS)
+	light.color = COLOR
+	light.energy = LIGHT_ENERGY
+	light.height = LIGHT_HEIGHT
+	light.position = Vector2(0, -SIZE.y * 0.5)
+	add_child(light)
 
 
 func _physics_process(delta: float) -> void:
@@ -38,4 +51,4 @@ func _draw() -> void:
 	var w := SIZE.x * 0.5
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(-w, 0), Vector2(direction * w * 0.4, -SIZE.y), Vector2(w, 0)]),
-		Color(1.0, 0.7, 0.3, 0.9))
+		Color(COLOR, 0.9))

@@ -22,6 +22,10 @@ enum State { DORMANT, RECOVER, CHARGE_WINDUP, CHARGE, DAZED, LEAP_WINDUP, LEAP, 
 @export var shockwave_speed := 380.0
 @export var recover_time := 0.9
 @export var phase_two_speedup := 1.3   ## timers shrink and charge speeds up by this
+## The slam's flash of light at its feet, in the shockwaves' orange.
+@export var slam_flash_radius := 160
+@export var slam_flash_energy := 1.0
+@export var slam_flash_time := 0.25
 
 var _state := State.DORMANT
 var _timer := 0.0
@@ -177,6 +181,7 @@ func on_hit_player() -> void:
 
 func _shockwave() -> void:
 	var feet := global_position + Vector2(0, SIZE.y * 0.5)
+	LightFlash.flash(get_parent(), feet, WardenShockwave.COLOR, slam_flash_radius, slam_flash_energy, slam_flash_time)
 	for dir in [-1, 1]:
 		var wave := WardenShockwave.new()
 		wave.direction = dir
