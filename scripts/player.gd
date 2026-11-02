@@ -302,9 +302,11 @@ func _physics_process(delta: float) -> void:
 			velocity.x = _carried_x + move_toward(velocity.x - _carried_x, input_x * top_speed, accel * delta)
 
 	# Attack (buffered: a press during the cooldown or a stun swings once it's over,
-	# aimed by whatever direction is held then)
+	# aimed by whatever direction is held then). On the ground next to an NPC,
+	# it talks to them instead.
 	if Input.is_action_just_pressed("attack"):
-		_attack_buffer_timer = attack_buffer_time
+		if stunned or not on_floor or not _talk_to_nearby():
+			_attack_buffer_timer = attack_buffer_time
 	if not stunned and _attack_buffer_timer > 0.0 and _attack_cooldown_timer <= 0.0:
 		_attack_buffer_timer = 0.0
 		_start_attack(input_y, on_floor)
@@ -503,6 +505,15 @@ func _end_dash() -> void:
 
 
 # -------------------------------------------------------------- Attack ----
+
+## Starts talking to an NPC you can talk to (see NPC.can_talk_to), if there is one.
+func _talk_to_nearby() -> bool:
+	for npc in get_tree().get_nodes_in_group("npc"):
+		if npc.can_talk_to(self):
+			npc.talk()
+			return true
+	return false
+
 
 func _start_attack(input_y: float, on_floor: bool) -> void:
 	_attack_timer = attack_duration

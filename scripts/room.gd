@@ -20,6 +20,7 @@ extends Node2D
 const TILE := 32
 const PAUSE_MENU_SCENE := preload("res://scenes/ui/pause_menu.tscn")
 const DEATH_MENU_SCENE := preload("res://scenes/ui/death_menu.tscn")
+const DIALOGUE_BOX_SCENE := preload("res://scenes/ui/dialogue_box.tscn")   # for its NPCs
 const DEATH_MENU_DELAY := 1.0   # seconds after you die before the death screen
 const LAYER_WORLD := 1
 const LAYER_PLATFORMS := 32
@@ -129,6 +130,7 @@ func _ready() -> void:
 	_player.health_changed.connect(_on_health_for_grade)
 	_on_health_for_grade(_player.health, _player.max_health)
 	add_child(PAUSE_MENU_SCENE.instantiate())
+	add_child(DIALOGUE_BOX_SCENE.instantiate())
 	_death_menu = DEATH_MENU_SCENE.instantiate()
 	add_child(_death_menu)
 

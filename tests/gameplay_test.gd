@@ -88,7 +88,7 @@ const SEGMENTS := {
 	],
 	# NPC dialogue: lines, conversations and the progress states that pick them (dialogue_*.gd).
 	"dialogue": [
-		"_test_dialogue_states",
+		"_test_dialogue_states", "_test_npc_talk", "_test_attack_still_swings_near_npc",
 	],
 	# Pause menu, main menu, level select, debug tools.
 	"menus": [
@@ -3518,3 +3518,109 @@ func _test_dialogue_states() -> void:
 	var prop: Array = line.get_property_list().filter(func(p): return p.name == "give_ability")
 	_check(prop.size() == 1 and prop[0].hint == PROPERTY_HINT_ENUM and "dash" in prop[0].hint_string.split(","), "a line can give an ability, picked from a list")
 	GameState.flags = {}
+
+
+const NPC_SCENE := preload("res://scenes/npcs/npc.tscn")
+
+
+## The test room with an NPC standing on its floor at column 2.5, enemies
+## gone, and the player a long way off: a first talk of two lines (the second
+## gives dash) and a repeat talk of one.
+func _spawn_npc_room() -> NPC:
+	var room := _build_editor_room()
+	var npc: NPC = NPC_SCENE.instantiate()
+	npc.npc_id = "tester"
+	npc.name_key = "NPC_GUARD"
+	var state := DialogueState.new()
+	state.name = "always"
+	state.first_talk = _talk(["DLG_GUARD_BEFORE_1", "DLG_GUARD_BEFORE_2"])
+	state.first_talk.lines[1].give_ability = "dash"
+	state.repeat_talk = _talk(["DLG_GUARD_BEFORE_AGAIN"])
+	npc.states = [state]
+	npc.position = Vector2(2.5 * TILE, 12 * TILE)
+	room.entities().add_child(npc)
+	await _spawn_node(room)
+	await _remove_enemies()
+	npc.sprite.sprite_frames = load("res://art/sprites/thug_frames.tres")
+	npc.sprite.play("walk")
+	await _stand_by_npc(8.0 * TILE)
+	return npc
+
+
+## Puts the player on the NPC test room's floor at x (px).
+func _stand_by_npc(x: float) -> void:
+	_player.global_position = Vector2(x, 12 * TILE - Player.BODY_SIZE.y * 0.5)
+	_player.velocity = Vector2.ZERO
+	await _frames(4)
+
+
+## Presses and releases attack as real input events, as the dialogue box
+## listens for (Input.action_press sends none).
+func _tap_attack() -> void:
+	for pressed in [true, false]:
+		var event := InputEventAction.new()
+		event.action = "attack"
+		event.pressed = pressed
+		Input.parse_input_event(event)
+		await _frames(1)
+
+
+func _test_npc_talk() -> void:
+	print("NPCs: a bubble in range; attack on the ground talks; the game pauses while the box and NPC animate; lines type and advance; then a repeat")
+	var npc := await _spawn_npc_room()
+	var box: DialogueBox = _main.get_children().filter(func(c): return c is DialogueBox)[0]
+	_check(not npc.is_prompt_shown() and not npc.can_talk_to(_player) and not box.is_open(), "out of range: no bubble")
+	await _stand_by_npc(npc.position.x + npc.talk_range - 4)
+	_check(npc.is_prompt_shown() and npc.can_talk_to(_player), "in range: the bubble shows")
+	_check(npc.sprite.flip_h == false, "and it turns to face you (on its right)")
+	await _stand_by_npc(npc.position.x - 20)
+	_check(npc.sprite.flip_h == true, "or on its left")
+
+	await _tap_attack()
+	_check(box.is_open() and get_tree().paused and box.line_index() == 0, "attack talks: the box opens on the first line, the game paused")
+	_check(box._name.text == tr("NPC_GUARD") and box._text.text == tr("DLG_GUARD_BEFORE_1"), "with its name and the line (%s)" % box._name.text)
+	_check(_player._attack_timer <= 0.0 and not _player.slash.visible, "and no swing")
+	_check(not npc.is_prompt_shown(), "the bubble hides while talking")
+	var typed: int = box._text.visible_characters
+	var frame := npc.sprite.frame
+	await _frames(20)
+	_check(box.is_typing() and box._text.visible_characters > typed, "the line types out while paused (%d to %d letters)" % [typed, box._text.visible_characters])
+	_check(npc.sprite.frame != frame or npc.sprite.frame_progress > 0.0, "and the NPC keeps animating")
+	await _tap_attack()
+	_check(not box.is_typing() and box.line_index() == 0, "attack shows the rest of the line")
+	_check(not GameState.has_ability("dash"), "nothing given yet")
+	await _tap_attack()
+	_check(box.line_index() == 1 and box._text.text == tr("DLG_GUARD_BEFORE_2"), "then the next line")
+	_check(GameState.has_ability("dash"), "which gives its ability as it shows")
+	await _tap_attack()
+	await _tap_attack()
+	_check(not box.is_open(), "after the last line, the box closes")
+	await _frames(3)
+	_check(not get_tree().paused and not npc.is_talking() and GameState.has_flag("talked_tester_always"), "the game carries on, and it remembers you heard it")
+	_check(_player._attack_timer <= 0.0 and not _player.slash.visible, "the closing press didn't swing either")
+
+	await _frames(5)
+	await _tap_attack()
+	_check(box.is_open() and box._text.text == tr("DLG_GUARD_BEFORE_AGAIN"), "talking again: the repeat talk")
+	await _tap_attack()
+	await _tap_attack()
+	await _frames(3)
+	_check(not box.is_open() and not get_tree().paused, "which closes too")
+	await _despawn()
+
+
+func _test_attack_still_swings_near_npc() -> void:
+	print("NPCs: attack still swings in the air near one, and anywhere out of its range")
+	var npc := await _spawn_npc_room()
+	var box: DialogueBox = _main.get_children().filter(func(c): return c is DialogueBox)[0]
+	await _stand_by_npc(8.0 * TILE)
+	await _tap_attack()
+	_check(_player._attack_timer > 0.0 and not box.is_open(), "out of range: a swing")
+	await _frames(40)
+	await _stand_by_npc(npc.position.x + 20)
+	_player.velocity.y = -400.0   # jump
+	await _frames(3)
+	_check(not _player.is_on_floor(), "in the air beside it")
+	await _tap_attack()
+	_check(_player._attack_timer > 0.0 and not box.is_open(), "in the air: a swing, not a talk")
+	await _despawn()

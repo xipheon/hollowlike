@@ -73,6 +73,13 @@ Rooms are scenes made in the Godot editor. Each tile you paint says what it is (
    - **Pipes** (`pipes.png`): use the **pipe** brush (Terrains tab). Drag a line and it joins the pieces up as you go: straight lengths, elbows, T's and crossings under a bolted collar, and an end going into the wall behind a flange. Now and then an end comes out broken off instead. A single cell on its own is a valve stub. Any piece can also be picked by hand from the Tiles tab.
 8. **Place things under Entities** by dragging scenes onto it from the FileSystem dock:
    - **Enemies:** the crawlers, one scene per colour: `scenes/enemies/crawler_sewer.tscn`, `crawler_sickly.tscn` and `crawler_pink.tscn` (the pink one heals you when killed). Then `thug.tscn`, which blocks and pauses on patrol (its block reduction, patrol and pause times are in the Inspector). In the Inspector, every enemy can set its health, damage, heal on kill and hit recoil, and a crawler can start on the ceiling.
+   - **NPCs:** `scenes/npcs/npc.tscn`, with its origin at its feet on the floor. In the Inspector set:
+     - `npc_id` (names what it remembers you heard, e.g. `guard`);
+     - `name_key` (its name in `localization/en/dialog.po`, e.g. `NPC_GUARD`);
+     - its sprite frames on its Sprite;
+     - its **States**: what it says at each point in the game, latest first. Each state has the progress flags it requires or forbids (e.g. `warden_defeated`), a **first talk** heard once and a **repeat talk** after that. A talk is a list of lines, each a key in `dialog.po`, and a line can give an ability.
+
+     In game, standing in its talk range (the box drawn in the editor) on the ground, attack talks to it instead of swinging.
    - **Bosses:** `scenes/bosses/warden.tscn` and `harrier.tscn`. Each needs an **Arena** node (`scripts/arena.gd`). Its origin is the arena's top-left corner, and `size_tiles` is its size. Point its `boss` at the boss node. The fight starts a few tiles past a gate, and the camera frames the arena.
    - **PlayerStart** (`scripts/player_start.gd`): where a fresh game starts, at the player's feet. Players coming through a door arrive at the door instead.
    - **RoomDoor** (`scripts/room_door.gd`): put it over the door tiles, with its origin at the doorway's top-left corner. Set its `height` in tiles, and choose `target_room` from the list. `arrive_at` names the door to arrive at in that room. Leave it empty to arrive at the door there that leads back.
