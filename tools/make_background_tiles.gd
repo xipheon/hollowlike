@@ -1,11 +1,18 @@
 extends SceneTree
 ## Builds the background tile sheet (art/tiles/background.png): a dark brick
-## warehouse wall drawn in code, with PixelLab pieces (windows, posters, light,
-## graffiti) laid over it. Window panes stay transparent so a parallax layer
-## behind shows through. Also writes a preview room. Run from the project folder:
+## warehouse wall drawn in code (plain, stained, knocked-through, and crumbled
+## edges), with PixelLab windows laid over it. Window panes stay transparent so
+## a parallax layer behind shows through. Things on the wall (lights, posters,
+## graffiti, pipes, girders) are on the Props layer's sheets instead
+## (tools/make_prop_tiles.gd, tools/make_pipe_tiles.gd); their old cells here
+## are left empty. Also writes a preview room, with the props over the wall.
+## Run from the project folder:
 ##   godot --headless --path . --script res://tools/make_background_tiles.gd
 ##
 ## Every tile has wall behind it, so a background cell is always one tile.
+## Rerunning it redraws the crumbled edges a little differently from the sheet
+## in the project (Godot's hash() has changed since it was drawn); the rest
+## comes out the same.
 ## Brick colours don't depend on the variant, so any wall tiles sit side by side.
 
 const TILE := 32
@@ -16,6 +23,8 @@ const PREVIEW_PATH := "res://art/tiles/source/background_preview.png"
 const PREVIEW_SCALE := 2
 const SKYLINE_PATH := "res://art/backgrounds/skyline.png"
 const SKYLINE_PREVIEW_Y := 115
+const PROPS_SHEET := "res://art/tiles/props.png"
+const PIPES_SHEET := "res://art/tiles/pipes.png"
 
 const BRICK := Vector2i(16, 8)
 # Dark and low-contrast, so the wall stays behind the gameplay.
@@ -28,24 +37,19 @@ const SPECKLE_LIGHT := 0.04
 const GRIME := 0.12        # how much darker grime makes a pixel
 const STAIN := Color8(38, 40, 28)
 const SOOT := Color8(22, 20, 22)
-const STRIPE_YELLOW := Color8(196, 160, 40)
-const STRIPE_BLACK := Color8(28, 26, 26)
-const PIPE := [Color8(54, 58, 62), Color8(86, 92, 96), Color8(122, 128, 130), Color8(70, 76, 80), Color8(40, 42, 46)]
-const RUST := Color8(120, 62, 30)
-const STEEL := [Color8(36, 40, 46), Color8(58, 64, 72), Color8(84, 92, 100)]
-
-# Generated pieces: [file, top-left cell, size in tiles, optional part of the
-# file to use]. A part is trimmed to its pixels and centred across the cell.
-# Missing files are skipped.
+# Generated pieces: [file, top-left cell, size in tiles], each centred across
+# its cells. Missing files are skipped.
 const PIECES := [
 	["window_2x2_raw.png", Vector2i(0, 1), Vector2i(2, 2)],
 	["window_3x2_raw.png", Vector2i(2, 1), Vector2i(3, 2)],
-	["posters_raw.png", Vector2i(5, 1), Vector2i(2, 1)],
-	["light_raw.png", Vector2i(7, 1), Vector2i(1, 1), Rect2i(16, 0, 16, 32)],  # lit bulb
-	["light_raw.png", Vector2i(7, 2), Vector2i(1, 1), Rect2i(0, 0, 16, 32)],   # dead bulb
-	["graffiti_raw.png", Vector2i(5, 2), Vector2i(2, 1)],
 ]
-const JUNCTION_CELL := Vector2i(0, 3)
+## Cells that held props before they moved to the Props layer's sheets: empty.
+const EMPTY_CELLS := [
+	Vector2i(4, 0), Vector2i(5, 0), Vector2i(6, 0), Vector2i(7, 0),
+	Vector2i(5, 1), Vector2i(6, 1), Vector2i(7, 1), Vector2i(5, 2), Vector2i(6, 2), Vector2i(7, 2),
+	Vector2i(0, 3), Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3),
+	Vector2i(4, 3), Vector2i(5, 3), Vector2i(6, 3), Vector2i(7, 3),
+]
 # Broken wall edges around a hole knocked through the wall: 16 tiles in rows
 # 4-5, one per set of open sides. Tile n has bit 1 = N open, 2 = E, 4 = S,
 # 8 = W, and sits at (n % 8, 4 + n / 8).
@@ -53,7 +57,8 @@ const EDGE_ORIGIN := Vector2i(0, 4)
 const EDGE_DEPTH := Vector2i(1, 9)  # how far a broken edge bites in, min/max px
 const EDGE_CHUNK := 4               # edge pixels per bite
 
-# Sample wall for the preview. Letters are sheet cells, see LEGEND.
+# Sample wall for the preview. Letters are sheet cells, see LEGEND: a cell
+# of this sheet, or [props or pipes sheet, cell] laid over plain brick.
 const PREVIEW_ROWS := [
 	"aaVacavaabaVavag",
 	"abWXabLMNbaWXbag",
@@ -66,12 +71,14 @@ const PREVIEW_ROWS := [
 ]
 const LEGEND := {
 	"a": Vector2i(0, 0), "b": Vector2i(1, 0), "c": Vector2i(2, 0), "d": Vector2i(3, 0),
-	"h": Vector2i(4, 0), "-": Vector2i(5, 0), "|": Vector2i(6, 0), "g": Vector2i(7, 0),
 	"W": Vector2i(0, 1), "X": Vector2i(1, 1), "Y": Vector2i(0, 2), "Z": Vector2i(1, 2),
 	"L": Vector2i(2, 1), "M": Vector2i(3, 1), "N": Vector2i(4, 1),
 	"l": Vector2i(2, 2), "m": Vector2i(3, 2), "n": Vector2i(4, 2),
-	"P": Vector2i(5, 1), "Q": Vector2i(6, 1), "V": Vector2i(7, 1), "v": Vector2i(7, 2),
-	"T": Vector2i(5, 2), "t": Vector2i(6, 2), "+": JUNCTION_CELL,
+	"h": [PROPS_SHEET, RoomArt.HAZARD], "g": [PROPS_SHEET, RoomArt.GIRDER],
+	"P": [PROPS_SHEET, RoomArt.POSTERS[0]], "Q": [PROPS_SHEET, RoomArt.POSTERS[0] + Vector2i(1, 0)],
+	"T": [PROPS_SHEET, RoomArt.GRAFFITI[0]], "t": [PROPS_SHEET, RoomArt.GRAFFITI[0] + Vector2i(1, 0)],
+	"V": [PROPS_SHEET, RoomArt.LIGHT_LIT], "v": [PROPS_SHEET, RoomArt.LIGHT_DEAD],
+	"-": [PIPES_SHEET, RoomArt.PIPE_H], "|": [PIPES_SHEET, RoomArt.PIPE_V], "+": [PIPES_SHEET, RoomArt.PIPE_JUNCTION],
 }
 
 
@@ -83,13 +90,6 @@ func _init() -> void:
 			_wall(sheet, Vector2i(cx, cy) * TILE)
 	_stain(sheet, Vector2i(2, 0) * TILE)
 	_damage(sheet, Vector2i(3, 0) * TILE)
-	_stripes(sheet, Vector2i(4, 0) * TILE)
-	_pipe(sheet, Vector2i(5, 0) * TILE, false)
-	_pipe(sheet, Vector2i(6, 0) * TILE, true)
-	_girder(sheet, Vector2i(7, 0) * TILE)
-	_pipe(sheet, JUNCTION_CELL * TILE, false)
-	_pipe(sheet, JUNCTION_CELL * TILE, true)
-	_fitting(sheet, JUNCTION_CELL * TILE)
 	for n in 16:
 		_broken_edges(sheet, (EDGE_ORIGIN + Vector2i(n % 8, n / 8)) * TILE, n)
 	for p in PIECES:
@@ -97,9 +97,9 @@ func _init() -> void:
 		if not FileAccess.file_exists(path):
 			continue
 		var piece := Image.load_from_file(ProjectSettings.globalize_path(path))
-		if p.size() > 3:
-			piece = _trim_sides(piece.get_region(p[3]))
 		_place(sheet, piece, p[1] * TILE, p[2] * TILE)
+	for cell in EMPTY_CELLS:
+		sheet.fill_rect(Rect2i(cell * TILE, Vector2i(TILE, TILE)), Color(0, 0, 0, 0))
 	sheet.save_png(ProjectSettings.globalize_path(SHEET_PATH))
 	_save_preview(sheet)
 	print("Wrote %s and %s" % [SHEET_PATH, PREVIEW_PATH])
@@ -163,62 +163,7 @@ func _damage(img: Image, o: Vector2i) -> void:
 				img.set_pixel(o.x + x, o.y + y, img.get_pixel(o.x + x, o.y + y).darkened(0.3))
 
 
-## A chipped hazard-stripe band painted across the wall. Period 8, so it tiles.
-func _stripes(img: Image, o: Vector2i) -> void:
-	for y in range(12, 20):
-		for x in TILE:
-			if _noise(x, y, 6) < 0.12:
-				continue  # paint chipped off
-			var c := STRIPE_YELLOW if posmod(x + y, 8) < 4 else STRIPE_BLACK
-			if y == 12 or y == 19:
-				c = c.darkened(0.2)
-			img.set_pixel(o.x + x, o.y + y, c)
 
-
-## An 8px rusty pipe across (or down) the tile, with a flange in the middle.
-func _pipe(img: Image, o: Vector2i, vertical: bool) -> void:
-	for a in TILE:
-		var flange := a >= 14 and a <= 17
-		var lo := 11 if flange else 12
-		var hi := 21 if flange else 20
-		for b in range(lo, hi):
-			var shade := clampi(int((b - lo) * PIPE.size() / float(hi - lo)), 0, PIPE.size() - 1)
-			var c: Color = PIPE[shade]
-			if flange:
-				c = c.lightened(0.1) if a == 14 else c.darkened(0.1)
-			if _noise(a, b, 7 + int(vertical)) < 0.1:
-				c = RUST
-			var p := Vector2i(b, a) if vertical else Vector2i(a, b)
-			img.set_pixel(o.x + p.x, o.y + p.y, c)
-	# Shadow on the wall below or right of the pipe.
-	for a in TILE:
-		var p := Vector2i(20, a) if vertical else Vector2i(a, 20)
-		img.set_pixel(o.x + p.x, o.y + p.y, img.get_pixel(o.x + p.x, o.y + p.y).darkened(0.4))
-
-
-## The cross fitting where a horizontal and a vertical pipe meet: a square
-## collar over both, with a bolt in each corner.
-func _fitting(img: Image, o: Vector2i) -> void:
-	var lo := 10
-	var hi := 22
-	for y in range(lo, hi):
-		for x in range(lo, hi):
-			var c: Color = PIPE[2]
-			if x == lo or y == lo:
-				c = PIPE[2].lightened(0.15)
-			elif x == hi - 1 or y == hi - 1:
-				c = PIPE[4]
-			elif x == lo + 1 or y == lo + 1 or x == hi - 2 or y == hi - 2:
-				c = PIPE[1]
-			if (x == lo + 2 or x == hi - 3) and (y == lo + 2 or y == hi - 3):
-				c = PIPE[4]  # bolts
-			if _noise(x, y, 10) < 0.08:
-				c = RUST
-			img.set_pixel(o.x + x, o.y + y, c)
-	# Shadow down and right of the collar.
-	for a in range(lo + 1, hi + 1):
-		img.set_pixel(o.x + hi, o.y + a, img.get_pixel(o.x + hi, o.y + a).darkened(0.4))
-		img.set_pixel(o.x + a, o.y + hi, img.get_pixel(o.x + a, o.y + hi).darkened(0.4))
 
 
 ## Knocks ragged bites out of the wall along each open side in `open_sides`
@@ -245,31 +190,6 @@ func _broken_edges(img: Image, o: Vector2i, open_sides: int) -> void:
 				img.set_pixelv(at, img.get_pixelv(at).darkened(0.3))
 
 
-## Crops away empty columns on either side, keeping the full height so a
-## hanging piece still reaches the top of its tile.
-func _trim_sides(piece: Image) -> Image:
-	piece.convert(Image.FORMAT_RGBA8)
-	var used := piece.get_used_rect()
-	return piece.get_region(Rect2i(used.position.x, 0, used.size.x, piece.get_height()))
-
-
-## A steel I-beam column, tiling vertically, with a rivet plate every 16 px.
-func _girder(img: Image, o: Vector2i) -> void:
-	for y in TILE:
-		for x in range(6, 26):
-			var flange := x < 10 or x >= 22
-			var c: Color = STEEL[1] if flange else STEEL[0]
-			if x == 6 or x == 22:
-				c = STEEL[2]
-			if x == 9 or x == 25:
-				c = STEEL[0].darkened(0.3)
-			if not flange and (y % 16 == 3 or y % 16 == 4) and (x == 13 or x == 18):
-				c = STEEL[2]  # rivets
-			if _noise(x, y, 9) < 0.08:
-				c = RUST.darkened(0.2)
-			img.set_pixel(o.x + x, o.y + y, c)
-	for y in TILE:
-		img.set_pixel(o.x + 26, o.y + y, img.get_pixel(o.x + 26, o.y + y).darkened(0.4))
 
 
 ## Lays a generated piece, centred, over the wall. For windows, transparent
@@ -327,9 +247,20 @@ func _save_preview(sheet: Image) -> void:
 		for y in img.get_height():
 			var t := float(y) / img.get_height()
 			img.fill_rect(Rect2i(0, y, img.get_width(), 1), Color8(20, 18, 48).lerp(Color8(120, 60, 90), t))
+	var sheets := {}
+	for path in [PROPS_SHEET, PIPES_SHEET]:
+		if FileAccess.file_exists(path):
+			sheets[path] = Image.load_from_file(ProjectSettings.globalize_path(path))
+			sheets[path].convert(Image.FORMAT_RGBA8)
 	for y in rows:
 		for x in cols:
-			var cell: Vector2i = LEGEND[PREVIEW_ROWS[y][x]]
-			img.blend_rect(sheet, Rect2i(cell * TILE, Vector2i(TILE, TILE)), Vector2i(x, y) * TILE)
+			var at := Vector2i(x, y) * TILE
+			var entry = LEGEND[PREVIEW_ROWS[y][x]]
+			if entry is Vector2i:
+				img.blend_rect(sheet, Rect2i(entry * TILE, Vector2i(TILE, TILE)), at)
+			else:
+				img.blend_rect(sheet, Rect2i(RoomArt.WALLS[0] * TILE, Vector2i(TILE, TILE)), at)
+				if sheets.has(entry[0]):
+					img.blend_rect(sheets[entry[0]], Rect2i(entry[1] * TILE, Vector2i(TILE, TILE)), at)
 	img.resize(img.get_width() * PREVIEW_SCALE, img.get_height() * PREVIEW_SCALE, Image.INTERPOLATE_NEAREST)
 	img.save_png(ProjectSettings.globalize_path(PREVIEW_PATH))

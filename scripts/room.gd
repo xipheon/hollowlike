@@ -7,7 +7,8 @@ extends Node2D
 ## scenes/rooms/room_template.tscn):
 ##   Skyline     the far city, behind everything
 ##   Background  the wall behind the room (background_tileset.tres)
-##   Props       things on the wall, over its brick (props_tileset.tres)
+##   Props       things on the wall, over its brick: lights, posters, graffiti,
+##               girders and pipes (props_tileset.tres)
 ##   Terrain     what you stand on and what hurts (foreground_tileset.tres)
 ##   Gates       arena gates, shut during a boss fight (foreground_tileset.tres)
 ##   Entities    placed enemies and bosses, a PlayerStart, RoomDoors, Arenas
@@ -33,11 +34,11 @@ const CAMERA_RELEASE_TIME := 0.6
 
 ## This room's id in LevelData.ROOMS.
 @export var room := ""
-## Fills every unpainted cell of the Background layer with brick, windows,
-## lights and graffiti, with posters on the Props layer (the same each time for the same room), so you
-## can edit it by hand. Wall you've already painted is kept. The room shows
-## exactly what's painted: unpainted wall is open, and the skyline shows
-## through. Save the scene to keep it.
+## Fills every unpainted cell of the Background layer with brick and windows,
+## with lights, posters and graffiti on the Props layer (the same each time
+## for the same room), so you can edit it by hand. Wall you've already painted
+## is kept. The room shows exactly what's painted: unpainted wall is open, and
+## the skyline shows through. Save the scene to keep it.
 @export_tool_button("Decorate wall", "TileMapLayer") var decorate_wall_action: Callable = decorate_wall
 
 var _grid := {}   # Vector2i -> RoomArt.Kind (EMPTY cells left out)
@@ -170,7 +171,7 @@ func _read_painted_grid() -> void:
 func _load_room() -> void:
 	_read_painted_grid()
 	_art = RoomArt.new(_kind_at, _w, _h)
-	_art.dress(self, background(), terrain(), gates())
+	_art.dress(self, props(), terrain(), gates())
 	for door in entities_of(RoomDoor):
 		var at := Vector2i((to_local(door.global_position) / TILE).round())
 		_doors.append({"rect": Rect2i(at, Vector2i(1, door.height)), "target": door.target_room,

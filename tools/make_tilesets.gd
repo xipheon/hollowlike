@@ -1,25 +1,29 @@
 extends SceneTree
 ## Builds the TileSet resources rooms are painted with, from the tile sheets
-## (art/tiles/tileset.png, background.png and props.png). Run from the project folder:
+## (art/tiles/tileset.png, background.png, props.png and pipes.png). Run from the project folder:
 ##   godot --headless --path . --script res://tools/make_tilesets.gd
 ##
 ## foreground_tileset.tres: terrain, one-way platforms, spikes, sewer water,
 ## gates, doors and moving platform tracks. background_tileset.tres: the brick
-## wall, windows, decor, lights and broken-wall edges. props_tileset.tres:
-## things on the wall with nothing behind them (posters), for the Props layer
-## over the brick. Every tile carries custom
+## wall, windows and broken-wall edges. props_tileset.tres: things on the wall
+## with nothing behind them, for the Props layer over the brick: lights,
+## posters, graffiti, hazard stripes and girders (props.png, source 0), and
+## pipes (pipes.png, source 1). Every tile carries custom
 ## data saying what it is, so the game reads behaviour from the tile, not from
 ## where it sits on a sheet:
 ##   kind   foreground: solid, platform, spikes, acid, gate, door, track
-##          background: wall, window, decor, light
-##          props: decor
+##          background: wall, window
+##          props: decor, light, pipe
 ##   light  steady, broken or sign (a glow the room adds; FlickerLight)
 ## Terrain sets let the editor's terrain brush pick tiles by their neighbours:
 ##   foreground: concrete, catwalk, spikes, sewer, track (all Match Sides)
 ##   background: wall (Match Sides): plain brick in weighted random variants,
 ##               and the crumbled edge facing any unpainted (open) side.
-##               Props (decor, windows, lights) count as wall to it, so
-##               only a really empty cell gets an edge.
+##               Windows count as wall to it, so only a really empty cell
+##               gets an edge.
+##   props:      pipe (Match Sides): straight lengths, elbows, T's and
+##               crossings joined up as you paint, ends going into the wall,
+##               and now and then a broken-off end.
 ## Patterns (the TileMap panel's Patterns tab): the large window, whole.
 ## Rerun after changing a sheet's layout (it keeps each file's ID). Once rooms are painted, prefer
 ## editing the .tres in Godot over rerunning this (it rebuilds from scratch).
@@ -36,6 +40,8 @@ const SPIKES := 2
 const SEWER := 3
 const TRACK := 4
 const WALL := 0
+const PIPE := 0
+const PIPE_BROKEN_CHANCE := 0.3   # how often the pipe brush picks a broken end over a wall end
 
 const SIDES := {
 	"N": TileSet.CELL_NEIGHBOR_TOP_SIDE, "E": TileSet.CELL_NEIGHBOR_RIGHT_SIDE,
@@ -80,8 +86,8 @@ func _new_tileset(sheet_path: String, data_layers: Array, terrains: Array) -> Ti
 
 
 ## Creates a tile and sets its custom data; returns its TileData.
-func _tile(ts: TileSet, coords: Vector2i, kind: String, light := "") -> TileData:
-	var source: TileSetAtlasSource = ts.get_source(0)
+func _tile(ts: TileSet, coords: Vector2i, kind: String, light := "", source_id := 0) -> TileData:
+	var source: TileSetAtlasSource = ts.get_source(source_id)
 	if not source.has_tile(coords):
 		source.create_tile(coords)
 	var data := source.get_tile_data(coords, 0)
@@ -174,32 +180,46 @@ func _background() -> TileSet:
 			if n & (1 << b) == 0:
 				sides += "NESW"[b]
 		_terrain(_tile(ts, RoomArt.EDGE_ORIGIN + Vector2i(n % 8, n / 8), "wall"), WALL, sides)
-	# Decor, windows and lights: painted tile by tile (or the large window as a
-	# pattern). Each is wall to the brush (see _wall_prop).
-	for coords in [RoomArt.HAZARD, RoomArt.PIPE_H, RoomArt.PIPE_V, RoomArt.GIRDER, RoomArt.PIPE_JUNCTION] + RoomArt.PIPE_ENDS:
-		_wall_prop(_tile(ts, coords, "decor"))
-	_piece(ts, RoomArt.GRAFFITI, "decor")
+	# Windows: painted tile by tile (or the large one as a pattern). Each is
+	# wall to the brush (see _wall_prop).
 	for piece in [RoomArt.WINDOW_SMALL, RoomArt.WINDOW_LARGE]:
 		_piece(ts, piece, "window")
-	_wall_prop(_tile(ts, RoomArt.LIGHT_LIT, "light", "steady"))
-	_wall_prop(_tile(ts, RoomArt.LIGHT_DEAD, "light", "broken"))
 	ts.add_pattern(_piece_pattern(RoomArt.WINDOW_LARGE))
 	return ts
 
 
 func _props() -> TileSet:
-	var ts := _new_tileset("res://art/tiles/props.png", ["kind"], [])
-	var origin: Vector2i = RoomArt.POSTERS[0]
-	var size: Vector2i = RoomArt.POSTERS[1]
-	for y in size.y:
-		for x in size.x:
-			_tile(ts, origin + Vector2i(x, y), "decor")
+	var ts := _new_tileset("res://art/tiles/props.png", ["kind", "light"], [
+		["pipe", Color(0.45, 0.5, 0.55)],
+	])
+	# One-off props, painted tile by tile.
+	for piece in [RoomArt.POSTERS, RoomArt.GRAFFITI]:
+		_piece_tiles(ts, piece, "decor")
+	for coords in [RoomArt.HAZARD, RoomArt.GIRDER]:
+		_tile(ts, coords, "decor")
+	_tile(ts, RoomArt.LIGHT_LIT, "light", "steady")
+	_tile(ts, RoomArt.LIGHT_DEAD, "light", "broken")
+	# Pipes: the 4x4 block, each piece joining on the sides it runs out of,
+	# and the broken ends as rarer stand-ins for the wall ends.
+	var pipes := TileSetAtlasSource.new()
+	pipes.texture = load("res://art/tiles/pipes.png")
+	pipes.texture_region_size = TILE
+	ts.add_source(pipes, RoomArt.PIPES_SOURCE)
+	for r in RoomArt.TERRAIN.size():
+		for c in RoomArt.TERRAIN[r].size():
+			var coords := Vector2i(c, r)
+			var odds := 1.0 - PIPE_BROKEN_CHANCE if coords in RoomArt.PIPE_WALL_ENDS else 1.0
+			_terrain(_tile(ts, coords, "pipe", "", RoomArt.PIPES_SOURCE), PIPE, RoomArt.TERRAIN[r][c], odds)
+	for i in RoomArt.PIPE_BROKEN_ENDS.size():
+		var wall: Vector2i = RoomArt.PIPE_WALL_ENDS[i]
+		_terrain(_tile(ts, RoomArt.PIPE_BROKEN_ENDS[i], "pipe", "", RoomArt.PIPES_SOURCE), PIPE,
+				RoomArt.TERRAIN[wall.y][wall.x], PIPE_BROKEN_CHANCE)
 	return ts
 
 
-## A prop on the wall (a graffiti, a pipe, a window, a light) counts as wall to
-## the wall brush: brick painted next to it stays plain, and only an empty cell
-## gets a crumbled edge. Probability 0: the brush never paints one itself.
+## A window counts as wall to the wall brush: brick painted next to it stays
+## plain, and only an empty cell gets a crumbled edge. Probability 0: the
+## brush never paints one itself.
 func _wall_prop(data: TileData) -> void:
 	_terrain(data, WALL, "NESW", 0.0)
 
@@ -215,7 +235,16 @@ func _piece_pattern(piece: Array) -> TileMapPattern:
 	return pattern
 
 
-## Every cell of a multi-tile piece ([top-left, size in tiles]).
+## Every cell of a multi-tile piece ([top-left, size in tiles]), as plain tiles.
+func _piece_tiles(ts: TileSet, piece: Array, kind: String) -> void:
+	var origin: Vector2i = piece[0]
+	var size: Vector2i = piece[1]
+	for y in size.y:
+		for x in size.x:
+			_tile(ts, origin + Vector2i(x, y), kind)
+
+
+## Every cell of a multi-tile piece ([top-left, size in tiles]), each wall to the brush.
 func _piece(ts: TileSet, piece: Array, kind: String) -> void:
 	var origin: Vector2i = piece[0]
 	var size: Vector2i = piece[1]

@@ -29,7 +29,7 @@ const SEGMENTS := {
 	# The tilesets' terrain brushes and tile data (tools/make_tilesets.gd, room_art.gd), the room template.
 	"tilesets": [
 		"_test_terrain_brushes", "_test_tiles_say_what_they_are", "_test_room_template",
-		"_test_props_layer",
+		"_test_props_layer", "_test_pipe_brush",
 	],
 	# Rooms made in the editor: painted layers, helper nodes, decoration (room.gd, room_art.gd).
 	"editor_rooms": [
@@ -2148,14 +2148,17 @@ func _test_terrain_brushes() -> void:
 	_check(bad.is_empty(), "wall brush: brick inside, crumbled edges at holes (%d of %d wrong)" % [bad.size(), bricks.size()])
 	wall.free()
 
-	# Props on the wall count as wall: brick painted around graffiti, the large
-	# window and a pipe end stays plain, and they stay put.
+	# Windows count as wall: brick painted around both sizes stays plain, and
+	# they stay put.
 	var props := TileMapLayer.new()
 	props.tile_set = RoomArt.BACKGROUND_TILES
-	var placed := {Vector2i(3, 3): RoomArt.GRAFFITI[0], Vector2i(9, 7): RoomArt.PIPE_H_WALL_LEFT}
+	var placed := {}
 	for dy in 2:
 		for dx in 3:
 			placed[Vector2i(6 + dx, 2 + dy)] = RoomArt.WINDOW_LARGE[0] + Vector2i(dx, dy)
+	for dy in 2:
+		for dx in 2:
+			placed[Vector2i(2 + dx, 5 + dy)] = RoomArt.WINDOW_SMALL[0] + Vector2i(dx, dy)
 	for c in placed:
 		props.set_cell(c, 0, placed[c])
 	var around: Array[Vector2i] = []
@@ -2168,7 +2171,7 @@ func _test_terrain_brushes() -> void:
 	var edged := inside.filter(func(c): return not props.get_cell_atlas_coords(c) in RoomArt.WALLS)
 	var moved := placed.keys().filter(func(c): return props.get_cell_atlas_coords(c) != placed[c])
 	_check(edged.is_empty() and moved.is_empty(),
-			"wall brush: props count as wall (%d bricks edged beside them, %d props changed)" % [edged.size(), moved.size()])
+			"wall brush: windows count as wall (%d bricks edged beside them, %d windows changed)" % [edged.size(), moved.size()])
 	props.free()
 	var window: TileMapPattern = RoomArt.BACKGROUND_TILES.get_pattern(0) if RoomArt.BACKGROUND_TILES.get_patterns_count() > 0 else null
 	_check(window != null and window.get_size() == RoomArt.WINDOW_LARGE[1]
@@ -2292,18 +2295,18 @@ func _test_decorate_wall_button() -> void:
 	print("Decorate wall: fills every unpainted wall cell, keeps hand-painted ones, the same each time; the room shows it as baked")
 	var hand_cell := Vector2i(3, 3)
 	var baked := _build_editor_room()
-	baked.background().set_cell(hand_cell, 0, RoomArt.HAZARD)
+	baked.background().set_cell(hand_cell, 0, RoomArt.WALLS[2])
 	baked.decorate_wall_action.call()
-	_check(baked.background().get_cell_atlas_coords(hand_cell) == RoomArt.HAZARD, "the hand-painted cell is kept")
+	_check(baked.background().get_cell_atlas_coords(hand_cell) == RoomArt.WALLS[2], "the hand-painted cell is kept")
 	_check(baked.background().get_used_cells().size() == 30 * 14, "every cell of the 30 x 14 room is wall (%d)" % baked.background().get_used_cells().size())
 	var tiles := {}
 	for c in baked.background().get_used_cells():
 		tiles[c] = baked.background().get_cell_atlas_coords(c)
 	_check(tiles.values().any(func(t): return t in [RoomArt.WINDOW_SMALL[0], RoomArt.WINDOW_LARGE[0]]), "with windows in it")
 	var bare := baked.props().get_used_cells().filter(func(c): return not baked.background().get_cell_atlas_coords(c) in RoomArt.WALLS)
-	_check(bare.is_empty(), "posters go on the Props layer, over plain brick (%d of %d not)" % [bare.size(), baked.props().get_used_cells().size()])
+	_check(bare.is_empty(), "lights, posters and graffiti go on the Props layer, over brick (%d of %d not)" % [bare.size(), baked.props().get_used_cells().size()])
 	var again := _build_editor_room()
-	again.background().set_cell(hand_cell, 0, RoomArt.HAZARD)
+	again.background().set_cell(hand_cell, 0, RoomArt.WALLS[2])
 	again.decorate_wall_action.call()
 	var differ := tiles.keys().filter(func(c): return again.background().get_cell_atlas_coords(c) != tiles[c])
 	_check(differ.is_empty(), "pressing it again on the same room gives the same wall (%d differ)" % differ.size())
@@ -2377,7 +2380,7 @@ func _test_tiles_say_what_they_are() -> void:
 
 
 func _test_props_layer() -> void:
-	print("Props layer: posters on their own sheet with no brick behind, over brick in every room")
+	print("Props layer: props and pipes on their own sheets with no brick behind, over brick in every room")
 	# The posters' cells keep only the poster: the sheet is see-through around it.
 	var sheet := (load("res://art/tiles/props.png") as Texture2D).get_image()
 	var size: Vector2i = RoomArt.POSTERS[1] * TILE
@@ -2391,20 +2394,68 @@ func _test_props_layer() -> void:
 	var source: TileSetAtlasSource = RoomArt.PROPS_TILES.get_source(0)
 	_check(source.has_tile(RoomArt.POSTERS[0]) and source.get_tile_data(RoomArt.POSTERS[0], 0).get_custom_data("kind") == "decor",
 			"a poster is a decor tile on the props sheet")
+	var lights := [RoomArt.LIGHT_LIT, RoomArt.LIGHT_DEAD].map(func(c): return source.get_tile_data(c, 0).get_custom_data("light"))
+	_check(lights == ["steady", "broken"], "the bulbs on the props sheet say how they glow (%s)" % [lights])
+	var pipes: TileSetAtlasSource = RoomArt.PROPS_TILES.get_source(RoomArt.PIPES_SOURCE)
+	_check(pipes != null and pipes.get_tiles_count() == 20 and pipes.get_tile_data(RoomArt.PIPE_H, 0).get_custom_data("kind") == "pipe",
+			"pipes are the props tileset's second sheet (%d tiles)" % (pipes.get_tiles_count() if pipes != null else 0))
+	var background: TileSetAtlasSource = RoomArt.BACKGROUND_TILES.get_source(0)
+	var left := []
+	for i in background.get_tiles_count():
+		var kind: String = background.get_tile_data(background.get_tile_id(i), 0).get_custom_data("kind")
+		if not kind in ["wall", "window"]:
+			left.append(background.get_tile_id(i))
+	_check(left.is_empty(), "the background sheet is only wall and windows%s" % ("" if left.is_empty() else ", not %s" % [left]))
 	# Each room: every Props cell is a real tile with wall behind it, and every
 	# Background cell is still a real tile now the posters have left that sheet.
 	for room_id in LevelData.ROOMS:
 		var room: Room = load(LevelData.ROOMS[room_id].scene).instantiate()
 		var missing := []
 		for layer in [room.background(), room.props()]:
-			var atlas: TileSetAtlasSource = layer.tile_set.get_source(0)
 			for c in layer.get_used_cells():
-				if not atlas.has_tile(layer.get_cell_atlas_coords(c)):
+				var atlas := layer.tile_set.get_source(layer.get_cell_source_id(c)) as TileSetAtlasSource
+				if atlas == null or not atlas.has_tile(layer.get_cell_atlas_coords(c)):
 					missing.append(c)
 		var bare := room.props().get_used_cells().filter(func(c): return room.background().get_cell_source_id(c) == -1)
 		_check(missing.is_empty() and bare.is_empty(),
 				"%s: props over wall, every tile real (%d missing, %d props on open wall)" % [room_id, missing.size(), bare.size()])
 		room.free()
+
+
+func _test_pipe_brush() -> void:
+	print("Pipe brush: straight lengths, elbows, T's, crossings and ends, joined up as painted")
+	var layer := TileMapLayer.new()
+	layer.tile_set = RoomArt.PROPS_TILES
+	# A crossing with an elbow and a T on its arms, and a lone stub:
+	#   . . X . . . .
+	#   . . X X X . .
+	#   X X X X . . X
+	#   . . X . . . .
+	var cells: Array[Vector2i] = [
+		Vector2i(2, 0), Vector2i(2, 1), Vector2i(3, 1), Vector2i(4, 1),
+		Vector2i(0, 2), Vector2i(1, 2), Vector2i(2, 2), Vector2i(3, 2), Vector2i(2, 3),
+	]
+	layer.set_cells_terrain_connect(cells, 0, 0)
+	layer.set_cells_terrain_connect([Vector2i(6, 2)], 0, 0)
+	cells.append(Vector2i(6, 2))
+	var steps := {"N": Vector2i.UP, "E": Vector2i.RIGHT, "S": Vector2i.DOWN, "W": Vector2i.LEFT}
+	var wrong := cells.filter(func(c):
+		var want := ""
+		for s in "NESW":
+			if cells.has(c + steps[s]):
+				want += s
+		return layer.get_cell_source_id(c) != RoomArt.PIPES_SOURCE or _pipe_sides(layer.get_cell_atlas_coords(c)) != want)
+	_check(wrong.is_empty(), "every pipe joins exactly its painted neighbours%s" % ("" if wrong.is_empty() else ", wrong at %s" % [wrong]))
+	layer.free()
+
+
+## The sides a pipes-sheet tile runs out of: from the block's layout, or the
+## wall end a broken end stands in for.
+func _pipe_sides(at: Vector2i) -> String:
+	var i := RoomArt.PIPE_BROKEN_ENDS.find(at)
+	if i >= 0:
+		at = RoomArt.PIPE_WALL_ENDS[i]
+	return RoomArt.TERRAIN[at.y][at.x] if at.y < RoomArt.TERRAIN.size() else "?"
 
 
 ## An enemy scene set up as if placed and edited in the Inspector.

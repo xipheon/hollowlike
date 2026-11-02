@@ -22,8 +22,12 @@ const TILE_KINDS := {
 ## Built by tools/make_tilesets.gd; every tile says what it is in its custom data.
 const FOREGROUND_TILES := preload("res://art/tiles/foreground_tileset.tres")
 const BACKGROUND_TILES := preload("res://art/tiles/background_tileset.tres")
+## The Props layer's tileset: the props sheet, and the pipes sheet as its
+## second source.
 const PROPS_TILES := preload("res://art/tiles/props_tileset.tres")
-const BACKGROUND := preload("res://art/tiles/background.png")
+const PROPS := preload("res://art/tiles/props.png")
+const PROPS_SOURCE := 0
+const PIPES_SOURCE := 1
 
 # Solid neighbours (N, E, S, W) of each cell in the tileset's 4x4 terrain block,
 # as in tools/make_art_templates.gd.
@@ -67,30 +71,8 @@ const ACID_FRAME_TIME := 0.24
 # tile give their top-left cell and size.
 const WALLS := [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)]
 const WALL_WEIGHTS := [0.475, 0.475, 0.03, 0.02]   # plain, plain, stained, broken
-const HAZARD := Vector2i(4, 0)
-const PIPE_H := Vector2i(5, 0)
-const PIPE_V := Vector2i(6, 0)
-const GIRDER := Vector2i(7, 0)
-const PIPE_JUNCTION := Vector2i(0, 3)
-# Pipe ends (tools/make_pipe_end_tiles.gd), named by the side the end is on:
-# going into the wall behind a bolted flange, or broken off.
-const PIPE_H_WALL_LEFT := Vector2i(0, 6)
-const PIPE_H_WALL_RIGHT := Vector2i(1, 6)
-const PIPE_H_BROKEN_LEFT := Vector2i(2, 6)
-const PIPE_H_BROKEN_RIGHT := Vector2i(3, 6)
-const PIPE_V_WALL_TOP := Vector2i(4, 6)
-const PIPE_V_WALL_BOTTOM := Vector2i(5, 6)
-const PIPE_V_BROKEN_TOP := Vector2i(6, 6)
-const PIPE_V_BROKEN_BOTTOM := Vector2i(7, 6)
-const PIPE_ENDS := [
-	PIPE_H_WALL_LEFT, PIPE_H_WALL_RIGHT, PIPE_H_BROKEN_LEFT, PIPE_H_BROKEN_RIGHT,
-	PIPE_V_WALL_TOP, PIPE_V_WALL_BOTTOM, PIPE_V_BROKEN_TOP, PIPE_V_BROKEN_BOTTOM,
-]
 const WINDOW_SMALL := [Vector2i(0, 1), Vector2i(2, 2)]
 const WINDOW_LARGE := [Vector2i(2, 1), Vector2i(3, 2)]
-const GRAFFITI := [Vector2i(5, 2), Vector2i(2, 1)]
-const LIGHT_LIT := Vector2i(7, 1)
-const LIGHT_DEAD := Vector2i(7, 2)
 # Broken wall around a hole: tile n has bit 1 = N open, 2 = E, 4 = S, 8 = W,
 # at EDGE_ORIGIN + (n % 8, n / 8). See tools/make_background_tiles.gd.
 const EDGE_ORIGIN := Vector2i(0, 4)
@@ -98,6 +80,31 @@ const EDGE_ORIGIN := Vector2i(0, 4)
 # Props sheet cells (art/tiles/props.png, tools/make_prop_tiles.gd): props with
 # nothing behind them, for the Props layer, over the Background's brick.
 const POSTERS := [Vector2i(0, 0), Vector2i(2, 1)]
+const GRAFFITI := [Vector2i(2, 0), Vector2i(2, 1)]
+const HAZARD := Vector2i(4, 0)
+const LIGHT_LIT := Vector2i(5, 0)
+const LIGHT_DEAD := Vector2i(6, 0)
+const GIRDER := Vector2i(7, 0)
+
+# Pipes sheet cells (art/tiles/pipes.png, tools/make_pipe_tiles.gd), also for
+# the Props layer. Its 4x4 block is laid out like TERRAIN: each cell is pipe
+# running out of the sides named there. Ends are named by the side the end is
+# on: going into the wall behind a bolted flange, or broken off (row 4).
+const PIPE_H := Vector2i(2, 3)
+const PIPE_V := Vector2i(0, 1)
+const PIPE_JUNCTION := Vector2i(2, 1)
+const PIPE_V_WALL_TOP := Vector2i(0, 0)
+const PIPE_H_WALL_LEFT := Vector2i(1, 3)
+const PIPE_V_WALL_BOTTOM := Vector2i(0, 2)
+const PIPE_H_WALL_RIGHT := Vector2i(3, 3)
+const PIPE_V_BROKEN_TOP := Vector2i(0, 4)
+const PIPE_H_BROKEN_LEFT := Vector2i(1, 4)
+const PIPE_V_BROKEN_BOTTOM := Vector2i(2, 4)
+const PIPE_H_BROKEN_RIGHT := Vector2i(3, 4)
+## Each wall end, and the broken end in its place (the same side) below.
+const PIPE_WALL_ENDS := [PIPE_V_WALL_TOP, PIPE_H_WALL_LEFT, PIPE_V_WALL_BOTTOM, PIPE_H_WALL_RIGHT]
+const PIPE_BROKEN_ENDS := [PIPE_V_BROKEN_TOP, PIPE_H_BROKEN_LEFT, PIPE_V_BROKEN_BOTTOM, PIPE_H_BROKEN_RIGHT]
+const PIPE_ENDS := PIPE_WALL_ENDS + PIPE_BROKEN_ENDS
 
 # Automatic decoration spacing, in tiles.
 const WINDOW_ROW_STEP := 9       # rows between window bands
@@ -125,15 +132,15 @@ func _init(kind_at: Callable, width: int, height: int) -> void:
 
 ## For a room made in the editor, whose tile layers are already painted: adds
 ## the light glows and shows its gates raised.
-func dress(parent: Node2D, background: TileMapLayer, terrain: TileMapLayer, gates: TileMapLayer) -> void:
+func dress(parent: Node2D, props: TileMapLayer, terrain: TileMapLayer, gates: TileMapLayer) -> void:
 	_gates = gates
 	set_gates_closed(false)
-	_add_lights(parent, background, terrain)
+	_add_lights(parent, props, terrain)
 
 
 ## Paints brick, windows, lights, posters and graffiti into every cell of the
 ## room's wall that isn't painted yet. Seeded by `room`: the same every time.
-## Posters go on the `props` layer, over brick.
+## Lights, posters and graffiti go on the `props` layer, over brick.
 func decorate_unpainted(room: String, background: TileMapLayer, props: TileMapLayer) -> void:
 	_rng.seed = hash(room)
 	var cells := {}
@@ -148,14 +155,14 @@ func decorate_unpainted(room: String, background: TileMapLayer, props: TileMapLa
 		background.set_cell(c, 0, cells[c])
 	for c in hung:
 		if props.get_cell_source_id(c) == -1:
-			props.set_cell(c, 0, hung[c])
+			props.set_cell(c, PROPS_SOURCE, hung[c])
 
 
 ## Glows for every tile whose `light` data says it has one: lit bulbs, dead
 ## bulbs (which sputter, showing the lit bulb over the dead one while they're
 ## on) and EXIT signs (which blink, darkening their letters while they're out).
-func _add_lights(parent: Node2D, background: TileMapLayer, foreground: TileMapLayer) -> void:
-	for layer in [background, foreground]:
+func _add_lights(parent: Node2D, props: TileMapLayer, foreground: TileMapLayer) -> void:
+	for layer in [props, foreground]:
 		for cell in layer.get_used_cells():
 			var data: TileData = layer.get_cell_tile_data(cell)
 			match data.get_custom_data("light") if data != null else "":
@@ -169,7 +176,7 @@ func _add_lights(parent: Node2D, background: TileMapLayer, foreground: TileMapLa
 
 func _add_broken_light(parent: Node2D, cell: Vector2i) -> void:
 	var lit := Sprite2D.new()
-	lit.texture = BACKGROUND
+	lit.texture = PROPS
 	lit.region_enabled = true
 	lit.region_rect = Rect2(LIGHT_LIT * TILE, Vector2(TILE, TILE))
 	lit.centered = false
@@ -260,8 +267,8 @@ func _mark(used: Dictionary, at: Vector2i, size: Vector2i) -> void:
 			used[at + Vector2i(x, y)] = true
 
 
-## Fills `cells` (wall cell -> background tile) with windows, lights and
-## graffiti, and `hung` (cell -> props tile) with posters.
+## Fills `cells` (wall cell -> background tile) with windows, and `hung`
+## (cell -> props tile) with lights, posters and graffiti.
 func _decorate(cells: Dictionary, hung: Dictionary) -> void:
 	var used := {}
 	# Windows: bands of them up the room, high enough to clear the floor.
@@ -286,7 +293,7 @@ func _decorate(cells: Dictionary, hung: Dictionary) -> void:
 				since_light = _rng.randi_range(0, 3)
 				if _rng.randf() < LIGHT_SKIP_CHANCE:
 					continue
-				cells[c] = LIGHT_LIT if _rng.randf() < LIGHT_LIT_CHANCE else LIGHT_DEAD
+				hung[c] = LIGHT_LIT if _rng.randf() < LIGHT_LIT_CHANCE else LIGHT_DEAD
 				used[c] = true
 	# Posters and graffiti at head height above a floor, spread out.
 	for y in range(0, _h - 2):
@@ -295,10 +302,9 @@ func _decorate(cells: Dictionary, hung: Dictionary) -> void:
 			if _kind_at(x, y + 2) != Kind.SOLID or _kind_at(x + 1, y + 2) != Kind.SOLID or _rng.randf() > WALL_ART_CHANCE:
 				x += 1
 				continue
-			var poster := _rng.randf() < 0.5
-			var piece: Array = POSTERS if poster else GRAFFITI
+			var piece: Array = POSTERS if _rng.randf() < 0.5 else GRAFFITI
 			if _fits(cells, Vector2i(x, y), piece[1], 0, used) and _fits(cells, Vector2i(x, y + 1), Vector2i(2, 1), 0, used):
-				_put(hung if poster else cells, Vector2i(x, y), piece)
+				_put(hung, Vector2i(x, y), piece)
 				_mark(used, Vector2i(x, y), piece[1])
 				x += WALL_ART_GAP
 			x += 1
