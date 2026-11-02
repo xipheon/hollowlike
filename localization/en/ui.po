@@ -1,0 +1,133 @@
+# Hollowlike: interface text, English.
+# One file per language and feature: localization/<language>/<feature>.po.
+# Every key starts UI_; msgstr is the text shown. Keep {named} placeholders as
+# they are (move them anywhere in the sentence). See localization/README.md.
+msgid ""
+msgstr ""
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Main menu: the game's title.
+msgid "UI_TITLE"
+msgstr "HOLLOWLIKE"
+
+#. Main menu buttons.
+msgid "UI_MENU_START"
+msgstr "Start"
+
+msgid "UI_MENU_LEVEL_SELECT"
+msgstr "Level Select"
+
+#. {language}: the language in use, e.g. "English". Pressing it switches to the next one.
+msgid "UI_MENU_LANGUAGE"
+msgstr "Language: {language}"
+
+msgid "UI_MENU_QUIT"
+msgstr "Quit"
+
+#. Shown along the bottom of the main menu.
+msgid "UI_MENU_HINT"
+msgstr "Arrows / Enter or d-pad / A to choose   ·   Esc / Start pauses in game"
+
+#. Level Select (a debug menu): its title and the rooms it lists.
+msgid "UI_LEVEL_SELECT_TITLE"
+msgstr "LEVEL SELECT"
+
+msgid "UI_LEVEL_FIRST_TEST_ROOM"
+msgstr "First Test Room"
+
+msgid "UI_LEVEL_BOSS"
+msgstr "Boss"
+
+msgid "UI_LEVEL_CLIMB_DASH"
+msgstr "Climb (with Dash)"
+
+msgid "UI_LEVEL_AERIE_DASH"
+msgstr "Aerie (with Dash)"
+
+#. Back to the previous menu (Level Select, Skin).
+msgid "UI_BACK"
+msgstr "Back"
+
+#. Pause menu.
+msgid "UI_PAUSE_TITLE"
+msgstr "PAUSED"
+
+msgid "UI_PAUSE_RESUME"
+msgstr "Resume"
+
+msgid "UI_PAUSE_SKIN"
+msgstr "Skin"
+
+msgid "UI_PAUSE_QUIT_TO_MENU"
+msgstr "Quit to Menu"
+
+msgid "UI_PAUSE_QUIT_GAME"
+msgstr "Quit Game"
+
+#. The controls, listed in the pause menu. Keep the line breaks.
+msgid "UI_PAUSE_CONTROLS"
+msgstr ""
+"Move: A/D or arrows · left stick / d-pad\n"
+"Jump: Space/Z · A   (hold = higher)\n"
+"Attack: J/X · X   (hold Up / Down-in-air to aim)\n"
+"Sprint: Shift · LT   (uses stamina)\n"
+"Dash: K/C · RB/B   (uses stamina)\n"
+"Pause: Esc/P · Start      Restart: R"
+
+#. Skin menu: its title and the player's outfits.
+msgid "UI_SKIN_TITLE"
+msgstr "SKIN"
+
+msgid "UI_SKIN_CLASSIC"
+msgstr "Brown Jacket"
+
+msgid "UI_SKIN_PINK"
+msgstr "Pink Jacket"
+
+#. HUD: the abilities you have. {list}: their names, joined by UI_LIST_SEPARATOR.
+msgid "UI_HUD_ABILITIES"
+msgstr "Abilities: {list}"
+
+#. HUD: in place of the list when you have no abilities.
+msgid "UI_HUD_NO_ABILITIES"
+msgstr "none"
+
+#. Between names in a list.
+msgid "UI_LIST_SEPARATOR"
+msgstr ", "
+
+#. On screen when you get an ability. {ability}: its name.
+msgid "UI_HUD_UNLOCKED"
+msgstr "Unlocked: {ability}"
+
+msgid "UI_HUD_YOU_DIED"
+msgstr "YOU DIED"
+
+#. On screen when a boss is beaten. {boss}: its name; {ability}: what it gave you.
+msgid "UI_HUD_BOSS_FALLS"
+msgstr ""
+"{boss} FALLS\n"
+"{ability} unlocked"
+
+#. Ability names.
+msgid "UI_ABILITY_DOUBLE_JUMP"
+msgstr "Double Jump"
+
+msgid "UI_ABILITY_SPRINT"
+msgstr "Sprint"
+
+msgid "UI_ABILITY_DASH"
+msgstr "Dash"
+
+msgid "UI_ABILITY_WALL_JUMP"
+msgstr "Wall Jump"
+
+#. Boss names, shown as a title when the fight starts and over its health bar.
+msgid "UI_BOSS_WARDEN"
+msgstr "THE WARDEN"
+
+msgid "UI_BOSS_HARRIER"
+msgstr "THE HARRIER"

@@ -78,6 +78,10 @@ const SEGMENTS := {
 		"_test_dash_needs_stamina", "_test_dash_eight_directions", "_test_wall_jump_needs_stamina",
 		"_test_hit_recoil",
 	],
+	# Translations: localization/<language>/<feature>.po, keys in use, switching language (game_state.gd).
+	"localization": [
+		"_test_translation_files_registered", "_test_every_key_has_english", "_test_language_switch",
+	],
 	# Pause menu, main menu, level select, debug tools.
 	"menus": [
 		"_test_pause_menu_toggles", "_test_pause_ignored_during_boss_intro",
@@ -144,6 +148,7 @@ var _player: Player
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS   # keep driving checks through the paused boss intro
+	TranslationServer.set_locale("en")   # checks read English text, whatever language is saved here
 	await get_tree().process_frame   # root can't take new children during startup
 	var chosen := _chosen_segments()
 	if chosen.is_empty():
@@ -1671,12 +1676,12 @@ func _test_pause_menu_toggles() -> void:
 	await _press_pause()
 	await _press_pad_a()
 	_check(not menu.is_open() and not get_tree().paused, "gamepad A presses the focused Resume")
-	_check(menu._quit_game_button != null and menu._quit_game_button.text == "Quit Game", "has a Quit Game button")
+	_check(menu._quit_game_button != null and tr(menu._quit_game_button.text) == "Quit Game", "has a Quit Game button")
 	var labels := menu._panel.find_children("*", "Label", true, false)
-	_check(labels.any(func(l: Label) -> bool: return l.text.contains("Jump:")), "controls listed in the menu")
+	_check(labels.any(func(l: Label) -> bool: return tr(l.text).contains("Jump:")), "controls listed in the menu")
 	var screen_labels := _main.find_children("*", "Label", true, false).filter(
 		func(l: Label) -> bool: return not menu.is_ancestor_of(l))
-	_check(not screen_labels.any(func(l: Label) -> bool: return l.text.contains("Jump:")), "controls gone from the game screen")
+	_check(not screen_labels.any(func(l: Label) -> bool: return tr(l.text).contains("Jump:")), "controls gone from the game screen")
 	await _despawn()
 
 
@@ -1822,7 +1827,7 @@ func _test_pause_menu_quits_to_main_menu() -> void:
 	await _spawn()
 	await _press_pause()
 	var buttons := _pause_menu()._panel.find_children("*", "Button", true, false)
-	var found := buttons.filter(func(b): return b.text == "Quit to Menu")
+	var found := buttons.filter(func(b): return tr(b.text) == "Quit to Menu")
 	_check(found.size() == 1, "has a Quit to Menu button")
 	var quit: Button = found[0]
 	quit.pressed.emit()
@@ -2815,3 +2820,86 @@ func _test_hit_recoil() -> void:
 		_check(away != Vector2.ZERO and absf(pushed.length() - case[5]) < 5.0 and absf(pushed.angle_to(away)) < deg_to_rad(4.0),
 				"%s: %s, along enemy to player %s" % [case[0], pushed.round(), (away * 100).round() / 100])
 	await _despawn()
+
+
+## Every file under `dir` (res://...) whose name ends with `suffix`, searched recursively.
+func _files_under(dir: String, suffix: String) -> PackedStringArray:
+	var found: PackedStringArray = []
+	var d := DirAccess.open(dir)
+	if d == null:
+		return found
+	for f in d.get_files():
+		if f.ends_with(suffix):
+			found.append(dir.path_join(f))
+	for sub in d.get_directories():
+		found.append_array(_files_under(dir.path_join(sub), suffix))
+	return found
+
+
+func _test_translation_files_registered() -> void:
+	print("Localization: every .po file in localization/ is registered in the project, and every registered one exists")
+	var registered: PackedStringArray = ProjectSettings.get_setting("internationalization/locale/translations", PackedStringArray())
+	var on_disk := _files_under("res://localization", ".po")
+	var missing := Array(on_disk).filter(func(p): return not registered.has(p))
+	var gone := Array(registered).filter(func(p): return not FileAccess.file_exists(p))
+	_check(not on_disk.is_empty() and missing.is_empty(),
+			"%d file(s), all registered%s" % [on_disk.size(), "" if missing.is_empty() else "; not registered: %s" % [missing]])
+	_check(gone.is_empty(), "no registered file is missing%s" % ("" if gone.is_empty() else ": %s" % [gone]))
+	_check(Array(on_disk).all(func(p): return p.get_base_dir().get_file() == (load(p) as Translation).locale),
+			"each file's language matches its folder (localization/<language>/<feature>.po)")
+
+
+func _test_every_key_has_english() -> void:
+	print("Localization: every UI_ key the scenes and scripts use has English text")
+	TranslationServer.set_locale("en")
+	var key := RegEx.create_from_string("\"(UI_[A-Z0-9_]*[A-Z0-9])\"")
+	var used := {}
+	for path in _files_under("res://scenes", ".tscn") + _files_under("res://scripts", ".gd"):
+		for m in key.search_all(FileAccess.get_file_as_string(path)):
+			used[m.get_string(1)] = path
+	for ability in GameState.STARTING_ABILITIES:   # built in code: GameState.ability_name()
+		used["UI_ABILITY_" + ability.to_upper()] = "game_state.gd"
+	var untranslated := used.keys().filter(func(k): return TranslationServer.translate(k) == k)
+	_check(used.size() > 20 and untranslated.is_empty(), "%d keys in use%s" % [used.size(),
+			"" if untranslated.is_empty() else "; no English for %s" % [untranslated.map(func(k): return "%s (%s)" % [k, used[k].get_file()])]])
+
+
+func _test_language_switch() -> void:
+	print("Localization: switching language updates the menus and HUD; the Language button switches and remembers it")
+	var saved: Variant = FileAccess.get_file_as_bytes(GameState.SETTINGS_PATH) if FileAccess.file_exists(GameState.SETTINGS_PATH) else null
+	var test_language := Translation.new()
+	test_language.locale = "eo"   # a stand-in second language, for this test only
+	test_language.add_message("UI_MENU_START", "Komenci")
+	test_language.add_message("UI_HUD_ABILITIES", "Kapabloj: {list}")
+	test_language.add_message("UI_ABILITY_DASH", "Kuro")
+	TranslationServer.add_translation(test_language)
+	TranslationServer.set_locale("en")
+	var menu := MENU_SCENE.instantiate()
+	get_tree().root.add_child(menu)
+	get_tree().current_scene = menu
+	await _frames(2)
+	var english_language: String = menu.language_button.text
+	_check(GameState.languages() == PackedStringArray(["en", "eo"]), "both languages listed %s" % [GameState.languages()])
+	menu.language_button.pressed.emit()
+	await _frames(2)
+	var settings := ConfigFile.new()
+	settings.load(GameState.SETTINGS_PATH)
+	_check(GameState.language() == "eo" and settings.get_value("game", "language", "") == "eo",
+			"the Language button switched to the next language, and saved it")
+	_check(menu.start_button.atr(menu.start_button.text) == "Komenci", "a menu button shows its new text")
+	_check(menu.language_button.text != english_language, "the Language button names the new language (%s)" % menu.language_button.text)
+	await _despawn()
+	await _spawn()
+	GameState.unlock("dash")
+	await _frames(1)
+	_check(_main._hud._abilities_label.text == "Kapabloj: Kuro", "the HUD's ability list too (%s)" % _main._hud._abilities_label.text)
+	TranslationServer.set_locale("en")
+	await _frames(1)
+	_check(_main._hud._abilities_label.text.begins_with("Abilities: "), "and back to English (%s)" % _main._hud._abilities_label.text)
+	await _despawn()
+	TranslationServer.remove_translation(test_language)
+	TranslationServer.set_locale("en")
+	if saved == null:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SETTINGS_PATH))
+	else:
+		FileAccess.open(GameState.SETTINGS_PATH, FileAccess.WRITE).store_buffer(saved)

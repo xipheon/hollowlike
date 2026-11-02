@@ -35,8 +35,8 @@ const FALLBACKS := {
 ## Selectable looks: the same layout, a different sheet each. To add one, add
 ## it here and give it a recolour (or its own frames) in tools/make_player_sheet.gd.
 const SKINS := [
-	{"id": "classic", "name": "Brown Jacket", "sheet": "res://art/sprites/player.png"},
-	{"id": "pink", "name": "Pink Jacket", "sheet": "res://art/sprites/player_pink.png"},
+	{"id": "classic", "name": "UI_SKIN_CLASSIC", "sheet": "res://art/sprites/player.png"},
+	{"id": "pink", "name": "UI_SKIN_PINK", "sheet": "res://art/sprites/player_pink.png"},
 ]
 const DEFAULT_SKIN := "classic"
 

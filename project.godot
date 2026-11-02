@@ -36,6 +36,11 @@ window/stretch/mode="canvas_items"
 
 project/assembly_name="Hollowlike Prototype"
 
+[internationalization]
+
+locale/translations=PackedStringArray("res://localization/en/ui.po")
+locale/fallback="en"
+
 [layer_names]
 
 2d_physics/layer_1="world"

@@ -28,32 +28,38 @@ theme_override_constants/separation = 12
 [node name="Title" type="Label" parent="Panel/Center/MainBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 32
-text = "PAUSED"
+text = "UI_PAUSE_TITLE"
 horizontal_alignment = 1
 
 [node name="ResumeButton" type="Button" parent="Panel/Center/MainBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
-text = "Resume"
+text = "UI_PAUSE_RESUME"
 
 [node name="SkinButton" type="Button" parent="Panel/Center/MainBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
-text = "Skin"
+text = "UI_PAUSE_SKIN"
+
+[node name="LanguageButton" type="Button" parent="Panel/Center/MainBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "UI_MENU_LANGUAGE"
 
 [node name="QuitToMenuButton" type="Button" parent="Panel/Center/MainBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
-text = "Quit to Menu"
+text = "UI_PAUSE_QUIT_TO_MENU"
 
 [node name="QuitGameButton" type="Button" parent="Panel/Center/MainBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
-text = "Quit Game"
+text = "UI_PAUSE_QUIT_GAME"
 
 [node name="KillBossButton" type="Button" parent="Panel/Center/MainBox"]
 unique_name_in_owner = true
@@ -71,12 +77,15 @@ unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0.6)
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
-text = "Move: A/D or arrows · left stick / d-pad
-Jump: Space/Z · A   (hold = higher)
-Attack: J/X · X   (hold Up / Down-in-air to aim)
-Sprint: Shift · LT   (uses stamina)
-Dash: K/C · RB/B   (uses stamina)
-Pause: Esc/P · Start      Restart: R"
+text = "UI_PAUSE_CONTROLS"
+
+[node name="DebugControls" type="Label" parent="Panel/Center/MainBox"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.6)
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Debug: F1 = dash, F2 = wall jump, F3 = kill boss"
 
 [node name="SkinBox" type="VBoxContainer" parent="Panel/Center"]
 unique_name_in_owner = true
@@ -87,7 +96,7 @@ theme_override_constants/separation = 12
 [node name="Title" type="Label" parent="Panel/Center/SkinBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 32
-text = "SKIN"
+text = "UI_SKIN_TITLE"
 horizontal_alignment = 1
 
 [node name="Skins" type="VBoxContainer" parent="Panel/Center/SkinBox"]
@@ -105,4 +114,4 @@ text = "Skin name"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
-text = "Back"
+text = "UI_BACK"

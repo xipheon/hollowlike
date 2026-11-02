@@ -32,7 +32,7 @@ var _hitbox: Area2D
 
 
 func _init() -> void:
-	boss_name = "THE WARDEN"
+	boss_name = "UI_BOSS_WARDEN"   # a translation key (localization/<language>/ui.po)
 	reward_ability = "dash"
 	max_health = 40
 

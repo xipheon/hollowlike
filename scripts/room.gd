@@ -119,7 +119,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _on_player_died() -> void:
-	_hud.show_message("YOU DIED", 3.0)
+	_hud.show_message(tr("UI_HUD_YOU_DIED"), 3.0)
 	await get_tree().create_timer(1.5).timeout
 	get_tree().reload_current_scene()
 
@@ -424,7 +424,8 @@ func _on_boss_defeated() -> void:
 	_set_gate_closed(false)
 	_hud.hide_boss()
 	GameState.unlock(beaten.reward_ability)
-	_hud.show_message("%s FALLS\n%s unlocked" % [beaten.boss_name, beaten.reward_ability.capitalize()], 3.5)
+	_hud.show_message(tr("UI_HUD_BOSS_FALLS").format({"boss": tr(beaten.boss_name),
+			"ability": GameState.ability_name(beaten.reward_ability)}), 3.5)
 	_player.shake(10.0, 0.5)
 	if _arena_camera == null:
 		return   # killed (debug) before the fight locked the camera

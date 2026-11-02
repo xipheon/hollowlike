@@ -1,13 +1,13 @@
 class_name PauseMenu
 extends CanvasLayer
-## Esc / P / Start pauses: Resume, pick a Skin, Quit back to the main menu, or
-## Quit the game. Also lists the controls. Won't open while something else
-## (the boss intro) already has the game paused. Laid out in
-## scenes/ui/pause_menu.tscn; edit it there (the room adds it to itself).
+## Esc / P / Start pauses: Resume, pick a Skin, switch Language, Quit back to
+## the main menu, or Quit the game. Also lists the controls. Won't open while
+## something else (the boss intro) already has the game paused. Laid out in
+## scenes/ui/pause_menu.tscn; edit it there (the room adds it to itself). Its
+## text is translation keys (UI_..., in localization/<language>/ui.po).
 ## The skin list is made from PlayerSprite.SKINS: one copy of SkinTemplate,
 ## the styled button in the scene, per skin.
 
-const DEBUG_CONTROLS_TEXT := "\nDebug: F1 = dash, F2 = wall jump, F3 = kill boss"
 const SKIN_MARK := "▶  "   # in front of the skin being worn
 
 @onready var _panel: Control = %Panel
@@ -15,6 +15,7 @@ const SKIN_MARK := "▶  "   # in front of the skin being worn
 @onready var _skin_box: Control = %SkinBox
 @onready var _resume_button: Button = %ResumeButton
 @onready var _skin_button: Button = %SkinButton
+@onready var _language_button: Button = %LanguageButton
 @onready var _quit_game_button: Button = %QuitGameButton
 ## Debug mode only, and only in a room with a living boss (see open()).
 @onready var _kill_boss_button: Button = %KillBossButton
@@ -30,13 +31,16 @@ func _ready() -> void:
 	_quit_game_button.pressed.connect(func() -> void: get_tree().quit())
 	_kill_boss_button.pressed.connect(_debug_kill_boss)
 	%SkinBackButton.pressed.connect(show_main)
-	if GameState.debug_mode:
-		%Controls.text += DEBUG_CONTROLS_TEXT
+	%DebugControls.visible = GameState.debug_mode
+	_language_button.pressed.connect(GameState.next_language)
+	_language_button.auto_translate_mode = AUTO_TRANSLATE_MODE_DISABLED   # its text is built here
+	_language_button.text = GameState.language_button_text()
 
 	var template: Button = %SkinTemplate
 	for s in PlayerSprite.SKINS:
 		var button := template.duplicate() as Button
 		button.name = "Skin_" + s.id
+		button.auto_translate_mode = AUTO_TRANSLATE_MODE_DISABLED   # translated in _refresh_skin_marks()
 		button.pressed.connect(func() -> void: _pick_skin(s.id))
 		template.add_sibling(button)
 		_skin_buttons[s.id] = button
@@ -82,7 +86,14 @@ func _pick_skin(skin_id: String) -> void:
 
 func _refresh_skin_marks() -> void:
 	for s in PlayerSprite.SKINS:
-		_skin_buttons[s.id].text = (SKIN_MARK if s.id == GameState.player_skin else "") + s.name
+		_skin_buttons[s.id].text = (SKIN_MARK if s.id == GameState.player_skin else "") + tr(s.name)
+
+
+## The language changed: text built here follows (the rest translates itself).
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_language_button.text = GameState.language_button_text()
+		_refresh_skin_marks()
 
 
 func _debug_kill_boss() -> void:

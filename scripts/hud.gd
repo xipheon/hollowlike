@@ -176,12 +176,20 @@ func _on_stamina_changed(current: float, maximum: float) -> void:
 
 func _on_ability_unlocked(ability: String) -> void:
 	_refresh_abilities()
-	show_message("Unlocked: %s" % ability.capitalize().replace("_", " "))
+	show_message(tr("UI_HUD_UNLOCKED").format({"ability": GameState.ability_name(ability)}))
 
 
 func _refresh_abilities() -> void:
 	var parts: PackedStringArray = []
 	for ability in GameState.abilities:
 		if GameState.abilities[ability]:
-			parts.append(String(ability).capitalize())
-	_abilities_label.text = "Abilities: " + (", ".join(parts) if parts.size() > 0 else "none")
+			parts.append(GameState.ability_name(ability))
+	var list := tr("UI_LIST_SEPARATOR").join(parts) if parts.size() > 0 else tr("UI_HUD_NO_ABILITIES")
+	_abilities_label.text = tr("UI_HUD_ABILITIES").format({"list": list})
+
+
+## The language changed: the ability list follows. (Boss names are keys and
+## translate themselves; a message on screen stays as it was until it fades.)
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and _abilities_label != null:
+		_refresh_abilities()

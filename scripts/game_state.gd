@@ -7,6 +7,8 @@ signal player_skin_changed(skin_id: String)
 
 const FADE_TIME := 0.25
 const MENU_SCENE := "res://scenes/main_menu.tscn"
+## Player preferences kept between runs (the language, for now).
+const SETTINGS_PATH := "user://settings.cfg"
 
 ## Abilities you begin a new game with; the rest are unlocked by bosses.
 const STARTING_ABILITIES := {
@@ -50,6 +52,63 @@ func _ready() -> void:
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(_fade)
+	# The language picked last time; otherwise Godot's own pick (the computer's
+	# language, or English if there's no translation for it).
+	var settings := ConfigFile.new()
+	if settings.load(SETTINGS_PATH) == OK and settings.has_section_key("game", "language"):
+		TranslationServer.set_locale(settings.get_value("game", "language"))
+
+
+# --------------------------------------------------------------- Language ----
+# Text is translated from the .po files in localization/ (see its README).
+
+## The languages there are translations for, e.g. ["en"].
+func languages() -> PackedStringArray:
+	var found := TranslationServer.get_loaded_locales()
+	found.sort()
+	return found
+
+
+## The language in use: the translated one closest to the locale (e.g. "en"
+## for "en_US"), or the fallback.
+func language() -> String:
+	var best := ""
+	var best_score := 0
+	for l in languages():
+		var score := TranslationServer.compare_locales(l, TranslationServer.get_locale())
+		if score > best_score:
+			best = l
+			best_score = score
+	return best if best != "" else String(ProjectSettings.get_setting("internationalization/locale/fallback", "en"))
+
+
+## Switches to `locale` and remembers it for next time. Translated text on
+## screen updates itself.
+func set_language(locale: String) -> void:
+	TranslationServer.set_locale(locale)
+	var settings := ConfigFile.new()
+	settings.load(SETTINGS_PATH)   # keep anything else saved there
+	settings.set_value("game", "language", locale)
+	settings.save(SETTINGS_PATH)
+
+
+## The next language after the one in use (round to the first), for the
+## menus' Language button.
+func next_language() -> void:
+	var all := languages()
+	if all.is_empty():
+		return
+	set_language(all[(all.find(language()) + 1) % all.size()])
+
+
+## An ability's name in the language in use, e.g. "Wall Jump" for wall_jump.
+func ability_name(ability: String) -> String:
+	return tr("UI_ABILITY_" + ability.to_upper())
+
+
+## The Language button's text, e.g. "Language: English".
+func language_button_text() -> String:
+	return tr("UI_MENU_LANGUAGE").format({"language": TranslationServer.get_locale_name(language())})
 
 
 func has_ability(ability: String) -> bool:
