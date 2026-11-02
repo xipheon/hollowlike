@@ -7,7 +7,9 @@ extends Node2D
 ##   BROKEN  a dead bulb: dark, then every few seconds it sputters on in a
 ##           burst of fast flashes, sometimes catching and buzzing for a
 ##           moment before it dies again.
-## The glow is banded rings drawn additively, so it stays pixel art. Optional
+## The glow is banded rings drawn additively, so it stays pixel art. A real
+## light (a PointLight2D, `light_radius` px, `light_energy` at full) shines on
+## the room around it, following the same brightness. Optional
 ## `lit_overlay` is shown at the current brightness (the lit bulb drawn over a
 ## dead one); optional `dim_overlay` is shown at the opposite (a dark box over
 ## a sign's letters when it's out).
@@ -17,11 +19,15 @@ enum Kind { STEADY, SIGN, BROKEN }
 const GLOW_BANDS := 4
 
 static var _glow_textures := {}   # Vector2i size -> banded radial texture
+static var _light_textures := {}  # int radius -> soft radial texture
 
 var kind := Kind.STEADY
 var glow_color := Color.WHITE
 var glow_size := Vector2i(48, 48)
 var glow_strength := 0.35
+var light_radius := 96
+var light_energy := 0.6
+var light: PointLight2D   # the real light, made in _ready
 var lit_overlay: CanvasItem
 var dim_overlay: CanvasItem
 var brightness := 1.0
@@ -39,6 +45,10 @@ func _ready() -> void:
 	material = CanvasItemMaterial.new()
 	material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	light = PointLight2D.new()
+	light.texture = _light_texture(light_radius)
+	light.color = glow_color
+	add_child(light)
 	# Start part-way into a cycle so lights in a room don't keep time together.
 	match kind:
 		Kind.BROKEN:
@@ -101,6 +111,9 @@ func _apply(value: float) -> void:
 		lit_overlay.modulate.a = brightness
 	if dim_overlay != null:
 		dim_overlay.modulate.a = 1.0 - brightness
+	if light != null:
+		light.energy = light_energy * brightness
+		light.enabled = brightness > 0.0
 	queue_redraw()
 
 
@@ -130,4 +143,23 @@ static func _glow_texture(size: Vector2i) -> Texture2D:
 	tex.width = size.x
 	tex.height = size.y
 	_glow_textures[size] = tex
+	return tex
+
+
+## A soft radial falloff for the real light: full in the middle, fading to
+## nothing at `radius`.
+static func _light_texture(radius: int) -> Texture2D:
+	if _light_textures.has(radius):
+		return _light_textures[radius]
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 1.0])
+	gradient.colors = PackedColorArray([Color.WHITE, Color(1, 1, 1, 0)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = gradient
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	tex.width = radius * 2
+	tex.height = radius * 2
+	_light_textures[radius] = tex
 	return tex

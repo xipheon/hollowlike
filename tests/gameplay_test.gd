@@ -25,6 +25,7 @@ const SEGMENTS := {
 		"_test_door_to_boss_room_and_back",
 		"_test_down_jump_drops_through_platform", "_test_down_jump_on_solid_ground_still_jumps",
 		"_test_pink_crawler_kill_heals", "_test_crawler_sludge", "_test_ceiling_crawler", "_test_room_lights_flicker",
+		"_test_room_dimming",
 	],
 	# The tilesets' terrain brushes and tile data (tools/make_tilesets.gd, room_art.gd), the room template.
 	"tilesets": [
@@ -1852,6 +1853,8 @@ func _test_room_lights_flicker() -> void:
 	var signs := lights.filter(func(l): return l.kind == FlickerLight.Kind.SIGN)
 	_check(not signs.is_empty(), "the door has a glowing EXIT sign (%d)" % signs.size())
 	_check(lights.any(func(l): return l.kind != FlickerLight.Kind.SIGN), "the ceiling bulbs glow")
+	_check(lights.all(func(l): return l.light is PointLight2D and l.light.color == l.glow_color and l.light.texture != null),
+			"each one shines a real light in its glow's colour")
 
 	# One of each kind, watched for 20 seconds.
 	var watched := {}
@@ -1862,11 +1865,15 @@ func _test_room_lights_flicker() -> void:
 		_main.add_child(light)
 		watched[kind] = {"light": light, "on": 0, "lowest": 1.0, "flashes": 0, "was_on": false}
 	var frames := 20 * 60
+	var out_of_step := 0
 	for i in frames:
 		await _frames(1)
 		for kind in watched:
 			var w: Dictionary = watched[kind]
 			var b: float = w.light.brightness
+			var real: PointLight2D = w.light.light
+			if absf(real.energy - w.light.light_energy * b) > 0.001 or real.enabled != (b > 0.0):
+				out_of_step += 1
 			var on := b > 0.0
 			w.on += int(b >= 0.99) if kind == FlickerLight.Kind.SIGN else int(on)
 			w.lowest = minf(w.lowest, b)
@@ -1881,6 +1888,28 @@ func _test_room_lights_flicker() -> void:
 			"the sign blinks or sags but is fully on %.0f%% of the time" % (100.0 * sign.on / frames))
 	_check(broken.flashes >= 2 and float(broken.on) / frames < 0.35,
 			"a dead bulb sputters on (%d flashes) but is dark %.0f%% of the time" % [broken.flashes, 100.0 - 100.0 * broken.on / frames])
+	_check(out_of_step == 0, "the real lights flicker in step with the glows (%d frames out)" % out_of_step)
+	await _despawn()
+
+
+func _test_room_dimming() -> void:
+	print("Rooms are dimmed a little (set in the Inspector) so lights stand out; the skyline and HUD aren't")
+	await _spawn()
+	var dim := _main.get_children().filter(func(c): return c is CanvasModulate)
+	_check(dim.size() == 1 and dim[0].color == _main.dimming, "the room is dimmed by its dimming (%s)" % _main.dimming)
+	_check(_main.dimming.v > 0.7, "only lightly: the room reads without its lights (%.2f)" % _main.dimming.v)
+	var skyline: Skyline = _main.get_node("Skyline")
+	var seen := Color(skyline.modulate.r * _main.dimming.r, skyline.modulate.g * _main.dimming.g, skyline.modulate.b * _main.dimming.b)
+	_check(seen.is_equal_approx(Color.WHITE), "the skyline is undimmed (%s)" % seen)
+	_check(skyline.get_children().all(func(c): return c.light_mask == 0), "and out of reach of the room's lights")
+	_check(_main.get_children().any(func(c): return c is HUD and c is CanvasLayer), "the HUD is on its own layer, undimmed")
+	await _despawn()
+	# Another room's own setting.
+	var room := _build_editor_room()
+	room.dimming = Color(0.9, 0.85, 0.8)
+	await _spawn_node(room)
+	dim = _main.get_children().filter(func(c): return c is CanvasModulate)
+	_check(dim.size() == 1 and dim[0].color == Color(0.9, 0.85, 0.8), "each room sets its own")
 	await _despawn()
 
 

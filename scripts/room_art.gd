@@ -52,15 +52,20 @@ const DOOR_TOP := Vector2i(2, 6)   # under solid ground: lintel and EXIT sign
 const TRACK_H := Vector2i(4, 0)    # moving platform track, side to side: left end, middle, right end
 const TRACK_V := Vector2i(7, 0)    # up and down: top end, middle, bottom end (going down the sheet)
 
-# Light glows (see FlickerLight). Positions are within the light's tile.
+# Light glows (see FlickerLight): the drawn rings, and the real light on the
+# room around them, in the glow's colour. Positions are within the light's tile.
 const BULB_GLOW := Color(0.78, 1.0, 0.9)
 const BULB_GLOW_CENTRE := Vector2(16, 22)
 const BULB_GLOW_SIZE := Vector2i(56, 56)
 const BULB_GLOW_STRENGTH := 0.22
+const BULB_LIGHT_RADIUS := 144
+const BULB_LIGHT_ENERGY := 0.8
 const SIGN_GLOW := Color(1.0, 0.25, 0.25)
 const SIGN_GLOW_CENTRE := Vector2(16, 12)
 const SIGN_GLOW_SIZE := Vector2i(40, 24)
 const SIGN_GLOW_STRENGTH := 0.3
+const SIGN_LIGHT_RADIUS := 64
+const SIGN_LIGHT_ENERGY := 0.6
 const SIGN_LETTERS := Rect2(8, 9, 16, 7)   # inside the sign's frame (tools/make_door_tiles.gd)
 const SIGN_OFF := Color8(52, 10, 14)        # the sign box's colour, covering the letters when it's out
 const ACID_FRAMES := 4
@@ -207,11 +212,15 @@ func _add_light(parent: Node2D, cell: Vector2i, kind: FlickerLight.Kind, lit: Ca
 		light.glow_size = SIGN_GLOW_SIZE
 		light.glow_color = SIGN_GLOW
 		light.glow_strength = SIGN_GLOW_STRENGTH
+		light.light_radius = SIGN_LIGHT_RADIUS
+		light.light_energy = SIGN_LIGHT_ENERGY
 	else:
 		light.position = Vector2(cell * TILE) + BULB_GLOW_CENTRE
 		light.glow_size = BULB_GLOW_SIZE
 		light.glow_color = BULB_GLOW
 		light.glow_strength = BULB_GLOW_STRENGTH
+		light.light_radius = BULB_LIGHT_RADIUS
+		light.light_energy = BULB_LIGHT_ENERGY
 		light.z_index = -1
 	parent.add_child(light)
 

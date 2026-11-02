@@ -34,6 +34,11 @@ const CAMERA_RELEASE_TIME := 0.6
 
 ## This room's id in LevelData.ROOMS.
 @export var room := ""
+## How much the room is dimmed, so its lights stand out: every colour in it is
+## multiplied by this (a CanvasModulate, added in game). Keep it light: the
+## room should read clearly without them. White: no dimming. The skyline, HUD
+## and menus aren't dimmed.
+@export var dimming := Color(0.8, 0.82, 0.88)
 ## Fills every unpainted cell of the Background layer with brick and windows,
 ## with lights, posters and graffiti on the Props layer (the same each time
 ## for the same room), so you can edit it by hand. Wall you've already painted
@@ -89,6 +94,7 @@ func _ready() -> void:
 	if Engine.is_editor_hint():
 		return
 	Engine.time_scale = 1.0
+	_dim()
 	_load_room()
 	_build_solids()
 	_spawn_player()
@@ -125,6 +131,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			GameState.unlock("wall_jump")
 		elif event.keycode == KEY_F3:
 			debug_kill_boss()
+
+
+## Dims the room by `dimming`, all but the skyline.
+func _dim() -> void:
+	var modulate_node := CanvasModulate.new()
+	modulate_node.name = "Dimming"
+	modulate_node.color = dimming
+	add_child(modulate_node)
+	var skyline := get_node_or_null("Skyline") as Skyline
+	if skyline != null:
+		skyline.undim(dimming)
 
 
 ## A moment after you die, the death screen: what killed you, Respawn or Quit.

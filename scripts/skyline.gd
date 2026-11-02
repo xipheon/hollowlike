@@ -4,7 +4,9 @@ extends Parallax2D
 ## The far city skyline behind every room, seen through windows and holes in
 ## the wall. It repeats sideways and stays put vertically, its bottom edge a
 ## little above the bottom of the screen; sky colour fills above it, ground
-## colour below. Builds itself, so it also shows in the editor.
+## colour below. Builds itself, so it also shows in the editor. The room's
+## lights don't shine on it, and the room's dimming is undone on it (undim()):
+## it's far away, outside the warehouse.
 
 const TEXTURE := preload("res://art/backgrounds/skyline.png")
 const SCROLL := Vector2(0.15, 0.0)     # x drifts slowly; y stays fixed on screen
@@ -35,12 +37,14 @@ func _ready() -> void:
 	sky.position = Vector2(0, top - FILL)
 	sky.size = Vector2(TEXTURE.get_width(), FILL)
 	sky.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sky.light_mask = 0
 	add_child(sky)
 	var ground := ColorRect.new()
 	ground.color = image.get_pixel(0, image.get_height() - 1)
 	ground.position = Vector2(0, SCREEN_BOTTOM)
 	ground.size = Vector2(TEXTURE.get_width(), FILL)
 	ground.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ground.light_mask = 0
 	add_child(ground)
 	add_child(_city(Vector2(0, top)))
 
@@ -50,4 +54,10 @@ func _city(at: Vector2) -> Sprite2D:
 	sprite.texture = TEXTURE
 	sprite.centered = false
 	sprite.position = at
+	sprite.light_mask = 0   # out of reach of the room's lights
 	return sprite
+
+
+## Cancels the room's `dimming` (its CanvasModulate) on the skyline.
+func undim(dimming: Color) -> void:
+	modulate = Color(1.0 / maxf(dimming.r, 0.01), 1.0 / maxf(dimming.g, 0.01), 1.0 / maxf(dimming.b, 0.01))
