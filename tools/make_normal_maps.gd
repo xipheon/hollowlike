@@ -1,27 +1,21 @@
 extends SceneTree
-## Gives every lit sheet a normal map, for the room's lights (see "Normal maps"
-## in art/README.md). For each sheet in SHEETS, beside it:
+## Gives the sheets in SHEETS a normal map, for the room's lights to shade (see
+## "Normal maps" in art/README.md). A special effect, for the few things whose
+## shape it brings out (on the dark brick wall it was too faint to be worth
+## it); everything else is lit flat. For each sheet in SHEETS, beside it:
 ##   <sheet>_n.png       its normal map: the same size, and blank (flat, facing
 ##                       out of the screen) until it's drawn
 ##   <sheet>_canvas.tres a CanvasTexture pairing the sheet with its normal map,
 ##                       which the tilesets, sprite frames and scripts use
-## Never overwrites either, so a normal map you've drawn is safe: delete one to
-## have it made blank again. A new or resized sheet gets its own. Run from the
-## project folder:
+## Never overwrites either, so a normal map that's been drawn is safe: delete
+## one to have it made blank again. After adding a sheet, point what draws it
+## at its _canvas.tres (tools/make_tilesets.gd does so for tile sheets by
+## itself, once rerun). Run from the project folder:
 ##   godot --headless --path . --script res://tools/make_normal_maps.gd
-## The skyline and the slash effects aren't lit, so they have none.
+## The pipes' map is drawn by tools/make_pipe_tiles.gd.
 
 const SHEETS := [
-	"res://art/tiles/tileset.png",
-	"res://art/tiles/background.png",
-	"res://art/tiles/props.png",
 	"res://art/tiles/pipes.png",
-	"res://art/sprites/player.png",
-	"res://art/sprites/player_pink.png",
-	"res://art/sprites/thug.png",
-	"res://art/sprites/crawler_sewer.png",
-	"res://art/sprites/crawler_sickly.png",
-	"res://art/sprites/crawler_pink.png",
 ]
 ## Facing straight out of the screen: x 0, y 0, z 1, stored as (128, 128, 255).
 const FLAT := Color8(128, 128, 255)

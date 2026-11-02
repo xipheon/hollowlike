@@ -35,8 +35,9 @@ const ROWS := [
 func _init() -> void:
 	for colour in COLOURS:
 		var sheet: Texture2D = load(SHEET_PATH % colour)
-		# Frames use the sheet with its normal map (tools/make_normal_maps.gd).
-		_save(_frames(load((SHEET_PATH % colour).get_basename() + "_canvas.tres")), FRAMES_PATH % colour)
+		# Frames use the sheet with its normal map, if it has one (tools/make_normal_maps.gd).
+		var lit := (SHEET_PATH % colour).get_basename() + "_canvas.tres"
+		_save(_frames(load(lit) if ResourceLoader.exists(lit) else sheet), FRAMES_PATH % colour)
 		var crawler := CharacterBody2D.new()
 		crawler.name = COLOURS[colour][0]
 		crawler.set_script(load(COLOURS[colour][1]))

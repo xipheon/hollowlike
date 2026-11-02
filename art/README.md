@@ -83,13 +83,18 @@ To add a new enemy, make a scene whose script extends `EnemyBase`. It shows up w
 
 ## Normal maps
 
-The room's lights shade the art using normal maps. A normal map is a second image, the same size as a sheet, whose colours say which way each pixel of the sheet faces. A light then brightens the pixels that face it and darkens those that face away, so a pipe looks round and a brick's top edge catches a bulb above it.
+The room's lights can shade a sheet using a normal map: a second image, the same size as the sheet, whose colours say which way each pixel faces. A light then brightens the pixels that face it and darkens those that face away, so a pipe looks round and a collar's edge catches a bulb beside it.
 
-**The files.** Every lit sheet has one beside it, named `<sheet>_n.png`: `tiles/background_n.png` belongs to `tiles/background.png`, `sprites/thug_n.png` to `sprites/thug.png`, and so on.
-- Lit sheets: `tileset`, `background`, `props` and `pipes` in `tiles/`, and `player`, `player_pink`, `thug` and the three `crawler_*` sheets in `sprites/`. The skyline and the slash effects aren't lit, so they have none.
-- They start blank: every pixel flat, facing straight out of the screen, which lights everything evenly, as if there were no normal map.
+It's a special effect, for the few things whose shape it brings out. On the dark brick wall it was too faint to be worth it. Everything else is lit flat.
+
+**The files.** A sheet with a normal map has it beside it, named `<sheet>_n.png`.
+- Only `tiles/pipes.png` has one so far, `tiles/pipes_n.png`. `tools/make_pipe_tiles.gd` draws it from the pipe geometry, so rerunning that tool redraws it.
 - Each pixel of `_n.png` describes the pixel at the same spot on the sheet, so keep the same size and layout. Where the sheet is transparent, the normal map doesn't matter; leave it flat.
-- `<sheet>_canvas.tres` pairs a sheet with its normal map. Don't edit it. `tools/make_normal_maps.gd` makes both for any sheet in its list that lacks them, and never overwrites one, so your drawings are safe. Delete a normal map to get a blank one back.
+- `<sheet>_canvas.tres` pairs a sheet with its normal map. Don't edit it.
+- **To give another sheet one:**
+  1. Add the sheet to `SHEETS` in `tools/make_normal_maps.gd` and run it. That makes a blank (flat) `_n.png` and the `_canvas.tres`, and never overwrites one that's already drawn.
+  2. Rerun `tools/make_tilesets.gd` for a tile sheet. Anything else that draws the sheet needs pointing at the `_canvas.tres`.
+  3. Draw the map.
 
 **The colours.** Each channel is one direction, from 0 to 255, with 128 meaning "neither way":
 - **Red:** facing left (0) or right (255).

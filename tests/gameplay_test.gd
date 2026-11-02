@@ -2587,16 +2587,16 @@ func _test_pipe_brush() -> void:
 
 
 func _test_normal_maps() -> void:
-	print("Normal maps: every lit sheet has one, the same size, and everything draws the sheet with it")
+	print("Normal maps: the sheets that have one (the pipes) are drawn with it, the same size; the rest are plain")
 	var tool: GDScript = load("res://tools/make_normal_maps.gd")
+	_check(tool.SHEETS == ["res://art/tiles/pipes.png"], "just the pipes have one (%s)" % [tool.SHEETS])
 	var bad := []
 	for sheet in tool.SHEETS:
-		var canvas := load(tool.canvas_path(sheet)) as CanvasTexture
-		var size := (load(sheet) as Texture2D).get_size()
-		if canvas == null or canvas.diffuse_texture != load(sheet) or canvas.normal_texture == null 				or canvas.normal_texture.resource_path != tool.normal_path(sheet) or canvas.normal_texture.get_size() != size:
+		if not _paired(sheet, load(tool.canvas_path(sheet)), tool):
 			bad.append(sheet.get_file())
-	_check(bad.is_empty(), "%d sheets, each paired with a normal map its size%s" % [tool.SHEETS.size(), "" if bad.is_empty() else ", not %s" % [bad]])
-	# What draws them: the tilesets, the sprite frames, the player's skins, the moving platform.
+	_check(bad.is_empty(), "each paired with a normal map its size%s" % ("" if bad.is_empty() else ", not %s" % [bad]))
+	# What draws the sheets: the tilesets, the sprite frames, the player's skins,
+	# the moving platform. Each uses its sheet's normal map if it has one.
 	var users := {}
 	for tileset in [RoomArt.FOREGROUND_TILES, RoomArt.BACKGROUND_TILES, RoomArt.PROPS_TILES]:
 		for i in tileset.get_source_count():
@@ -2611,8 +2611,23 @@ func _test_normal_maps() -> void:
 	for skin in PlayerSprite.SKINS:
 		users[skin.id] = load(skin.sheet)
 	users["moving platform"] = MovingPlatform.SHEET
-	var flat := users.keys().filter(func(k): return not (users[k] is CanvasTexture and users[k].normal_texture != null))
-	_check(flat.is_empty(), "tiles, enemies, the player and platforms draw with their normal maps%s" % ("" if flat.is_empty() else ", not %s" % [flat]))
+	var wrong := users.keys().filter(func(k):
+		var texture: Texture2D = users[k]
+		var sheet := (texture as CanvasTexture).diffuse_texture.resource_path if texture is CanvasTexture else texture.resource_path
+		return (texture is CanvasTexture) != (sheet in tool.SHEETS))
+	_check(wrong.is_empty(), "the pipes draw with their normal map, everything else plain (%d users)%s"
+			% [users.size(), "" if wrong.is_empty() else ", not %s" % [wrong]])
+	var pipes := RoomArt.PROPS_TILES.get_source(RoomArt.PIPES_SOURCE) as TileSetAtlasSource
+	_check(pipes.texture is CanvasTexture and _paired("res://art/tiles/pipes.png", pipes.texture, tool), "the pipe tiles shade with it")
+	# The pipes' map is drawn, not left blank: it has some shape.
+	var normal := (load(tool.normal_path("res://art/tiles/pipes.png")) as Texture2D).get_image()
+	normal.convert(Image.FORMAT_RGBA8)
+	var shaped := 0
+	for y in normal.get_height():
+		for x in normal.get_width():
+			if normal.get_pixel(x, y) != Color8(128, 128, 255):
+				shaped += 1
+	_check(shaped > 0, "the pipes' normal map is drawn (%d px shaped)" % shaped)
 	# The room's lights hang out from the wall, so they shade a flat normal map
 	# rather than grazing it.
 	var light := FlickerLight.new()
@@ -2620,6 +2635,14 @@ func _test_normal_maps() -> void:
 	_check(light.light.height > 0.0 and RoomArt.BULB_LIGHT_HEIGHT > 0.0 and RoomArt.SIGN_LIGHT_HEIGHT > 0.0,
 			"lights hang out from the wall (bulbs %d px, signs %d px)" % [RoomArt.BULB_LIGHT_HEIGHT, RoomArt.SIGN_LIGHT_HEIGHT])
 	light.free()
+
+
+## Whether `texture` is `sheet` with its normal map (beside it, its size).
+func _paired(sheet: String, texture: Texture2D, tool: GDScript) -> bool:
+	var canvas := texture as CanvasTexture
+	if canvas == null or canvas.diffuse_texture != load(sheet) or canvas.normal_texture == null:
+		return false
+	return canvas.normal_texture.resource_path == tool.normal_path(sheet) and canvas.normal_texture.get_size() == canvas.diffuse_texture.get_size()
 
 
 ## The sides a pipes-sheet tile runs out of: from the block's layout, or the

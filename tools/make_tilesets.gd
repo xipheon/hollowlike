@@ -31,8 +31,9 @@ extends SceneTree
 ## connections), so a bulb lights that rim of the face toward it and the
 ## rest is in shadow; sides against more solid stay flush, so no light leaks
 ## between tiles.
-## Each sheet is used as its CanvasTexture (<sheet>_canvas.tres, with its
-## normal map; tools/make_normal_maps.gd), so the room's lights shade the tiles.
+## A sheet with a normal map (tools/make_normal_maps.gd lists them: the pipes)
+## is used as its CanvasTexture, <sheet>_canvas.tres, so the room's lights
+## shade its tiles; the rest are plain images.
 ## Rerun after changing a sheet's layout (it keeps each file's ID). Once rooms are painted, prefer
 ## editing the .tres in Godot over rerunning this (it rebuilds from scratch).
 
@@ -112,9 +113,10 @@ func _occluder(data: TileData, open: String) -> void:
 	data.set_occluder_polygon(0, 0, polygon)
 
 
-## A sheet with its normal map, as tools/make_normal_maps.gd pairs them.
+## A sheet with its normal map if it has one (tools/make_normal_maps.gd), else the sheet.
 func _lit(sheet_path: String) -> Texture2D:
-	return load(sheet_path.get_basename() + "_canvas.tres")
+	var canvas := sheet_path.get_basename() + "_canvas.tres"
+	return load(canvas) if ResourceLoader.exists(canvas) else load(sheet_path)
 
 
 ## Creates a tile and sets its custom data; returns its TileData.
