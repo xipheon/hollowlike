@@ -30,7 +30,7 @@ msgid "DLG_GUARD_BEFORE_AGAIN"
 msgstr "Still here? That thing in the loading bay isn't going anywhere. Neither am I."
 
 #. The guard, after you've beaten the Warden: thanks, and a warning about the
-#. Harrier, which nests high up past the climb.
+#. Sin Hawk (the bird boss), which nests high up past the climb.
 msgid "DLG_GUARD_AFTER_WARDEN_1"
 msgstr "You took that thing down? I... thank you. Really."
 
@@ -39,7 +39,7 @@ msgid "DLG_GUARD_AFTER_WARDEN_GIFT"
 msgstr "Here, take this. Found it on my rounds. Hits a lot harder than that rusty thing."
 
 msgid "DLG_GUARD_AFTER_WARDEN_2"
-msgstr "But listen. Up past the climb, something's nesting in the rafters. Feathers like knives."
+msgstr "But listen. Up past the climb, the Sin Hawk's nesting in the rafters. Feathers like knives."
 
 msgid "DLG_GUARD_AFTER_WARDEN_3"
 msgstr "It sees you long before you see it. Keep moving, and watch the sky."
@@ -48,13 +48,13 @@ msgstr "It sees you long before you see it. Keep moving, and watch the sky."
 msgid "DLG_GUARD_AFTER_WARDEN_AGAIN"
 msgstr "Thanks again. And mind the rafters."
 
-#. The guard, after you've beaten the Harrier too.
+#. The guard, after you've beaten the Sin Hawk too.
 msgid "DLG_GUARD_AFTER_HARRIER_1"
 msgstr "Both of them? You're something else."
 
 msgid "DLG_GUARD_AFTER_HARRIER_2"
 msgstr "Maybe I'll finally get some quiet on this shift."
 
-#. The guard, after the Harrier, on every later visit.
+#. The guard, after the Sin Hawk, on every later visit.
 msgid "DLG_GUARD_AFTER_HARRIER_AGAIN"
 msgstr "Quiet nights from here on. I hope."

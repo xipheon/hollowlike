@@ -1,10 +1,14 @@
+@tool
 class_name ItemPickup
 extends Area2D
 ## An item lying in a room, floating just off the floor and glowing, waiting
 ## to be picked up: touch it and GameState.give_item() gets it (the HUD says
-## what you got). Bosses drop their rewards as these (Room._drop_rewards());
-## `picked_flag` remembers it's gone, so it's still there if you leave and
-## come back without it, and not once you have it.
+## what you got). Bosses drop their rewards as these (Room._drop_rewards()),
+## and one can be placed in a room: add an Area2D under Entities with this
+## script, set its `item`, and put it HOVER px above the floor. `picked_flag`
+## remembers it's gone, so it's still there if you leave and come back
+## without it, and not once you have it (the room names a placed one's flag
+## after its node: picked_<room>_<name>).
 
 const SCALE := 2.0                 # the 16 px icon, shown at 32
 const BOB := 3.0                   # px up and down
@@ -16,13 +20,21 @@ const LIGHT_RADIUS := 56
 const LIGHT_ENERGY := 0.6
 const LIGHT_HEIGHT := 24.0
 
-var item: Item
+## What it gives you (a file in items/).
+@export var item: Item:
+	set(value):
+		item = value
+		queue_redraw()
 var picked_flag := ""
 var _time := 0.0
 var _taken := false
 
 
 func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	if Engine.is_editor_hint():
+		set_process(false)   # just its icon, still
+		return
 	add_to_group("item_pickup")
 	collision_layer = 0
 	collision_mask = 2   # the player's body
@@ -32,7 +44,6 @@ func _ready() -> void:
 	shape.shape = rect
 	add_child(shape)
 	add_child(FlickerLight.make_light(LIGHT_RADIUS, LIGHT_COLOR, LIGHT_ENERGY, LIGHT_HEIGHT))
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	body_entered.connect(func(body: Node) -> void:
 		if body is Player:
 			collect())

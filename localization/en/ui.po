@@ -15,10 +15,10 @@ msgstr "HOLLOWLIKE"
 
 #. Main menu buttons.
 msgid "UI_MENU_START"
-msgstr "Start"
+msgstr "New Game"
 
 msgid "UI_MENU_LEVEL_SELECT"
-msgstr "Level Select"
+msgstr "Test Rooms"
 
 #. {language}: the language in use, e.g. "English". Pressing it switches to the next one.
 msgid "UI_MENU_LANGUAGE"
@@ -125,7 +125,7 @@ msgid "UI_BOSS_WARDEN"
 msgstr "THE WARDEN"
 
 msgid "UI_BOSS_HARRIER"
-msgstr "THE HARRIER"
+msgstr "SIN HAWK"
 
 #. Death screen: its title and buttons.
 msgid "UI_DEATH_TITLE"
@@ -161,12 +161,12 @@ msgstr "Trampled by The Warden"
 msgid "UI_DEATH_BY_WARDEN_SHOCKWAVE"
 msgstr "Flattened by The Warden's shockwave"
 
-#. The Harrier's body: walking into it, or its swoop.
+#. The Sin Hawk's body: walking into it, or its swoop.
 msgid "UI_DEATH_BY_HARRIER"
-msgstr "Torn down by The Harrier"
+msgstr "Torn down by the Sin Hawk"
 
 msgid "UI_DEATH_BY_HARRIER_FEATHER"
-msgstr "Pierced by The Harrier's feather"
+msgstr "Pierced by the Sin Hawk's feather"
 
 #. An enemy that doesn't say what it is.
 msgid "UI_DEATH_BY_ENEMY"
@@ -201,6 +201,12 @@ msgstr "Strong Pipe"
 msgid "UI_ITEM_STRONG_PIPE_DESC"
 msgstr "A heavier length of pipe. Every swing hits harder."
 
+msgid "UI_ITEM_LEAD_CORE"
+msgstr "Lead Core"
+
+msgid "UI_ITEM_LEAD_CORE_DESC"
+msgstr "A slug of lead to pack into your pipe. Every swing hits harder."
+
 #. On screen, and in the dialogue box, when you get an item. {item}: its name.
 msgid "UI_ITEM_RECEIVED"
 msgstr "Received: {item}"
@@ -219,3 +225,19 @@ msgstr "Nothing yet."
 #. An item you hold more than one of. {item}: its name; {count}: how many.
 msgid "UI_INVENTORY_COUNT"
 msgstr "{item} ×{count}"
+
+#. The welcome card a new game opens with: its heading.
+msgid "UI_INTRO_TITLE"
+msgstr "Welcome to the Depot"
+
+#. The welcome card: where you are and what to do. Friendly, two sentences.
+msgid "UI_INTRO_BODY"
+msgstr "The night shift never clocked out, and something has moved in below. Take your time, look around, and see how far down it goes."
+
+#. The welcome card: the controls, keyboard then controller.
+msgid "UI_INTRO_CONTROLS"
+msgstr "Move: A / D or arrows   ·   Jump: Space   ·   Attack and talk: J   ·   Pause: Esc\nController: stick or d-pad   ·   A   ·   X   ·   Start"
+
+#. The welcome card: how to close it.
+msgid "UI_INTRO_CONTINUE"
+msgstr "Press Attack or Jump to begin"

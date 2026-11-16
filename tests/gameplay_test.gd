@@ -101,7 +101,13 @@ const SEGMENTS := {
 		"_test_debug_kill_boss", "_test_debug_kill_boss_off_outside_debug_mode",
 		"_test_main_menu_starts_game", "_test_level_select_loads_each_room",
 		"_test_pause_menu_quits_to_main_menu", "_test_pause_menu_skins", "_test_death_screen",
-		"_test_progress_flags",
+		"_test_progress_flags", "_test_menu_backdrop", "_test_new_game_welcome_card",
+	],
+	# The world's rooms (scenes/world/): how they join up, and what's locked
+	# behind the dash and the wall jump (reach.gd, tools/build_world.gd).
+	"world": [
+		"_test_world_rooms_join_up", "_test_world_order_by_reach", "_test_reach_matches_play",
+		"_test_hub_gap_needs_dash", "_test_entrance_wall_needs_wall_jump", "_test_placed_item_pickup",
 	],
 }
 
@@ -1921,15 +1927,17 @@ func _test_main_menu_starts_game() -> void:
 	get_tree().root.add_child(menu)
 	get_tree().current_scene = menu
 	await _frames(2)
-	_check(menu.start_button.has_focus(), "Start focused")
+	_check(menu.start_button.has_focus(), "New Game focused")
 	await _press_pad_a()
-	var room := await _wait_for_room("first_test_room", 120)
-	_check(room != null, "first room loaded")
+	var room := await _wait_for_room(LevelData.FIRST_ROOM, 120)
+	_check(room != null, "the first room loaded (%s)" % LevelData.FIRST_ROOM)
 	_check(not GameState.has_ability("dash"), "progress reset")
 	if room != null:
 		var p: Player = room._player
-		_check(p.global_position.x < 5 * TILE, "starting at its PlayerStart (col %.1f)" % (p.global_position.x / TILE))
+		var start: PlayerStart = room.entities_of(PlayerStart)[0]
+		_check(absf(p.global_position.x - start.global_position.x) < 1.0, "starting at its PlayerStart (col %.1f)" % (p.global_position.x / TILE))
 	await _frames(30)   # let the fade finish
+	await _close_intro()
 	await _despawn()
 
 
@@ -3874,3 +3882,422 @@ func _test_inventory_page() -> void:
 	menu.close()
 	await _despawn()
 	GameState.items = {}
+
+
+# ------------------------------------------------------------ The world ----
+
+## The world's rooms (LevelData ids): those under scenes/world/.
+func _world_rooms() -> Array:
+	return LevelData.ROOMS.keys().filter(func(id): return String(LevelData.ROOMS[id].scene).begins_with("res://scenes/world/"))
+
+
+## A world room's scene, loaded but not running (for reading its layout); kept in `loaded`.
+func _world_room(id: String, loaded: Dictionary) -> Room:
+	if not loaded.has(id):
+		loaded[id] = load(LevelData.ROOMS[id].scene).instantiate()
+	return loaded[id]
+
+
+## Runs a world room as the current scene, past its welcome card if it has one.
+func _spawn_world(id: String) -> void:
+	await _spawn(load(LevelData.ROOMS[id].scene))
+	await _close_intro()
+
+
+## Waits out a fade between scenes left running by the check before.
+func _wait_for_fade() -> void:
+	for i in 120:
+		if not GameState._transitioning:
+			return
+		await _frames(1)
+
+
+## Closes the welcome card, if it's up.
+func _close_intro() -> void:
+	for card in get_tree().get_nodes_in_group("intro_card"):
+		if card.is_open():
+			card.close()
+			await card.finished
+
+
+## The door in `room` you arrive at coming from the room `from` through `through`.
+func _arrival_door(room: Room, from: String, through: RoomDoor) -> RoomDoor:
+	for door in room.entities_of(RoomDoor):
+		if through.arrive_at != "" and String(door.name) == through.arrive_at:
+			return door
+	for door in room.entities_of(RoomDoor):
+		if door.target_room == from:
+			return door
+	return null
+
+
+func _test_world_rooms_join_up() -> void:
+	print("The world's rooms: every door leads to a room with a door back, and you arrive on solid ground")
+	var loaded := {}
+	var player := Player.new()
+	var ids := _world_rooms()
+	_check(ids.size() >= 7 and LevelData.FIRST_ROOM in ids, "the world has its rooms, the first among them (%d)" % ids.size())
+	for id in ids:
+		var room := _world_room(id, loaded)
+		var reach := Reach.of_room(room, player)
+		var problems := []
+		if room.room != id:
+			problems.append("its room id is %s" % room.room)
+		var starts := room.entities_of(PlayerStart)
+		if starts.size() != 1 or not reach.can_stand(Vector2i((starts[0].position / TILE).floor()) + Vector2i.UP):
+			problems.append("no PlayerStart on the ground")
+		var doors := room.entities_of(RoomDoor)
+		if doors.is_empty():
+			problems.append("no doors")
+		for door in doors:
+			if not door.target_room in ids:
+				problems.append("%s leads out of the world (%s)" % [door.name, door.target_room])
+				continue
+			for cell in reach.door_cells(door):
+				if reach.kind(cell) != RoomArt.Kind.DOOR:
+					problems.append("%s isn't over door tiles" % door.name)
+					break
+			if not reach.can_stand(reach.door_stand(door)):
+				problems.append("no ground inside %s" % door.name)
+			var back := _arrival_door(_world_room(door.target_room, loaded), id, door)
+			if back == null or back.target_room != id:
+				problems.append("%s: no door back from %s" % [door.name, door.target_room])
+		_check(problems.is_empty(), "%s %s" % [id, problems])
+	for id in loaded:
+		loaded[id].free()
+	player.free()
+
+
+## The world's rooms loaded for reading (not running), a Reach for each, and
+## what's been worked out so far, shared by the checks that walk the world.
+## _close_world() frees it.
+var _world_loaded := {}
+var _world_reach := {}
+var _world_cells := {}
+var _world_player: Player
+
+
+func _open_world() -> void:
+	if _world_player != null:
+		return
+	_world_player = Player.new()
+	for id in _world_rooms():
+		_world_reach[id] = Reach.of_room(_world_room(id, _world_loaded), _world_player)
+
+
+func _close_world() -> void:
+	for id in _world_loaded:
+		_world_loaded[id].free()
+	_world_loaded = {}
+	_world_reach = {}
+	_world_cells = {}
+	if _world_player != null:
+		_world_player.free()
+		_world_player = null
+
+
+## Where Reach says you can get to in the room `id` from `from`, with `abilities`.
+func _world_cells_from(id: String, from: Vector2i, abilities: Array) -> Dictionary:
+	var key := [id, from, ",".join(abilities)]
+	if not _world_cells.has(key):
+		_world_cells[key] = _world_reach[id].cells_from(from, abilities)
+	return _world_cells[key]
+
+
+## Plays the world out by Reach alone, from a new game's start: goes through
+## every door in reach, picks up every item in reach and beats every boss
+## whose arena is in reach, gaining the abilities they give if `allowed` lists
+## them. Returns what it got to: rooms (ids), doors and items ("room.Node"),
+## bosses (room ids) and abilities, each in the order it came.
+func _walk_world(allowed: Array) -> Dictionary:
+	_open_world()
+	var got := {"rooms": [], "doors": [], "items": [], "bosses": [], "abilities": []}
+	var entries := {}   # room id -> the cells you've come into it at
+	var first: Room = _world_loaded[LevelData.FIRST_ROOM]
+	entries[LevelData.FIRST_ROOM] = [Vector2i((first.entities_of(PlayerStart)[0].position / TILE).floor()) + Vector2i.UP]
+	var changed := true
+	while changed:
+		changed = false
+		for id in entries.keys():
+			var room: Room = _world_loaded[id]
+			if not id in got.rooms:
+				got.rooms.append(id)
+			for from in entries[id].duplicate():
+				var cells := _world_cells_from(id, from, got.abilities)
+				var gained: Array[Item] = []
+				for pickup in room.entities_of(ItemPickup):
+					var tag := "%s.%s" % [id, pickup.name]
+					if not tag in got.items and cells.has(Vector2i((pickup.position / TILE).floor())):
+						got.items.append(tag)
+						gained.append(pickup.item)
+				for arena in room.entities_of(Arena):
+					var inset := Vector2i(Room.ARENA_TRIGGER_INSET, 0)
+					var trigger := Rect2i(Vector2i((arena.position / TILE).round()) + inset, arena.size_tiles - inset * 2)
+					if not id in got.bosses and cells.keys().any(func(c): return trigger.has_point(c)):
+						got.bosses.append(id)
+						gained.append_array(arena.get_node(arena.boss).rewards)
+				for item in gained:
+					if item.grants_ability in allowed and not item.grants_ability in got.abilities:
+						got.abilities.append(item.grants_ability)
+						changed = true
+				for door in room.entities_of(RoomDoor):
+					var tag := "%s.%s" % [id, door.name]
+					if tag in got.doors or not _world_reach[id].door_cells(door).any(func(c): return cells.has(c)):
+						continue
+					got.doors.append(tag)
+					var back := _arrival_door(_world_loaded[door.target_room], id, door)
+					var into: Vector2i = _world_reach[door.target_room].door_stand(back)
+					if not entries.has(door.target_room):
+						entries[door.target_room] = []
+					if not into in entries[door.target_room]:
+						entries[door.target_room].append(into)
+						changed = true
+	return got
+
+
+func _test_world_order_by_reach() -> void:
+	print("By what's in reach: the Warden first, the Sin Hawk only with its dash, the wall-jump paths last, and then everything")
+	var started := Time.get_ticks_msec()
+	var bare := _walk_world([])
+	_check(bare.bosses == ["warden_arena"], "with nothing, the only boss you can get to is the Warden %s" % [bare.bosses])
+	_check(not "hub.SpanDoor" in bare.doors and not "entrance.VaultDoor" in bare.doors,
+			"the doors to the Span and the Vault are out of reach")
+	_check(bare.items.is_empty(), "and so is every item lying about %s" % [bare.items])
+	_check("tunnels" in bare.rooms and "hub" in bare.rooms, "the Junction and the Tunnels are open %s" % [bare.rooms])
+
+	var spurs_only := _walk_world(["wall_jump"])
+	_check(spurs_only.abilities.is_empty(), "the wall jump can't be had before the dash: the Sin Hawk is past the gap %s" % [spurs_only.abilities])
+
+	var dash := _walk_world(["dash"])
+	_check(dash.bosses == ["warden_arena", "hawk_arena"], "with the Warden's dash, the Sin Hawk is in reach %s" % [dash.bosses])
+	_check("tunnels.HeartContainer" in dash.items, "and the Tunnels' Heart Container")
+	_check(not "span.HeartContainer" in dash.items and not "vault" in dash.rooms,
+			"but not the Span's alcove or the Vault: those need the wall jump %s" % [dash.items])
+
+	var all := _walk_world(["dash", "wall_jump"])
+	_check(all.abilities == ["dash", "wall_jump"], "the abilities come in that order %s" % [all.abilities])
+	var ids := _world_rooms()
+	_check(ids.all(func(id): return id in all.rooms), "with both, every room is in reach %s" % [all.rooms])
+	var missing := []
+	for id in ids:
+		var room: Room = _world_loaded[id]
+		for door in room.entities_of(RoomDoor):
+			if not "%s.%s" % [id, door.name] in all.doors:
+				missing.append("%s.%s" % [id, door.name])
+		for pickup in room.entities_of(ItemPickup):
+			if not "%s.%s" % [id, pickup.name] in all.items:
+				missing.append("%s.%s" % [id, pickup.name])
+	_check(missing.is_empty(), "and every door and item %s" % [missing])
+	_check(all.items.size() >= 4, "items lying about the world (%d)" % all.items.size())
+	_close_world()
+	print("  (%.1fs)" % ((Time.get_ticks_msec() - started) / 1000.0))
+
+
+func _test_reach_matches_play() -> void:
+	print("Reach against the real thing: its jump height is the player's, and it never rules out a jump the player makes")
+	await _spawn_world("hub")
+	var reach := Reach.of_room(_main, _player)
+	# A real jump, straight up from the floor.
+	var floor_y := _player.global_position.y
+	Input.action_press("jump")
+	var top := floor_y
+	for i in 60:
+		await _frames(1)
+		top = minf(top, _player.global_position.y)
+	Input.action_release("jump")
+	_check(absf((floor_y - top) - reach.jump_rise()) < 4.0, "a jump lifts you what Reach says (%.1f px vs %.1f)" % [floor_y - top, reach.jump_rise()])
+	var from := Vector2i((_player.global_position / TILE).floor())
+	var cells := reach.cells_from(from, [])
+	var far_ledge := reach.door_stand(_main.get_node("Entities/SpanDoor"))
+	_check(cells.has(from + Vector2i(6, 0)) and cells.has(Vector2i(_main._w - 2, from.y)), "from the floor with nothing: all along the floor")
+	_check(not cells.has(far_ledge) and reach.cells_from(from, ["dash"]).has(far_ledge), "the Span's ledge only with the dash")
+	await _despawn()
+
+
+func _test_hub_gap_needs_dash() -> void:
+	print("Played: the Junction's gap to the Span's door can't be jumped, and a dash clears it")
+	await _spawn_world("hub")
+	var door: RoomDoor = _main.get_node("Entities/SpanDoor")
+	var ledge_row := int(door.position.y / TILE) + door.height   # the ledges' top
+	# The gap: leftwards from the door, its ledge, then the open cells to the next one.
+	var far: int = _main._w - 1
+	while _main._kind_at(far - 1, ledge_row) == RoomArt.Kind.SOLID:
+		far -= 1
+	var edge := far
+	while _main._kind_at(edge - 1, ledge_row) != RoomArt.Kind.SOLID:
+		edge -= 1
+	_check(far - edge >= 9, "a gap of %d tiles (cols %d to %d)" % [far - edge, edge, far - 1])
+	await _try_acid_dash_crossing(edge - 6, 1, edge, far, ledge_row)
+	_check(not _player._dead and _player.global_position.y > (ledge_row + 4) * TILE,
+			"a running jump falls short, and drops you to the floor unhurt (row %.1f)" % (_player.global_position.y / TILE))
+	GameState.unlock("dash")
+	_check(await _try_acid_dash_crossing(edge - 6, 1, edge, far, ledge_row) and _player.global_position.y < ledge_row * TILE,
+			"a jump and a dash lands on the far side (col %.1f)" % (_player.global_position.x / TILE))
+	Input.action_press("move_right")
+	var room := await _wait_for_room("span", 240)
+	Input.action_release("move_right")
+	_check(room != null, "and its door leads to the Span")
+	await _frames(30)
+	await _despawn()
+
+
+## Climbs the wall on the left from the floor at its foot, holding into it:
+## jump, then jump again off the wall each time the rise runs out (and, with
+## `dash_up`, dash straight up at the top of the first jump). Returns the
+## highest your feet got, in px above the floor.
+func _climb_wall(wall_col: int, floor_row: int, dash_up := false) -> float:
+	_player.global_position = Vector2((wall_col + 1) * TILE + Player.BODY_SIZE.x * 0.5 + 1.0, floor_row * TILE - Player.BODY_SIZE.y * 0.5)
+	_player.velocity = Vector2.ZERO
+	await _frames(5)
+	var floor_y := _player.global_position.y
+	var top := floor_y
+	Input.action_press("move_left")
+	Input.action_press("jump")
+	var dashed := false
+	for i in 600:
+		await _frames(1)
+		top = minf(top, _player.global_position.y)
+		if _player.velocity.y > -60.0 and not _player.is_on_floor():
+			if dash_up and not dashed:
+				dashed = true
+				Input.action_press("move_up")
+				Input.action_press("dash")
+				await _frames(2)
+				Input.action_release("dash")
+				Input.action_release("move_up")
+			elif _player._wall_sliding:
+				Input.action_release("jump")
+				await _frames(1)
+				Input.action_press("jump")
+				await _frames(3)   # until it's kicked off, so the next look sees the new jump
+		if i > 20 and _player.is_on_floor():
+			break
+	_release_all()
+	return floor_y - top
+
+
+func _test_entrance_wall_needs_wall_jump() -> void:
+	print("Played: the Entrance's wall to the Vault can't be climbed with a jump and a dash, and wall jumps climb it")
+	await _spawn_world("entrance")
+	var door: RoomDoor = _main.get_node("Entities/VaultDoor")
+	var top_row := int(door.position.y / TILE) + door.height   # the wall's top
+	var wall_col := 0
+	while _main._kind_at(wall_col + 1, top_row) == RoomArt.Kind.SOLID:
+		wall_col += 1
+	var floor_row := top_row
+	while _main._kind_at(wall_col + 1, floor_row) != RoomArt.Kind.SOLID:
+		floor_row += 1
+	var height := (floor_row - top_row) * TILE
+	_check(floor_row - top_row >= 10, "a wall %d tiles tall" % (floor_row - top_row))
+	var rise := await _climb_wall(wall_col, floor_row)
+	_check(rise < height - TILE, "a jump gets nowhere near the top (%.0f of %d px)" % [rise, height])
+	GameState.unlock("dash")
+	rise = await _climb_wall(wall_col, floor_row, true)
+	_check(rise > _player.jump_velocity ** 2 / (2.0 * _player.gravity) + TILE and rise < height,
+			"a jump and a dash straight up gets higher but still short (%.0f of %d px)" % [rise, height])
+	GameState.abilities["dash"] = false
+	GameState.unlock("wall_jump")
+	rise = await _climb_wall(wall_col, floor_row)
+	_check(rise >= height and _player.is_on_floor() and _player.global_position.y < top_row * TILE,
+			"wall jumps climb it, onto the ledge (%.0f of %d px, stamina left %.0f)" % [rise, height, _player.stamina])
+	Input.action_press("move_left")
+	var room := await _wait_for_room("vault", 240)
+	Input.action_release("move_left")
+	_check(room != null, "and its door leads to the Vault")
+	await _frames(30)
+	await _despawn()
+
+
+func _test_placed_item_pickup() -> void:
+	print("An item placed in a room is picked up once: gone when you come back")
+	await _spawn_world("tunnels")
+	var heart: ItemPickup = _main.get_node("Entities/HeartContainer")
+	_check(heart.item != null and heart.item.id == "heart_container" and heart.picked_flag == "picked_tunnels_HeartContainer",
+			"the Tunnels' Heart Container, with a flag of its own (%s)" % heart.picked_flag)
+	var floor_y: float = _main._floor_below(heart.global_position)
+	_check(is_equal_approx(floor_y - heart.global_position.y, ItemPickup.HOVER), "floating just off its ledge")
+	var hearts := _player.max_health + heart.item.max_health_bonus
+	_player._invuln_timer = 999.0
+	_player.global_position = heart.global_position
+	await _frames(3)
+	_check(GameState.item_count("heart_container") == 1 and _player.max_health == hearts
+			and GameState.has_flag("picked_tunnels_HeartContainer"), "touching it picks it up: a heart more")
+	var held := GameState.items.duplicate()
+	var flags := GameState.flags.duplicate()
+	await _despawn()
+	# Back again, as the same game.
+	var again: Room = load(LevelData.ROOMS["tunnels"].scene).instantiate()
+	await _spawn_node(again)
+	GameState.flags = flags
+	GameState.items = held
+	get_tree().reload_current_scene()
+	var room := await _wait_for_room("tunnels", 60)
+	await _frames(2)
+	_check(room != null and room.get_node_or_null("Entities/HeartContainer") == null, "it's not there the next time")
+	await _despawn()
+	GameState.items = {}
+	GameState.flags = {}
+
+
+func _test_menu_backdrop() -> void:
+	print("Main menu: the title sits over a view of the first room, with nobody in it")
+	await _wait_for_fade()
+	var menu := MENU_SCENE.instantiate()
+	get_tree().root.add_child(menu)
+	get_tree().current_scene = menu
+	await _frames(3)
+	var backdrop: Room = menu.get_node_or_null("Backdrop")
+	_check(backdrop != null and backdrop.room == LevelData.FIRST_ROOM and backdrop.backdrop, "the first room, as a backdrop")
+	if backdrop != null:
+		_check(backdrop._player == null and backdrop._hud == null and get_tree().get_nodes_in_group("player").is_empty(),
+				"no player or HUD in it (%s)" % [get_tree().get_nodes_in_group("player")])
+		_check(get_tree().get_nodes_in_group("intro_card").is_empty() and not get_tree().paused, "no welcome card, nothing paused")
+		var camera := get_viewport().get_camera_2d()
+		var start: PlayerStart = backdrop.entities_of(PlayerStart)[0]
+		_check(camera != null and camera.get_parent() == backdrop and absf(camera.global_position.x - start.global_position.x) <= Room.BACKDROP_DRIFT + 1.0,
+				"seen from where you'll start")
+		_check(not backdrop.terrain().get_used_cells().is_empty() and backdrop.get_children().any(func(c): return c is CanvasModulate),
+				"its tiles and its look")
+	var ui: CanvasLayer = menu.get_node("UI")
+	_check(ui.layer > Room.GRADE_LAYER and menu.start_button.is_visible_in_tree() and ui.is_ancestor_of(menu.start_button),
+			"the menu on a layer of its own, over the room's dimming and grade")
+	_check(menu.start_button.text == "UI_MENU_START" and tr("UI_MENU_START") == "New Game", "New Game")
+	menu.queue_free()
+	await _frames(2)
+
+
+func _test_new_game_welcome_card() -> void:
+	print("A new game opens with a welcome card: paused until you press attack or jump, and only once")
+	await _wait_for_fade()
+	var menu := MENU_SCENE.instantiate()
+	get_tree().root.add_child(menu)
+	get_tree().current_scene = menu
+	await _frames(2)
+	menu.start_button.pressed.emit()
+	var room := await _wait_for_room(LevelData.FIRST_ROOM, 120)
+	await _frames(30)   # the fade
+	var cards := get_tree().get_nodes_in_group("intro_card")
+	_check(cards.size() == 1 and get_tree().paused and GameState.has_flag(IntroCard.SEEN_FLAG),
+			"the card is up and the game paused (%d, %s, %s)" % [cards.size(), get_tree().paused, room])
+	if cards.size() == 1:
+		var card: IntroCard = cards[0]
+		var labels := card.find_children("*", "Label", true, false)
+		var keys: Array = labels.map(func(l): return l.text)
+		_check(keys == ["UI_INTRO_TITLE", "UI_INTRO_BODY", "UI_INTRO_CONTROLS", "UI_INTRO_CONTINUE"]
+				and keys.all(func(k): return tr(k) != k), "a heading, a welcome, the controls and how to go on %s" % [keys])
+		_check(room.get_children().any(func(c): return c is HUD), "over the room, ready behind it")
+		var x0: float = room._player.global_position.x
+		await _tap_attack()
+		await card.finished
+		await _frames(1)
+		_check(not get_tree().paused and not is_instance_valid(card), "attack closes it and the game carries on")
+		await _frames(3)
+		_check(room._player._attack_timer <= 0.0 and absf(room._player.global_position.x - x0) < 1.0, "without that press swinging")
+	get_tree().reload_current_scene()
+	room = await _wait_for_room(LevelData.FIRST_ROOM, 60)
+	await _frames(3)
+	_check(get_tree().get_nodes_in_group("intro_card").is_empty() and not get_tree().paused, "dying or restarting doesn't show it again")
+	_main = room
+	await _despawn()
+	GameState.flags = {}
+

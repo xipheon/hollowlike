@@ -20,87 +20,97 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 color = Color(0.07, 0.08, 0.11, 1)
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="UI" type="CanvasLayer" parent="."]
+layer = 20
+
+[node name="Shade" type="ColorRect" parent="UI"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.04, 0.05, 0.08, 0.55)
+
+[node name="Center" type="CenterContainer" parent="UI"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 
-[node name="MainBox" type="VBoxContainer" parent="Center"]
+[node name="MainBox" type="VBoxContainer" parent="UI/Center"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="Title" type="Label" parent="Center/MainBox"]
+[node name="Title" type="Label" parent="UI/Center/MainBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 52
 text = "UI_TITLE"
 horizontal_alignment = 1
 
-[node name="Spacer" type="Control" parent="Center/MainBox"]
+[node name="Spacer" type="Control" parent="UI/Center/MainBox"]
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 
-[node name="StartButton" type="Button" parent="Center/MainBox"]
+[node name="StartButton" type="Button" parent="UI/Center/MainBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_MENU_START"
 
-[node name="LevelSelectButton" type="Button" parent="Center/MainBox"]
+[node name="LevelSelectButton" type="Button" parent="UI/Center/MainBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_MENU_LEVEL_SELECT"
 
-[node name="LanguageButton" type="Button" parent="Center/MainBox"]
+[node name="LanguageButton" type="Button" parent="UI/Center/MainBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_MENU_LANGUAGE"
 
-[node name="QuitButton" type="Button" parent="Center/MainBox"]
+[node name="QuitButton" type="Button" parent="UI/Center/MainBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_MENU_QUIT"
 
-[node name="LevelBox" type="VBoxContainer" parent="Center"]
+[node name="LevelBox" type="VBoxContainer" parent="UI/Center"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="Title" type="Label" parent="Center/LevelBox"]
+[node name="Title" type="Label" parent="UI/Center/LevelBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 40
 text = "UI_LEVEL_SELECT_TITLE"
 horizontal_alignment = 1
 
-[node name="Spacer" type="Control" parent="Center/LevelBox"]
+[node name="Spacer" type="Control" parent="UI/Center/LevelBox"]
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 
-[node name="Levels" type="VBoxContainer" parent="Center/LevelBox"]
+[node name="Levels" type="VBoxContainer" parent="UI/Center/LevelBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="FirstTestRoom" type="Button" parent="Center/LevelBox/Levels"]
+[node name="FirstTestRoom" type="Button" parent="UI/Center/LevelBox/Levels"]
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_LEVEL_FIRST_TEST_ROOM"
 script = ExtResource("2")
 room = "first_test_room"
 
-[node name="Boss" type="Button" parent="Center/LevelBox/Levels"]
+[node name="Boss" type="Button" parent="UI/Center/LevelBox/Levels"]
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_LEVEL_BOSS"
 script = ExtResource("2")
 room = "boss"
 
-[node name="Climb" type="Button" parent="Center/LevelBox/Levels"]
+[node name="Climb" type="Button" parent="UI/Center/LevelBox/Levels"]
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_LEVEL_CLIMB_DASH"
@@ -109,7 +119,7 @@ room = "climb"
 flags = Array[String](["warden_defeated"])
 items = Array[ExtResource("item_res")]([ExtResource("item_boots"), ExtResource("item_heart")])
 
-[node name="Aerie" type="Button" parent="Center/LevelBox/Levels"]
+[node name="Aerie" type="Button" parent="UI/Center/LevelBox/Levels"]
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_LEVEL_AERIE_DASH"
@@ -118,13 +128,13 @@ room = "aerie"
 flags = Array[String](["warden_defeated"])
 items = Array[ExtResource("item_res")]([ExtResource("item_boots"), ExtResource("item_heart")])
 
-[node name="BackButton" type="Button" parent="Center/LevelBox"]
+[node name="BackButton" type="Button" parent="UI/Center/LevelBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_BACK"
 
-[node name="Hint" type="Label" parent="."]
+[node name="Hint" type="Label" parent="UI"]
 modulate = Color(1, 1, 1, 0.5)
 layout_mode = 1
 anchors_preset = 12

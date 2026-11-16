@@ -19,6 +19,8 @@ const PALETTE := {
 	"M": Color8(196, 204, 212),   # steel, lit
 	"T": Color8(46, 48, 58),      # tape
 	"t": Color8(84, 88, 104),     # tape, lit
+	"l": Color8(74, 80, 96),      # lead
+	"L": Color8(132, 140, 160),   # lead, lit
 }
 const ICONS := {
 	"dash_boots": [
@@ -91,6 +93,24 @@ const ICONS := {
 		"kMmmk...........",
 		"kMmk............",
 		"kkk.............",
+		"................",
+	],
+	"lead_core": [
+		"................",
+		"................",
+		"................",
+		"....kkkkkkkk....",
+		"...kLLLLLLLLk...",
+		"..kLLLLLLLLllk..",
+		"..kLlllllllllk..",
+		".kLllllllllllk..",
+		".kLlllllllllllk.",
+		".kllllllllllllk.",
+		".kllllllllllllk.",
+		".kkkkkkkkkkkkkk.",
+		"................",
+		"................",
+		"................",
 		"................",
 	],
 }

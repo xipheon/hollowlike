@@ -219,7 +219,7 @@ func take_carried_health(full: int) -> int:
 
 ## Wipe progress and load the first room (from the main menu).
 func start_new_game() -> void:
-	start_at_room("first_test_room")
+	start_at_room(LevelData.FIRST_ROOM)
 
 
 ## Wipe progress and load any room at its PlayerStart (level select), with

@@ -1,11 +1,13 @@
 extends Control
-## Title screen: Start a new game, pick a level, switch Language, or Quit.
-## Laid out in scenes/main_menu.tscn; edit it there. Its text is translation
-## keys (UI_..., in localization/<language>/ui.po).
-## Level Select lists the LevelButtons under Levels in that scene: add,
-## remove, reorder and label them there, and set which room each starts and
-## with which abilities. It's a debug tool: it only shows in debug mode (the
-## editor, debug exports), not in release exports.
+## Title screen, over a view of the room a new game starts in (the Backdrop):
+## start a New Game, switch Language, or Quit. Laid out in
+## scenes/main_menu.tscn; edit it there (everything you see is under UI, a
+## layer of its own so the room's dimming doesn't reach it). Its text is
+## translation keys (UI_..., in localization/<language>/ui.po).
+## Test Rooms lists the LevelButtons under Levels in that scene: add, remove,
+## reorder and label them there, and set which room each starts and with which
+## abilities. It's a debug tool: it only shows in debug mode (the editor,
+## debug exports), not in release exports.
 
 @onready var start_button: Button = %StartButton
 @onready var level_select_button: Button = %LevelSelectButton
@@ -21,6 +23,7 @@ var level_buttons := {}
 
 
 func _ready() -> void:
+	_add_backdrop()
 	start_button.pressed.connect(func() -> void: GameState.start_new_game())
 	level_select_button.pressed.connect(show_level_select)
 	level_select_button.visible = GameState.debug_mode
@@ -33,6 +36,16 @@ func _ready() -> void:
 		if button is LevelButton:
 			level_buttons[button.room] = button
 	show_main()
+
+
+## The first room, as a picture behind the menu (Room.backdrop), over the
+## plain Background and under the UI layer.
+func _add_backdrop() -> void:
+	var room: Room = load(LevelData.ROOMS[LevelData.FIRST_ROOM].scene).instantiate()
+	room.name = "Backdrop"
+	room.backdrop = true
+	add_child(room)
+	move_child(room, $Background.get_index() + 1)
 
 
 ## The language changed: text built here follows (the rest translates itself).

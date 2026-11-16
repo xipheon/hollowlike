@@ -11,7 +11,7 @@ extends Node2D
 ##               girders and pipes (props_tileset.tres)
 ##   Terrain     what you stand on and what hurts (foreground_tileset.tres)
 ##   Gates       arena gates, shut during a boss fight (foreground_tileset.tres)
-##   Entities    placed enemies and bosses, a PlayerStart, RoomDoors, Arenas
+##   Entities    placed enemies, bosses and items, a PlayerStart, RoomDoors, Arenas
 ## Paint from the room's top-left (0, 0). What each tile does comes from its
 ## custom data `kind` (see tools/make_tilesets.gd); the room reads the tiles
 ## into a grid of RoomArt.Kind (solid, platform, spikes, sewer water, gate,
@@ -21,6 +21,9 @@ const TILE := 32
 const PAUSE_MENU_SCENE := preload("res://scenes/ui/pause_menu.tscn")
 const DEATH_MENU_SCENE := preload("res://scenes/ui/death_menu.tscn")
 const DIALOGUE_BOX_SCENE := preload("res://scenes/ui/dialogue_box.tscn")   # for its NPCs
+const INTRO_CARD_SCENE := preload("res://scenes/ui/intro_card.tscn")
+const BACKDROP_DRIFT := 48.0        # px the title's view of the room sways each way
+const BACKDROP_DRIFT_TIME := 14.0   # seconds, there and back
 const DEATH_MENU_DELAY := 1.0   # seconds after you die before the death screen
 const LAYER_WORLD := 1
 const LAYER_PLATFORMS := 32
@@ -68,6 +71,11 @@ const LAST_HEART_SPEED := 1.0
 ## is kept. The room shows exactly what's painted: unpainted wall is open, and
 ## the skyline shows through. Save the scene to keep it.
 @export_tool_button("Decorate wall", "TileMapLayer") var decorate_wall_action: Callable = decorate_wall
+
+## Set before the room is added: it's only a picture (behind the main menu's
+## title): its art, lights and look, seen from its PlayerStart, with no
+## player, HUD or menus.
+var backdrop := false
 
 var _grid := {}   # Vector2i -> RoomArt.Kind (EMPTY cells left out)
 var _art: RoomArt
@@ -123,6 +131,9 @@ func _ready() -> void:
 	_set_look()
 	_load_room()
 	_build_solids()
+	if backdrop:
+		_show_as_backdrop()
+		return
 	_spawn_player()
 	_hud = HUD.new()
 	add_child(_hud)
@@ -134,6 +145,30 @@ func _ready() -> void:
 	add_child(DIALOGUE_BOX_SCENE.instantiate())
 	_death_menu = DEATH_MENU_SCENE.instantiate()
 	add_child(_death_menu)
+	# A new game opens with the welcome card, once.
+	if room == LevelData.FIRST_ROOM and GameState.arrived_from == "" and not GameState.has_flag(IntroCard.SEEN_FLAG):
+		add_child(INTRO_CARD_SCENE.instantiate())
+
+
+## The room as a picture: a camera where you'd start, swaying gently.
+func _show_as_backdrop() -> void:
+	set_physics_process(false)
+	set_process_unhandled_input(false)
+	var found := entities_of(PlayerStart)
+	var at := Vector2(_w, _h) * TILE * 0.5
+	if not found.is_empty():
+		at = to_local(found[0].global_position) - Vector2(0, Player.BODY_SIZE.y)
+	var camera := Camera2D.new()
+	camera.limit_left = 0
+	camera.limit_top = 0
+	camera.limit_right = _w * TILE
+	camera.limit_bottom = _h * TILE
+	camera.position = at
+	add_child(camera)
+	camera.make_current()
+	var sway := create_tween().set_loops().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	sway.tween_property(camera, "position:x", at.x + BACKDROP_DRIFT, BACKDROP_DRIFT_TIME * 0.5)
+	sway.tween_property(camera, "position:x", at.x, BACKDROP_DRIFT_TIME * 0.5)
 
 
 func _physics_process(_delta: float) -> void:
@@ -297,6 +332,11 @@ func _load_room() -> void:
 		var at := Vector2i((to_local(door.global_position) / TILE).round())
 		_doors.append({"rect": Rect2i(at, Vector2i(1, door.height)), "target": door.target_room,
 				"arrive_at": door.arrive_at, "name": String(door.name)})
+	# Items placed in the room: gone if you've picked them up before.
+	for pickup in entities_of(ItemPickup):
+		pickup.picked_flag = "picked_%s_%s" % [room, pickup.name]
+		if GameState.has_flag(pickup.picked_flag):
+			pickup.queue_free()
 	for arena in entities_of(Arena):
 		var boss: BossBase = arena.get_node_or_null(arena.boss)
 		if boss != null:
