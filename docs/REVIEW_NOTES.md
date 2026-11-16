@@ -1,0 +1,93 @@
+# Review notes: commit 5387bd6 (the world, Reach, title backdrop, welcome card)
+
+**Verdict.** The world is laid out the way the commit says it is, and the gates that matter hold in play: you can't reach the Sin Hawk without the dash, and you can't reach the Vault without the wall jump. But `Reach` is not sound, so "out of reach is certain" is false. It doesn't model an upward dash started on the ground, and that dash keeps the air dash. A ground up-dash followed by an air up-dash lifts you 325.6 px. Reach's `dash_rise()` says 295.8. I played this in the real Span with only the dash: it reaches the alcove's Heart Container, which is meant to need the wall jump. The world test passes anyway, because it trusts Reach. The other gaps in Reach are small (under a tile) or are things it already says it ignores, and none of them opens a bypass in the current rooms. I found no soft-locks. The world segment passes (0 failed, 13 s, 11.6 s of that in `_test_world_order_by_reach`).
+
+## Confirmed
+
+### 1. Reach misses the ground up-dash, and the Span alcove falls to the dash alone
+- **What:** `Player._start_dash` (scripts/player.gd:499) only spends the air dash when `not on_floor`. A dash straight up (or up-diagonal) started on the ground leaves `_air_dash_available` true. Once the cooldown is over (`dash_duration + dash_cooldown`, 0.47 s from the start), you can air-dash again. Reach models a ground dash only sideways, off a ledge (scripts/reach.gd:234-240, a `FALL` launch). Its best vertical move is a jump plus one air dash (reach.gd:80, `dash_rise()` = 295.8 px).
+- **Numbers (played, headless, real Player in scenes/world/span.tscn):**
+  - Jump, then an up-dash at the apex: feet rise 287.9 px.
+  - Ground up-dash, then an air up-dash as soon as the cooldown ends: feet rise **325.6 px**.
+  - Reach's `dash_rise()`: 295.8 px. So Reach is about 30 px short of what the player can really do.
+- **Scenario:** Have only the dash. Stand on the Span's catwalk at col 45, row 15 (feet y 512). Hold up, dash, dash again after the cooldown, then hold right near the top. Your feet reach y 186.4. The alcove floor is at y 192 (row 6), so you are 5.6 px above it, and you land in the alcove at (47, 6) with the Heart Container. `Reach.cells_from(Vector2i(45, 15), ["dash"])` returns no alcove cells. `_test_world_order_by_reach` (tests/gameplay_test.gd, the "but not the Span's alcove or the Vault" check) passes, but what it asserts is false in play.
+- **Also affected:** the Entrance wall to the Vault needs 352 px. The real best is 325.6, so it still holds, but the margin is 26 px, not the ~56 px Reach implies. The played check `_climb_wall(..., dash_up=true)` only tries a jump followed by a dash, so it never tests the stronger move.
+- **Fix:**
+  - In `Reach._fly`, when `launch == JUMP and _dash`, also dash from the ground: up, both up-diagonals, and the sideways steps already there. Launch `DASH_END` with `dashed = false`, for example a `_dash_from` variant that takes `dashed`.
+  - Add a played check for ground up-dash plus air up-dash next to the jump-height one in `_test_reach_matches_play`.
+  - For the room: move the alcove one row higher in the `span` plan (alcove floor at row 5), so the dash-only best (feet at y 186.4) falls short of the new floor at y 160. Or lower the catwalk at (43, 16). Then rebuild `span`.
+
+## Plausible (reasoned from the code and arithmetic, not played)
+
+### 2. Dashing off a ledge and then jumping in coyote time goes further than Reach allows
+- **What:** coyote time keeps running during a dash. A ground dash that leaves the ledge in its last ~0.1 s still allows a full jump (113 px) on the first frame after the dash, and the air dash is unspent. The dash carries you about 55 px past where a run would (4 frames at 13.7 px instead of 5.3 px). You leave the ground at about 79 px past the edge, at ledge height, with no fall yet.
+- **Where Reach falls short:** a `JUMP` launch counts coyote as `run_speed * coyote_time` = 32 px (reach.gd:212). The ground-dash `FALL` launch has no jump (reach.gd:240, rise 4 px). By my estimate, the real horizontal position at a given height runs about 15-25 px past Reach's limit. That is sometimes one more column, both before and after the follow-up air dash.
+- **Scenario:** no current gate depends on it. The gaps it could matter at (hub, tunnels ledge) are crossed with the dash anyway, and the vertical gates are far from any ledge. It would bite a future gap that sits within a tile of the limit.
+- **Fix:** add `(dash_speed - run_speed) * coyote_time` to the `JUMP` spans when `_dash` is set. Or, from a ground-dash `FALL` cell no further than `dash_speed * coyote_time` past the edge, also queue a `JUMP` launch with the air dash unspent.
+
+### 3. Heights can come out up to about 0.6 px short
+- **What:** this has two parts.
+  - `_rise_at` (reach.gd:87) gives 113.12 px for the jump, but stepping the frames gives 113.17. The discrete maximum can exceed the formula by up to g/(8·tps²), which is 0.07 px here.
+  - `_launch` prunes a launch when an earlier one was up to 0.5 px lower (`b[0] <= y + 0.5`, reach.gd:196). The same applies in `_dash_from` (reach.gd:280).
+- **Impact:** small, but it contradicts "heights exact to the pixel" and could flip a layout that sits within a pixel of the limit.
+- **Fix:** add `_g / (8.0 * tps * tps)` to `_rise_at`. Prune only when the earlier launch is as high or higher (`b[0] <= y`), or add 0.5 px back to the rises.
+
+### 4. Moves Reach ignores, and why they don't break these rooms
+- **Pogo (`_recoil`):** hitting something from above sends you up at `hit_recoil` and gives back the air dash.
+  - Lift per bounce: 300 px/s for crawlers, bosses and the default, about 26 px; 180 px/s for the thug, about 10 px.
+  - Crawlers don't climb walls (scripts/enemy_crawler.gd: they turn at walls and ledges), and every crawler and thug in the world stands on a floor. Without the dash, a bounce never beats a plain jump: your feet bounce at roughly the enemy's height plus the swing's reach plus 26 px, well under 113 px.
+  - With the dash, each bounce is worth about +26 px plus a fresh dash (about 174 px). No enemy sits near the shaft, the hub gap or the Vault wall.
+  - Spikes can't be bounced on: `_on_attack_area_entered` only recoils off the "breakable" group.
+  - Ceiling crawlers can only be hit from below, which pushes you down.
+- **Knockback** (`knockback` = (500, -300)): about 26 px of lift, plus about 84 px sideways during the 0.22 s stun. The hub has no enemies, so nothing helps you over its gap. In the Tunnels, the thug and the pink crawler stand on the floor, far below ledges C and D.
+- **I-frames over spikes:** spikes are an Area2D only (room.gd `_add_spikes`), so you stand inside the spike cell. After an enemy hit you get 0.5 s of invulnerability, 0.22 s of it stunned. In that window you can stand on spikes and jump off them, which Reach never allows (spikes neither hold you nor let you through). This only matters in the Span's pits, which you can only reach with the dash. Acid kills through invulnerability.
+- **Moving platforms:** there are none in scenes/world, so nothing to model.
+- **Fix:** none is needed now. Do add a line to Reach's header saying that enemies and spike i-frames make "out of reach" conditional on there being no enemy near the gate.
+
+### 5. The backdrop only stops the Room itself
+- **What:** `Room._show_as_backdrop` (room.gd) turns off the Room's own physics and unhandled input. Enemies, NPCs and bosses under Entities still run their own `_physics_process`, with no player in the tree. The Entrance has none, so nothing goes wrong today. Change `LevelData.FIRST_ROOM` to a room with enemies and the title screen would run crawlers, along with any sounds, errors or null-player paths they have.
+- **Fix:** when `backdrop` is set, set `entities().process_mode = PROCESS_MODE_DISABLED` (the camera sway tween is on the room, so it keeps running), or free the enemies.
+
+### 6. A placed item's picked flag follows its node name
+- **What:** room.gd:337 sets `picked_<room>_<node name>`.
+  - Renaming the node in the editor makes an item you already picked up come back in existing saves.
+  - `entities_of` searches recursively, so two pickups with the same name under different parents share a flag: picking up one removes the other.
+- **Fix:** add an exported `pickup_id` (defaulting to the node name), or use the path relative to Entities. Warn about duplicates when the room loads.
+
+### 7. The welcome card's controls line hard-codes the keys
+- **What:** `UI_INTRO_CONTROLS` names A/D, Space, J and Esc. If bindings ever become remappable, it will be wrong. It also leaves out the dash.
+- **Status:** it is a translation key, so the project's string rule is met. This is minor.
+
+## Project rules
+- **Tests hard-code layout numbers instead of reading them:**
+  - `far - edge >= 9`, `edge - 6` and `ledge_row + 4` in `_test_hub_gap_needs_dash`.
+  - `floor_row - top_row >= 10` in `_test_entrance_wall_needs_wall_jump`.
+  - `ids.size() >= 7` in `_test_world_rooms_join_up`.
+  - `all.items.size() >= 4` in `_test_world_order_by_reach`.
+  - `from + Vector2i(6, 0)` and the 4.0 px tolerance in `_test_reach_matches_play`.
+  - The literal `"picked_tunnels_HeartContainer"` in `_test_placed_item_pickup`, which could be built from `room.room` and `heart.name`.
+
+  The gap and wall sizes could come from `tools/build_world.gd`'s ROOMS, or from Reach (for example, "the gap is wider than a jump covers per Reach").
+- **Strings:** every new player-visible string I found is a key in localization/en/ui.po (UI_INTRO_*, UI_MENU_*).
+- **Comments:** they match the house style. One is now wrong: reach.gd:9-16 says heights are exact and that "out of reach" is certain. Correct it along with finding 1.
+
+## Checked and fine
+- **Jump height:** Reach's 113.1 px matches play (113.17 px). Jump buffering adds no height. Variable jump height only shortens jumps.
+- **Dash:** Reach's length of 153.1 px is more than the real 150.3 px (11 frames). The exit at `run_speed` gives 24 px of lift in play, and Reach allows 29.6. There is one air dash per landing, and wall sliding doesn't refresh it, which matches Reach. Down-dashes are covered by Reach's sideways dash followed by a fall.
+- **Wall jump:** Reach allows 5 per landing (100/20) and ignores the stamina the dash spends, which is generous. It ignores the 0.15 s lock and steers at full run speed, also generous. A wall at head height is covered, because Reach lets your feet into that cell even where the body wouldn't fit.
+- **Falls:** the ±1 column per row below the launch row is enough, because real fall speed by then keeps you under 32 px sideways per row.
+- **One-way drop-through:** it only goes down, which Reach's falls cover.
+- **Hub gap:** 10 tiles. The best jump with no abilities is about 230 px, against the 298 px needed. There are no enemies in the hub.
+- **Tunnels:** ledge D needs the dash. The acid (3 tiles) and spikes (4 tiles) can be jumped. Dropping through the catwalk over the acid kills you; that is a hazard, not a soft-lock.
+- **Entrance and Vault:** you can't reach the Vault without the wall jump, with or without the dash: 352 px are needed and the real best is 325.6 px. The step and the catwalk are 20+ tiles from the wall.
+- **Span's second pit:** the catwalk at (53, 22) sits level with the floor, so the pit is two 4-tile jumps. That's harmless, because the Span is only reachable with the dash.
+- **Soft-locks:** none found. Every ledge and pit drops back to the floor, spike pits put you back on safe ground, and each arena's gate reopens after the fight.
+- **Arenas:** both match the conventions in boss_room.tscn and aerie_room.tscn: 28×11 and 28×13, the gate one column left of the Arena, and the fight starting `ARENA_TRIGGER_INSET` (3) tiles in. The Warden's arena is at (9, 4) and the Hawk's at (5, 3), and the scenes match their plans.
+- **Welcome card:**
+  - It is `PROCESS_MODE_ALWAYS` and pauses the game.
+  - The pause menu won't open while the game is paused (pause_menu.gd:72), so it can't unpause behind the card.
+  - The card waits two physics frames before unpausing, so the press that closes it doesn't also swing.
+  - It shows once, and a new game wipes its flag.
+- **Main menu:** the UI layer (20) sits over the room's grade. The backdrop's unhandled input is off, so the restart key and debug keys don't fire on the title screen.
+- **ItemPickup:** the `@tool` changes are guarded by `Engine.is_editor_hint()`. The placed-pickup flags can't collide with boss-drop flags (`picked_<room>_<index>`) unless a node is named with a bare number.
+- **Test cleanup:** the world tests free the rooms and the Player they load (`_close_world`, `_test_world_rooms_join_up`), and the world segment reports no leaks.

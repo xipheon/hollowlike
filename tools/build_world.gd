@@ -41,12 +41,12 @@ const ROOMS := {
 	"entrance": {
 		"root": "Entrance", "size": Vector2i(40, 26), "ceiling": 3, "floor": 2,
 		"ops": [
-			["#", 1, 13, 6, 11],     # the wall to the Vault's ledge
+			["#", 1, 12, 6, 12],     # the wall to the Vault's ledge: 12 tiles, past a ground dash and an air dash
 			["#", 22, 22, 4, 2],     # a step to jump onto,
 			["=", 28, 20, 5, 1],     # and a catwalk from it: far from the wall, so they're no help up it
 		],
 		"doors": [
-			{"name": "VaultDoor", "side": "left", "top": 10, "target": "vault"},
+			{"name": "VaultDoor", "side": "left", "top": 9, "target": "vault"},
 			{"name": "HubDoor", "side": "right", "top": 21, "target": "hub"},
 		],
 		"things": [["start", 11, 23]],
@@ -105,8 +105,9 @@ const ROOMS := {
 		"root": "Span", "size": Vector2i(66, 26), "ceiling": 11, "floor": 4,
 		"ops": [
 			[" ", 12, 22, 10, 2], ["^", 12, 24, 10, 1],
-			["=", 38, 19, 4, 1], ["=", 43, 16, 5, 1],   # up to the shaft's mouth
-			[" ", 44, 3, 3, 8],      # the shaft
+			["=", 38, 20, 4, 1], ["=", 43, 18, 5, 1],   # up to the shaft's mouth
+			[" ", 44, 3, 3, 8],      # the shaft: its floor 12 tiles up, past a ground dash and an air dash
+			["#", 43, 11, 1, 3], ["#", 47, 11, 1, 3],   # its walls, down to where a jump can catch them
 			[" ", 47, 3, 6, 3],      # the Heart Container's alcove
 			[" ", 49, 22, 10, 2], ["^", 49, 24, 10, 1],
 			["=", 53, 22, 2, 1],     # a rest halfway over the second pit

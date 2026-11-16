@@ -76,9 +76,10 @@ func jump_rise() -> float:
 	return _rise[Launch.JUMP]
 
 
-## How high a jump and a dash straight up lift your feet, in px.
+## The most the dash lifts your feet, in px: a dash straight up from the
+## ground (which leaves the air dash unspent), then the air dash up.
 func dash_rise() -> float:
-	return _rise[Launch.JUMP] + _dash_length + _rise[Launch.DASH_END]
+	return (_dash_length + _rise[Launch.DASH_END]) * 2.0
 
 
 ## How high leaving at `speed` px/s upward lifts you, in px: the arc's
@@ -231,9 +232,14 @@ func _fly(launch: Launch, x0: int, y0: float, jumps: int, dashed: bool) -> void:
 				continue
 			seen[next] = true
 			found.append(next)
-	# A dash along the ground can carry you off a ledge, the air dash unspent.
+	# A dash from the ground leaves the air dash unspent: along it and off a
+	# ledge, or up (straight, or to a side) and on into the air dash.
 	if launch == Launch.JUMP and _dash:
+		_dash_to(x0, y0, x0, y0 - _dash_length, 0, false)
+		var across := _dash_length * DIAGONAL
 		for side: int in [-1, 1]:
+			for step in range(1, int((across + TILE) / TILE) + 1):
+				_dash_to(x0, y0, x0 + side * step, y0 - across, 0, false)
 			for step in range(1, int((_dash_length + TILE) / TILE) + 1):
 				if not _open(x0 + side * step, row0):
 					break
@@ -281,22 +287,23 @@ func _dash_from(x: int, row: int, y: float, jumps: int) -> void:
 			return
 	before.append([y, jumps])
 	_dashed_from[key] = before
-	_dash_to(x, y, x, y - _dash_length, jumps)
+	_dash_to(x, y, x, y - _dash_length, jumps, true)
 	var across := _dash_length * DIAGONAL
 	for side: int in [-1, 1]:
 		# A dash that meets a wall slides along it, so it can end short.
 		for step in range(1, int((across + TILE) / TILE) + 1):
-			_dash_to(x, y, x + side * step, y - across, jumps)
+			_dash_to(x, y, x + side * step, y - across, jumps, true)
 		for step in range(1, int((_dash_length + TILE) / TILE) + 1):
-			_dash_to(x, y, x + side * step, y, jumps)
+			_dash_to(x, y, x + side * step, y, jumps, true)
 
 
-func _dash_to(x: int, y: float, to_x: int, to_y: float, jumps: int) -> void:
+## `spent`: whether it was the air dash (one from the ground isn't).
+func _dash_to(x: int, y: float, to_x: int, to_y: float, jumps: int, spent: bool) -> void:
 	var from := Vector2((x + 0.5) * TILE, y)
 	var to := Vector2((to_x + 0.5) * TILE, to_y)
 	if _clear(from, to) or (_clear(from, Vector2(to.x, from.y)) and _clear(Vector2(to.x, from.y), to)) \
 			or (_clear(from, Vector2(from.x, to.y)) and _clear(Vector2(from.x, to.y), to)):
-		_launch(Launch.DASH_END, to_x, to_y, jumps, true)
+		_launch(Launch.DASH_END, to_x, to_y, jumps, spent)
 
 
 ## Whether feet can go straight from `from` to `to` (px) through open cells.
