@@ -81,11 +81,21 @@ Rooms are scenes made in the Godot editor. Each tile you paint says what it is (
 
      In game, standing in its talk range (the box drawn in the editor) on the ground, attack talks to it instead of swinging.
    - **Bosses:** `scenes/bosses/warden.tscn` and `harrier.tscn`. Each needs an **Arena** node (`scripts/arena.gd`). Its origin is the arena's top-left corner, and `size_tiles` is its size. Point its `boss` at the boss node. The fight starts a few tiles past a gate, and the camera frames the arena. A beaten boss drops its rewards (items) where it falls: the Warden, Dash Boots and a Heart Container; the Harrier, Climbing Spurs and a Heart Container. Any left behind are still there when you come back.
+   - **Items:** add an Area2D with `scripts/item_pickup.gd`, set its **Item** (a file in `items/`), and put it 22 px above the floor. It's picked up once: the room remembers it by the node's name, so don't rename one after release.
    - **PlayerStart** (`scripts/player_start.gd`): where a fresh game starts, at the player's feet. Players coming through a door arrive at the door instead.
    - **RoomDoor** (`scripts/room_door.gd`): put it over the door tiles, with its origin at the doorway's top-left corner. Set its `height` in tiles, and choose `target_room` from the list. `arrive_at` names the door to arrive at in that room. Leave it empty to arrive at the door there that leads back.
 
    PlayerStart, RoomDoor and Arena show labels in the editor and are hidden in the game.
 9. **Play it.** Press F6 to run just this scene. Without a PlayerStart, the player appears at a door. Run the tests too (see `tests/gameplay_test.gd`).
+
+### The world's rooms
+
+The game's own rooms are in `scenes/world/`. They were first built from the plans in `tools/build_world.gd` (ground, catwalks, hazards, doors and what stands where, as rectangles in tiles), and are ordinary room scenes since: edit them in the editor like any other.
+
+- Running `godot --headless --path . res://tools/build_world.tscn` builds only rooms that don't exist yet. Naming a room after `--` rebuilds it from its plan, **replacing your edits to it**.
+- A new game starts in `LevelData.FIRST_ROOM`. The main menu shows that room behind the title.
+- **What's locked behind what** is checked by the `world` test segment. `scripts/reach.gd` works out everywhere the player could possibly get to in a room from the player's own jump, dash and wall jump settings, and the tests walk the whole world with it: the Warden must be the only boss in reach at the start, the Sin Hawk only with the dash, and everything with the wall jump too. If you change a room, or the player's jump or dash, run that segment: it names any path that opened or closed. As a guide, a jump clears 3 tiles up, a jump and a dash 9, and a gap needs 10 or more tiles to need the dash.
+- `godot --path . res://tools/make_contact_sheet.tscn` draws every world room on one image, `build/world_contact_sheet.png`.
 
 **Items** live in `items/` (one `Item` resource each: its name and description keys in `ui.po`, its icon in `art/items/`, drawn by `tools/make_item_icons.gd`). An item can grant an ability, add health (a Heart Container: 2, a whole heart) or add damage, and can stack. A boss drops its `rewards`, and an NPC's dialogue line can give one (`give_item`: a Received card follows the line). Everything you hold is in the pause menu's Inventory.
 

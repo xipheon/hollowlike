@@ -22,6 +22,7 @@ extends Node
 const TILE := 32
 const TEMPLATE := "res://scenes/rooms/room_template.tscn"
 const DOOR_HEIGHT := 3
+const LIGHT_EVERY := 7   # columns between the bulbs hung under every ceiling and ledge, so no room is dark
 const SCENES := {
 	"crawler": "res://scenes/enemies/crawler_sewer.tscn", "ceiling": "res://scenes/enemies/crawler_sewer.tscn",
 	"sickly": "res://scenes/enemies/crawler_sickly.tscn", "pink": "res://scenes/enemies/crawler_pink.tscn",
@@ -186,6 +187,7 @@ func _build(id: String, path: String) -> void:
 	room.room = id
 	_paint(room.terrain(), room.gates())
 	room.decorate_wall()
+	_light(room.background(), room.props())
 
 	var entities := room.entities()
 	entities.get_node("PlayerStart").free()
@@ -250,6 +252,23 @@ func _paint(terrain: TileMapLayer, gates: TileMapLayer) -> void:
 					terrain.set_cell(cell, 0, RoomArt.DOOR_TOP if _at(x, y - 1) == "#" else RoomArt.DOOR)
 				"|":
 					gates.set_cell(cell, 0, RoomArt.GATE_END if _at(x, y + 1) != "|" else RoomArt.GATE)
+
+
+## Hangs lit bulbs under every ceiling and ledge, LIGHT_EVERY columns apart
+## (Decorate wall hangs few, and leaves some dead), on plain brick only.
+func _light(background: TileMapLayer, props: TileMapLayer) -> void:
+	for y in range(1, _size.y):
+		var since := LIGHT_EVERY / 2
+		for x in _size.x:
+			since += 1
+			var cell := Vector2i(x, y)
+			if _at(x, y - 1) != "#" or _at(x, y) != " ":
+				continue
+			if props.get_cell_atlas_coords(cell) == RoomArt.LIGHT_LIT:
+				since = 0
+			elif since >= LIGHT_EVERY and props.get_cell_source_id(cell) in [-1, RoomArt.PROPS_SOURCE] 					and background.get_cell_atlas_coords(cell) in RoomArt.WALLS 					and (props.get_cell_source_id(cell) == -1 or props.get_cell_atlas_coords(cell) == RoomArt.LIGHT_DEAD):
+				props.set_cell(cell, RoomArt.PROPS_SOURCE, RoomArt.LIGHT_LIT)
+				since = 0
 
 
 func _place(entities: Node2D, counts: Dictionary, thing: Array) -> void:
