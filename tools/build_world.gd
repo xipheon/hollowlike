@@ -55,18 +55,20 @@ const ROOMS := {
 	# The junction: the guard, the way down to the Tunnels, and the upper door
 	# to the Span across a gap only a dash clears.
 	"hub": {
-		"root": "Hub", "size": Vector2i(50, 30), "ceiling": 3, "floor": 2,
+		# Tall, so the Span (up right) and the Tunnels (down right) sit apart on the map.
+		"root": "Hub", "size": Vector2i(50, 40), "ceiling": 3, "floor": 2,
 		"ops": [
-			["=", 10, 25, 5, 1], ["=", 15, 22, 5, 1], ["=", 10, 19, 5, 1], ["=", 15, 16, 5, 1],
-			["#", 20, 13, 10, 2],    # this side of the gap
-			["#", 40, 13, 9, 2],     # the far side, and the Span's door
+			["=", 15, 35, 5, 1], ["=", 10, 32, 5, 1], ["=", 15, 29, 5, 1], ["=", 10, 26, 5, 1],
+			["=", 15, 23, 5, 1], ["=", 10, 20, 5, 1], ["=", 15, 17, 5, 1],
+			["#", 20, 14, 10, 2],    # this side of the gap
+			["#", 40, 14, 9, 2],     # the far side, and the Span's door
 		],
 		"doors": [
-			{"name": "EntranceDoor", "side": "left", "top": 25, "target": "entrance"},
-			{"name": "SpanDoor", "side": "right", "top": 10, "target": "span"},
-			{"name": "TunnelsDoor", "side": "right", "top": 25, "target": "tunnels"},
+			{"name": "EntranceDoor", "side": "left", "top": 35, "target": "entrance"},
+			{"name": "SpanDoor", "side": "right", "top": 11, "target": "span"},
+			{"name": "TunnelsDoor", "side": "right", "top": 35, "target": "tunnels"},
 		],
-		"things": [["start", 3, 27], ["guard", 7, 27], ["bench", 24, 27]],
+		"things": [["start", 3, 37], ["guard", 7, 37], ["bench", 26, 37]],
 	},
 	# The way to the Warden. The ledge up on the right, past a dash gap, holds
 	# a Heart Container for when you come back.

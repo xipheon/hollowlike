@@ -16,6 +16,9 @@ const SKIN_MARK := "▶  "   # in front of the skin being worn
 @onready var _main_box: Control = %MainBox
 @onready var _skin_box: Control = %SkinBox
 @onready var _inventory_box: Control = %InventoryBox
+@onready var _map_box: Control = %MapBox
+@onready var _map_button: Button = %MapButton
+@onready var map_view: MapView = %MapView
 @onready var _inventory_button: Button = %InventoryButton
 @onready var _items: Control = %Items
 @onready var _item_description: Label = %ItemDescription
@@ -43,6 +46,8 @@ func _ready() -> void:
 	_kill_boss_button.pressed.connect(_debug_kill_boss)
 	%SkinBackButton.pressed.connect(show_main)
 	_inventory_button.pressed.connect(show_inventory)
+	_map_button.pressed.connect(show_map)
+	%MapBackButton.pressed.connect(show_main)
 	%InventoryBackButton.pressed.connect(show_main)
 	_item_template = %ItemTemplate
 	_items.remove_child(_item_template)
@@ -82,13 +87,30 @@ func open() -> void:
 func show_main() -> void:
 	var from_skins := _skin_box.visible
 	var from_inventory := _inventory_box.visible
+	var from_map := _map_box.visible
 	_skin_box.visible = false
 	_inventory_box.visible = false
+	_map_box.visible = false
 	_main_box.visible = true
 	if from_skins:
 		_skin_button.grab_focus()   # cursor back on the button that led here
 	elif from_inventory:
 		_inventory_button.grab_focus()
+	elif from_map:
+		_map_button.grab_focus()
+
+
+## The map: the rooms you've been in, and where you are.
+func show_map() -> void:
+	_main_box.visible = false
+	_map_box.visible = true
+	var room := get_parent() as Room
+	if room != null:
+		map_view.here = room.room
+		if room._player != null:
+			map_view.you = room.to_local(room._player.global_position)
+	map_view.queue_redraw()
+	%MapBackButton.grab_focus()
 
 
 ## The inventory: a button per item you hold (name, and how many if more than
@@ -156,7 +178,7 @@ func close() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if is_open() and (_skin_box.visible or _inventory_box.visible) and event.is_action_pressed("ui_cancel"):
+	if is_open() and (_skin_box.visible or _inventory_box.visible or _map_box.visible) and event.is_action_pressed("ui_cancel"):
 		show_main()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("pause"):

@@ -116,6 +116,8 @@ const SEGMENTS := {
 		"_test_save_round_trip", "_test_bench_rests_and_saves", "_test_continue_gets_you_up_at_the_bench",
 		"_test_dying_gets_you_up_at_the_bench", "_test_new_game_asks_before_starting_over", "_test_load_list_and_damaged_saves",
 	],
+	# The map page (world_map.gd, map_view.gd, the pause menu's Map).
+	"map": ["_test_map_lays_rooms_by_their_doors", "_test_map_page"],
 }
 
 const TILE := 32
@@ -1919,7 +1921,7 @@ func _test_level_select_loads_each_room() -> void:
 					expected[item.grants_ability] = true
 			_check(absf(p.global_position.x - start.global_position.x) < 2.0 and GameState.abilities == expected,
 					"%s: at its PlayerStart (col %.1f), starting abilities plus %s" % [room, p.global_position.x / TILE, granted])
-			var flags_now := GameState.flags.keys()
+			var flags_now := GameState.flags.keys().filter(func(f): return f != WorldMap.visited_flag(room))   # the map's mark
 			flags_now.sort()
 			var flags_want := progress.duplicate()
 			for item in held:
@@ -4581,3 +4583,55 @@ func _test_load_list_and_damaged_saves() -> void:
 	menu.queue_free()
 	await _frames(2)
 	_clear_saves()
+
+
+# ---------------------------------------------------------------- Map ----
+
+func _test_map_lays_rooms_by_their_doors() -> void:
+	print("The map lays the world out by its doors: every door level with the one it leads to, side by side, no rooms overlapping")
+	var rooms := WorldMap.rooms()
+	_check(_world_rooms().all(func(id): return rooms.has(id)), "every world room is on it %s" % [rooms.keys()])
+	_open_world()
+	var problems := []
+	for id in rooms:
+		var room: Room = _world_loaded[id]
+		var at: Vector2i = rooms[id].rect.position
+		for door in room.entities_of(RoomDoor):
+			var back := _arrival_door(_world_loaded[door.target_room], id, door)
+			var mine := Rect2i(at + Vector2i((door.position / TILE).round()), Vector2i(1, door.height))
+			var theirs := Rect2i(rooms[door.target_room].rect.position + Vector2i((back.position / TILE).round()), Vector2i(1, back.height))
+			if mine.position.y != theirs.position.y or mine.size.y != theirs.size.y or absi(mine.position.x - theirs.position.x) != 1:
+				problems.append("%s.%s %s vs %s.%s %s" % [id, door.name, mine, door.target_room, back.name, theirs])
+		for other in rooms:
+			if other != id and rooms[id].rect.intersects(rooms[other].rect):
+				problems.append("%s overlaps %s" % [id, other])
+	_close_world()
+	_check(problems.is_empty(), "doors meet, nothing overlaps %s" % [problems])
+
+
+func _test_map_page() -> void:
+	print("Pause > Map: the rooms you've been in, the one you're in marked with where you are")
+	await _spawn_world("hub")
+	_check(GameState.has_flag(WorldMap.visited_flag("hub")), "being in a room marks it visited")
+	GameState.set_flag(WorldMap.visited_flag("tunnels"))
+	await _press_pause()
+	var menu := _pause_menu()
+	menu._map_button.pressed.emit()
+	await _frames(2)
+	var view := menu.map_view
+	_check(menu._map_box.visible and not menu._main_box.visible and view.is_visible_in_tree(), "the map page")
+	_check(view.shown_rooms().size() == 2 and "hub" in view.shown_rooms() and "tunnels" in view.shown_rooms(),
+			"only the rooms you've been in %s" % [view.shown_rooms()])
+	_check(view.here == "hub" and absf(view.you.x - _main.to_local(_player.global_position).x) < 1.0, "you're in the hub, where you stand")
+	var hub := view.room_rect("hub")
+	var tunnels := view.room_rect("tunnels")
+	_check(Rect2(Vector2.ZERO, view.size).encloses(hub.merge(tunnels)) and absf(tunnels.position.x - hub.end.x) < 1.0,
+			"both fit on the page, the Tunnels right of the Junction")
+	var back := InputEventAction.new()
+	back.action = "ui_cancel"
+	back.pressed = true
+	Input.parse_input_event(back)
+	await _frames(1)
+	_check(menu._main_box.visible and menu._map_button.has_focus(), "back to the menu")
+	menu.close()
+	await _despawn()

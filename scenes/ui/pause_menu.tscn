@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" path="res://scripts/pause_menu.gd" id="1"]
 
+[ext_resource type="Script" path="res://scripts/map_view.gd" id="map_view"]
+
 [node name="PauseMenu" type="CanvasLayer"]
 process_mode = 3
 layer = 50
@@ -42,6 +44,12 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
 text = "UI_PAUSE_INVENTORY"
+
+[node name="MapButton" type="Button" parent="Panel/Center/MainBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "UI_PAUSE_MAP"
 
 [node name="SkinButton" type="Button" parent="Panel/Center/MainBox"]
 unique_name_in_owner = true
@@ -168,6 +176,30 @@ horizontal_alignment = 1
 autowrap_mode = 3
 
 [node name="InventoryBackButton" type="Button" parent="Panel/Center/InventoryBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 40)
+layout_mode = 2
+text = "UI_BACK"
+
+[node name="MapBox" type="VBoxContainer" parent="Panel/Center"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Panel/Center/MapBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "UI_MAP_TITLE"
+horizontal_alignment = 1
+
+[node name="MapView" type="Control" parent="Panel/Center/MapBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(720, 340)
+layout_mode = 2
+script = ExtResource("map_view")
+
+[node name="MapBackButton" type="Button" parent="Panel/Center/MapBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 40)
 layout_mode = 2

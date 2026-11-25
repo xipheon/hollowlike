@@ -135,6 +135,7 @@ func _ready() -> void:
 		_show_as_backdrop()
 		return
 	_spawn_player()
+	GameState.set_flag(WorldMap.visited_flag(room))   # for the map
 	_hud = HUD.new()
 	add_child(_hud)
 	_hud.bind_player(_player)

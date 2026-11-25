@@ -243,6 +243,15 @@ msgid "UI_INTRO_CONTINUE"
 msgstr "Press Attack or Jump to begin"
 
 #. Main menu: carry on from your newest save.
+#. Pause menu: the map of the rooms you've been in.
+msgid "UI_PAUSE_MAP"
+msgstr "Map"
+
+#. The map page's heading.
+msgid "UI_MAP_TITLE"
+msgstr "MAP"
+
+#. Main menu: carry on from your newest save.
 msgid "UI_MENU_CONTINUE"
 msgstr "Continue"
 
