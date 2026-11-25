@@ -1,6 +1,8 @@
 extends Node
-## Autoload. Persists across scene reloads (death/respawn).
-## Later: save/load, checkpoints, map discovery all live here.
+## Autoload. Persists across scene reloads (death/respawn). What a save holds
+## is to_dict() / from_dict() (see SaveSystem): add a field to both when you
+## add progress, and bump SaveSystem.VERSION when a change makes old saves
+## wrong.
 
 signal ability_unlocked(ability: String)
 signal player_skin_changed(skin_id: String)
@@ -49,6 +51,15 @@ var bosses_defeated := {}
 var carried_health := -1
 ## The player's look (PlayerSprite.SKINS). Cosmetic, so a new game keeps it.
 var player_skin := PlayerSprite.DEFAULT_SKIN
+## The campaign being played (1..SaveSystem.CAMPAIGNS), or 0 when nothing is
+## saved (the Test Rooms, the tests).
+var campaign := 0
+## Seconds played this campaign, counted while a room is running.
+var play_time := 0.0
+## The room you last rested in, and its bench (a Bench node's name): where
+## Continue puts you, and where you get up again if you die in that room.
+var rest_room := ""
+var rest_bench := ""
 
 var _fade: ColorRect
 var _transitioning := false
@@ -217,9 +228,99 @@ func take_carried_health(full: int) -> int:
 	return health
 
 
-## Wipe progress and load the first room (from the main menu).
-func start_new_game() -> void:
+## Wipe progress and load the first room (from the main menu), playing
+## `in_campaign` (its old saves are deleted; 0 saves nothing).
+func start_new_game(in_campaign := 0) -> void:
+	if in_campaign > 0:
+		SaveSystem.delete_campaign(in_campaign)
 	start_at_room(LevelData.FIRST_ROOM)
+	campaign = in_campaign
+
+
+# ------------------------------------------------------------- Saving ----
+
+## Rests at the bench `bench` in `room`: you'll get up there again if you die
+## in this room, and the game is saved (an autosave) if a campaign is being
+## played. False if saving failed.
+func rest_at(room: String, bench: String) -> bool:
+	rest_room = room
+	rest_bench = bench
+	arrived_from = ""   # you're at the bench now, not a door: dying here gets you up at it
+	if campaign <= 0:
+		return true
+	return SaveSystem.write(campaign, SaveSystem.next_auto_slot(campaign), to_dict(), save_header())
+
+
+## What a save holds: everything about this game but the language and skin.
+func to_dict() -> Dictionary:
+	var defeated := {}
+	for room in bosses_defeated:
+		var at: Vector2 = bosses_defeated[room]
+		defeated[room] = [at.x, at.y]
+	var held := []   # in the order you got them (a file's keys come back sorted)
+	for id in items:
+		held.append([id, items[id]])
+	return {
+		"abilities": abilities.duplicate(), "flags": flags.duplicate(), "items": held,
+		"bosses_defeated": defeated, "rest_room": rest_room, "rest_bench": rest_bench, "play_time": play_time,
+	}
+
+
+## Puts this game back as `d` (to_dict()) says. Items come back from their
+## files, items/<id>.tres.
+func from_dict(d: Dictionary) -> void:
+	abilities = STARTING_ABILITIES.duplicate()
+	var saved_abilities: Dictionary = d.get("abilities", {})
+	for ability in saved_abilities:
+		if abilities.has(ability):
+			abilities[ability] = bool(saved_abilities[ability])
+	flags = {}
+	var saved_flags: Dictionary = d.get("flags", {})
+	for flag in saved_flags:
+		flags[flag] = true
+	items = {}
+	_item_defs = {}
+	for entry: Array in d.get("items", []):
+		var path := "res://items/%s.tres" % entry[0]
+		if ResourceLoader.exists(path):
+			items[entry[0]] = int(entry[1])
+			_item_defs[entry[0]] = load(path)
+	bosses_defeated = {}
+	var defeated: Dictionary = d.get("bosses_defeated", {})
+	for room in defeated:
+		bosses_defeated[room] = Vector2(defeated[room][0], defeated[room][1])
+	rest_room = d.get("rest_room", "")
+	rest_bench = d.get("rest_bench", "")
+	play_time = float(d.get("play_time", 0.0))
+
+
+## What save lists show besides SaveSystem's own: the room and play time.
+func save_header() -> Dictionary:
+	return {"room": rest_room, "play_time": play_time}
+
+
+## Loads a save and goes to the bench it was made at. False (and nothing
+## changes) if it can't be read; SaveSystem.load_problem() says why.
+func load_game(in_campaign: int, slot: String) -> bool:
+	var save := SaveSystem.read(in_campaign, slot)
+	if save.is_empty() or not LevelData.ROOMS.has(save.state.get("rest_room", "")):
+		return false
+	from_dict(save.state)
+	campaign = in_campaign
+	carried_health = -1
+	_fade_to_scene(LevelData.ROOMS[rest_room].scene, "")
+	return true
+
+
+## Loads the newest save there is (the main menu's Continue). False if none.
+func continue_game() -> bool:
+	var newest := SaveSystem.latest_overall()
+	return not newest.is_empty() and load_game(newest.campaign, newest.slot)
+
+
+func _process(delta: float) -> void:
+	if campaign > 0 and not get_tree().paused and get_tree().current_scene is Room:
+		play_time += delta
 
 
 ## Wipe progress and load any room at its PlayerStart (level select), with
@@ -238,6 +339,10 @@ func start_at_room(room: String, unlocked: Array = [], progress: Array = [], hel
 		give_item(item)
 	bosses_defeated = {}
 	carried_health = -1
+	campaign = 0
+	play_time = 0.0
+	rest_room = ""
+	rest_bench = ""
 	_fade_to_scene(LevelData.ROOMS[room].scene, "")
 
 

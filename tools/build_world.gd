@@ -13,7 +13,7 @@ extends Node
 ## "~" acid or "|" an arena gate. `doors` are 3 tiles tall on the left or
 ## right wall: {name, side, top (row), target}. `things` are placed by the
 ## cell they stand in (the cell above the floor): [what, x, y, ...]:
-##   start, guard, crawler, sickly, pink, thug, ceiling (a crawler hanging
+##   start, guard, bench, crawler, sickly, pink, thug, ceiling (a crawler hanging
 ##   from the cell above), item (then its id in items/), warden / hawk (then
 ##   the arena, x, y, width, height).
 ## The wall behind is decorated the way the Decorate wall button does it.
@@ -27,12 +27,13 @@ const SCENES := {
 	"crawler": "res://scenes/enemies/crawler_sewer.tscn", "ceiling": "res://scenes/enemies/crawler_sewer.tscn",
 	"sickly": "res://scenes/enemies/crawler_sickly.tscn", "pink": "res://scenes/enemies/crawler_pink.tscn",
 	"thug": "res://scenes/enemies/thug.tscn", "guard": "res://scenes/npcs/guard.tscn",
+	"bench": "res://scenes/props/bench.tscn",
 	"warden": "res://scenes/bosses/warden.tscn", "hawk": "res://scenes/bosses/harrier.tscn",
 }
 ## Node names, and how far above the floor under its cell each one's origin is.
 const PLACED := {
 	"crawler": ["Crawler", 12.0], "sickly": ["SicklyCrawler", 12.0], "pink": ["PinkCrawler", 12.0],
-	"thug": ["Thug", 22.0], "guard": ["Guard", 0.0], "warden": ["Warden", 36.0],
+	"thug": ["Thug", 22.0], "guard": ["Guard", 0.0], "warden": ["Warden", 36.0], "bench": ["Bench", 0.0],
 }
 
 const ROOMS := {
@@ -49,7 +50,7 @@ const ROOMS := {
 			{"name": "VaultDoor", "side": "left", "top": 9, "target": "vault"},
 			{"name": "HubDoor", "side": "right", "top": 21, "target": "hub"},
 		],
-		"things": [["start", 11, 23]],
+		"things": [["start", 11, 23], ["bench", 15, 23]],
 	},
 	# The junction: the guard, the way down to the Tunnels, and the upper door
 	# to the Span across a gap only a dash clears.
@@ -65,7 +66,7 @@ const ROOMS := {
 			{"name": "SpanDoor", "side": "right", "top": 10, "target": "span"},
 			{"name": "TunnelsDoor", "side": "right", "top": 25, "target": "tunnels"},
 		],
-		"things": [["start", 3, 27], ["guard", 7, 27]],
+		"things": [["start", 3, 27], ["guard", 7, 27], ["bench", 24, 27]],
 	},
 	# The way to the Warden. The ledge up on the right, past a dash gap, holds
 	# a Heart Container for when you come back.
@@ -117,7 +118,7 @@ const ROOMS := {
 			{"name": "HawkDoor", "side": "right", "top": 19, "target": "hawk_arena"},
 		],
 		"things": [
-			["start", 3, 21], ["ceiling", 24, 11], ["crawler", 27, 21], ["thug", 33, 21],
+			["start", 3, 21], ["bench", 6, 21], ["ceiling", 24, 11], ["crawler", 27, 21], ["thug", 33, 21],
 			["sickly", 62, 21], ["item", 50, 5, "heart_container"],
 		],
 	},

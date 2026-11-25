@@ -51,11 +51,23 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 
+[node name="ContinueButton" type="Button" parent="UI/Center/MainBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 44)
+layout_mode = 2
+text = "UI_MENU_CONTINUE"
+
 [node name="StartButton" type="Button" parent="UI/Center/MainBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_MENU_START"
+
+[node name="LoadButton" type="Button" parent="UI/Center/MainBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 44)
+layout_mode = 2
+text = "UI_MENU_LOAD"
 
 [node name="LevelSelectButton" type="Button" parent="UI/Center/MainBox"]
 unique_name_in_owner = true
@@ -74,6 +86,68 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 44)
 layout_mode = 2
 text = "UI_MENU_QUIT"
+
+[node name="CampaignBox" type="VBoxContainer" parent="UI/Center"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="UI/Center/CampaignBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "UI_NEW_GAME_TITLE"
+horizontal_alignment = 1
+
+[node name="Campaigns" type="VBoxContainer" parent="UI/Center/CampaignBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="CampaignBackButton" type="Button" parent="UI/Center/CampaignBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(420, 44)
+layout_mode = 2
+text = "UI_BACK"
+
+[node name="LoadBox" type="VBoxContainer" parent="UI/Center"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="UI/Center/LoadBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "UI_LOAD_TITLE"
+horizontal_alignment = 1
+
+[node name="Saves" type="VBoxContainer" parent="UI/Center/LoadBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="LoadEmpty" type="Label" parent="UI/Center/LoadBox"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.6)
+layout_mode = 2
+text = "UI_LOAD_EMPTY"
+horizontal_alignment = 1
+
+[node name="LoadProblem" type="Label" parent="UI/Center/LoadBox"]
+unique_name_in_owner = true
+modulate = Color(1, 0.6, 0.5, 1)
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+auto_translate_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="LoadBackButton" type="Button" parent="UI/Center/LoadBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(420, 44)
+layout_mode = 2
+text = "UI_BACK"
 
 [node name="LevelBox" type="VBoxContainer" parent="UI/Center"]
 unique_name_in_owner = true

@@ -110,6 +110,12 @@ const SEGMENTS := {
 		"_test_world_rooms_join_up", "_test_world_order_by_reach", "_test_reach_matches_play",
 		"_test_hub_gap_needs_dash", "_test_entrance_wall_needs_wall_jump", "_test_placed_item_pickup",
 	],
+	# Saving: benches, what a save holds, the title's Continue, New Game and
+	# Load (save_system.gd, bench.gd, GameState to_dict / from_dict).
+	"saving": [
+		"_test_save_round_trip", "_test_bench_rests_and_saves", "_test_continue_gets_you_up_at_the_bench",
+		"_test_dying_gets_you_up_at_the_bench", "_test_new_game_asks_before_starting_over", "_test_load_list_and_damaged_saves",
+	],
 }
 
 const TILE := 32
@@ -167,9 +173,15 @@ var _main: Node2D
 var _player: Player
 
 
+## Saves the tests make go here, not with the player's own (SaveSystem.root).
+const TEST_SAVES := "user://test_saves/"
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS   # keep driving checks through the paused boss intro
 	TranslationServer.set_locale("en")   # checks read English text, whatever language is saved here
+	SaveSystem.root = TEST_SAVES
+	_clear_saves()
 	await get_tree().process_frame   # root can't take new children during startup
 	var chosen := _chosen_segments()
 	if chosen.is_empty():
@@ -182,6 +194,7 @@ func _ready() -> void:
 		for test in SEGMENTS[segment]:
 			await call(test)
 		timings.append("%s %.0fs" % [segment, (Time.get_ticks_msec() - started) / 1000.0])
+	_clear_saves()
 	print("\nRan: %s" % ", ".join(timings))
 	print("%s: %d failed check(s)" % ["PASS" if _fails == 0 else "FAIL", _fails])
 	get_tree().quit(_fails)
@@ -226,6 +239,9 @@ func _spawn_node(room: Node, boss_beaten := false) -> void:
 	GameState.player_skin = PlayerSprite.DEFAULT_SKIN
 	GameState.abilities = GameState.STARTING_ABILITIES.duplicate()
 	GameState.debug_mode = true
+	GameState.campaign = 0
+	GameState.rest_room = ""
+	GameState.rest_bench = ""
 	_main = room
 	get_tree().root.add_child(_main)
 	get_tree().current_scene = _main
@@ -1931,9 +1947,13 @@ func _test_main_menu_starts_game() -> void:
 	get_tree().root.add_child(menu)
 	get_tree().current_scene = menu
 	await _frames(2)
-	_check(menu.start_button.has_focus(), "New Game focused")
+	_check(menu.start_button.has_focus() and not menu.continue_button.visible and not menu.load_button.visible,
+			"no saves: New Game focused, no Continue or Load")
+	await _press_pad_a()
+	_check(menu.campaign_buttons.size() == SaveSystem.CAMPAIGNS and menu.campaign_buttons[0].has_focus(), "New Game lists the campaigns")
 	await _press_pad_a()
 	var room := await _wait_for_room(LevelData.FIRST_ROOM, 120)
+	_check(GameState.campaign == 1, "playing campaign 1")
 	_check(room != null, "the first room loaded (%s)" % LevelData.FIRST_ROOM)
 	_check(not GameState.has_ability("dash"), "progress reset")
 	if room != null:
@@ -4328,6 +4348,7 @@ func _test_new_game_welcome_card() -> void:
 	get_tree().current_scene = menu
 	await _frames(2)
 	menu.start_button.pressed.emit()
+	menu.campaign_buttons[0].pressed.emit()
 	var room := await _wait_for_room(LevelData.FIRST_ROOM, 120)
 	await _frames(30)   # the fade
 	var cards := get_tree().get_nodes_in_group("intro_card")
@@ -4355,3 +4376,208 @@ func _test_new_game_welcome_card() -> void:
 	await _despawn()
 	GameState.flags = {}
 
+
+# ------------------------------------------------------------- Saving ----
+
+func _clear_saves() -> void:
+	for n in range(1, SaveSystem.CAMPAIGNS + 1):
+		SaveSystem.delete_campaign(n)
+
+
+## Runs a world room as campaign `n`, past its welcome card.
+func _spawn_campaign(id: String, n := 1) -> void:
+	await _spawn_world(id)
+	GameState.campaign = n
+
+
+func _bench(room: Room) -> Bench:
+	return room.entities_of(Bench)[0]
+
+
+## Stands on the ground by `bench` and presses attack.
+func _rest(bench: Bench) -> void:
+	_player.global_position = bench.global_position - Vector2(0, Player.BODY_SIZE.y * 0.5 + 1.0)
+	_player.velocity = Vector2.ZERO
+	await _frames(4)
+	await _tap_attack()
+	await _frames(2)
+
+
+func _test_save_round_trip() -> void:
+	print("A save holds the game: abilities, items, flags, beaten bosses, where you rested and the play time")
+	var before := GameState.to_dict()
+	GameState.abilities = GameState.STARTING_ABILITIES.duplicate()
+	GameState.flags = {}
+	GameState.items = {}
+	GameState.unlock("dash")
+	GameState.give_item(HEART_CONTAINER)
+	GameState.give_item(HEART_CONTAINER)
+	GameState.give_item(DASH_BOOTS)
+	GameState.set_flag("warden_defeated")
+	GameState.bosses_defeated = {"warden_arena": Vector2(912.5, 432.0)}
+	GameState.rest_room = "hub"
+	GameState.rest_bench = "Bench"
+	GameState.play_time = 754.5
+	var parsed: Dictionary = JSON.parse_string(JSON.stringify(GameState.to_dict()))   # as it comes back from the file
+	GameState.from_dict({})
+	_check(GameState.items.is_empty() and GameState.flags.is_empty() and not GameState.has_ability("dash"), "an empty save is a fresh game")
+	GameState.from_dict(parsed)
+	_check(GameState.has_ability("dash") and not GameState.has_ability("wall_jump"), "abilities")
+	_check(GameState.item_count("heart_container") == 2 and GameState.has_item("dash_boots") and GameState.held_items()[0] == HEART_CONTAINER,
+			"items, as the same resources %s" % [GameState.items])
+	_check(GameState.max_health_bonus() == HEART_CONTAINER.max_health_bonus * 2, "and what they give")
+	_check(GameState.has_flag("warden_defeated") and GameState.has_flag("got_dash_boots"), "flags")
+	_check(GameState.bosses_defeated == {"warden_arena": Vector2(912.5, 432.0)}, "beaten bosses and where they lie")
+	_check(GameState.rest_room == "hub" and GameState.rest_bench == "Bench" and is_equal_approx(GameState.play_time, 754.5), "where you rested, and the time")
+	_check(JSON.parse_string(JSON.stringify(GameState.to_dict())) == parsed, "and saved again, it's the same save")
+	GameState.from_dict(before)
+	GameState.bosses_defeated = {}
+
+
+func _test_bench_rests_and_saves() -> void:
+	print("A bench: on the ground beside it, attack rests: full health, and the game saved (an autosave)")
+	_clear_saves()
+	await _spawn_campaign("hub")
+	var bench := _bench(_main)
+	_player.health = 3
+	_player.global_position = bench.global_position + Vector2(bench.rest_range * 3.0, -Player.BODY_SIZE.y * 0.5 - 1.0)
+	await _frames(4)
+	_check(not bench.can_talk_to(_player) and not bench.is_prompt_shown(), "too far: no prompt")
+	await _rest(bench)
+	_check(bench.is_prompt_shown(), "close: a prompt over it")
+	_check(_player.health == _player.max_health, "rested: full health (%d)" % _player.health)
+	_check(_player._attack_timer <= 0.0, "without swinging")
+	var newest := SaveSystem.latest(1)
+	_check(not newest.is_empty() and SaveSystem.is_auto(newest.slot) and newest.header.room == "hub", "saved, as an autosave, in the hub %s" % [newest])
+	_check(_main._hud._message_label.text == tr("UI_HUD_RESTED_SAVED"), "and it says so")
+	GameState.campaign = 0
+	await _rest(bench)
+	_check(SaveSystem.saves(1).size() == 1 and _main._hud._message_label.text == tr("UI_HUD_RESTED"), "in a Test Room (no campaign): rests, saves nothing")
+	await _despawn()
+
+
+func _test_continue_gets_you_up_at_the_bench() -> void:
+	print("Continue loads the newest save: you get up at its bench, with all you had")
+	_clear_saves()
+	await _spawn_campaign("span", 2)
+	GameState.give_item(DASH_BOOTS)
+	GameState.set_flag("warden_defeated")
+	var bench := _bench(_main)
+	await _rest(bench)
+	var bench_at := bench.global_position
+	await _despawn()
+	# Quit, as it were: the game forgets it all.
+	GameState.from_dict({})
+	GameState.campaign = 0
+	var menu := MENU_SCENE.instantiate()
+	get_tree().root.add_child(menu)
+	get_tree().current_scene = menu
+	await _frames(2)
+	_check(menu.continue_button.visible and menu.continue_button.has_focus() and menu.load_button.visible, "with a save: Continue, focused, and Load")
+	await _press_pad_a()
+	var room := await _wait_for_room("span", 120)
+	_check(room != null, "the Span, where you rested")
+	if room != null:
+		var p: Player = room._player
+		_check(absf(p.global_position.x - bench_at.x) < 1.0 and absf(p.global_position.y + Player.BODY_SIZE.y * 0.5 - bench_at.y) < 2.0,
+				"getting up at its bench")
+		_check(GameState.campaign == 2 and GameState.has_ability("dash") and GameState.has_item("dash_boots") and GameState.has_flag("warden_defeated"),
+				"campaign 2, with the dash, the boots and the Warden beaten")
+		_check(get_tree().get_nodes_in_group("intro_card").is_empty(), "no welcome card")
+	await _frames(30)
+	_main = room
+	await _despawn()
+
+
+func _test_dying_gets_you_up_at_the_bench() -> void:
+	print("Dying in the room you rested in gets you up at its bench, even having come in by a door")
+	_clear_saves()
+	await _spawn_campaign("hub")
+	GameState.arrived_from = "tunnels"   # came in through the Tunnels' door
+	var bench := _bench(_main)
+	await _rest(bench)
+	var bench_x := bench.global_position.x
+	var room := _main
+	_player.kill()
+	_check(await _wait_for_death_screen(room, 120), "died")
+	room._death_menu.respawn_button.pressed.emit()
+	room = await _wait_for_room("hub", 60)
+	await _frames(3)
+	_check(room != null and absf(room._player.global_position.x - bench_x) < 1.0, "got up at the bench")
+	_main = room
+	await _despawn()
+
+
+func _test_new_game_asks_before_starting_over() -> void:
+	print("New Game: an empty campaign starts at once; a used one asks again, then its saves go")
+	_clear_saves()
+	await _spawn_campaign("hub")
+	await _rest(_bench(_main))
+	await _despawn()
+	var menu := MENU_SCENE.instantiate()
+	get_tree().root.add_child(menu)
+	get_tree().current_scene = menu
+	await _frames(2)
+	menu.start_button.pressed.emit()
+	await _frames(1)
+	var labels: Array = menu.campaign_buttons.map(func(b): return b.text)
+	var time := SaveSystem.time_text(float(SaveSystem.latest(1).header.play_time))
+	_check(labels[0] == tr("UI_CAMPAIGN_USED").format({"n": 1, "time": time}) and labels[1] == tr("UI_CAMPAIGN_EMPTY").format({"n": 2}),
+			"campaign 1 used, 2 empty %s" % [labels])
+	menu.campaign_buttons[0].pressed.emit()
+	await _frames(2)
+	_check(get_tree().current_scene == menu and menu.campaign_buttons[0].text == tr("UI_CAMPAIGN_CONFIRM").format({"n": 1}),
+			"one press: asks again (%s)" % menu.campaign_buttons[0].text)
+	menu.campaign_buttons[0].pressed.emit()
+	var room := await _wait_for_room(LevelData.FIRST_ROOM, 120)
+	_check(room != null and GameState.campaign == 1 and not SaveSystem.is_used(1), "two presses: a new game, its old saves gone")
+	await _frames(30)
+	await _close_intro()
+	_main = room
+	await _despawn()
+
+
+func _test_load_list_and_damaged_saves() -> void:
+	print("Load lists every save; a damaged one loads its backup; one from another version is refused, saying why")
+	_clear_saves()
+	await _spawn_campaign("hub")
+	var bench := _bench(_main)
+	await _rest(bench)
+	await _frames(2)
+	await _rest(bench)   # a second autosave
+	var first := SaveSystem.saves(1)
+	await _despawn()
+	_check(first.size() == 2, "two autosaves %s" % [first.map(func(s): return s.slot)])
+	# Damage the newest: the next write's backup is what's left of it.
+	var newest := SaveSystem.latest(1)
+	SaveSystem.write(1, newest.slot, GameState.to_dict(), GameState.save_header())   # now it has a .bak
+	var file := FileAccess.open(SaveSystem.path(1, newest.slot), FileAccess.WRITE)
+	file.store_string("{ not json")
+	file.close()
+	var save := SaveSystem.read(1, newest.slot)
+	_check(not save.is_empty() and SaveSystem.notes.size() == 1, "a damaged save loads its backup, with a note (%s)" % [SaveSystem.notes])
+	# An older version.
+	var other: String = first[0].slot if first[0].slot != newest.slot else first[1].slot
+	var old := SaveSystem.read(1, other)
+	old.header.version = SaveSystem.VERSION - 1
+	file = FileAccess.open(SaveSystem.path(1, other), FileAccess.WRITE)
+	file.store_string(JSON.stringify(old))
+	file.close()
+	var menu := MENU_SCENE.instantiate()
+	get_tree().root.add_child(menu)
+	get_tree().current_scene = menu
+	await _frames(2)
+	menu.load_button.pressed.emit()
+	await _frames(1)
+	_check(menu.save_buttons.size() == 2 and menu.save_buttons[0][0].has_focus(), "Load lists both (%d)" % menu.save_buttons.size())
+	var old_button: Button
+	for entry in menu.save_buttons:
+		if entry[2] == other:
+			old_button = entry[0]
+	old_button.pressed.emit()
+	await _frames(2)
+	_check(get_tree().current_scene == menu and menu._load_problem.text == tr("UI_SAVE_NOTE_OLDER").format({"slot": SaveSystem.slot_name(other)}),
+			"the old one: refused, saying why (%s)" % menu._load_problem.text)
+	menu.queue_free()
+	await _frames(2)
+	_clear_saves()

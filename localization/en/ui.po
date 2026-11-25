@@ -241,3 +241,79 @@ msgstr "Move: A / D or arrows   ·   Jump: Space   ·   Attack and talk: J   · 
 #. The welcome card: how to close it.
 msgid "UI_INTRO_CONTINUE"
 msgstr "Press Attack or Jump to begin"
+
+#. Main menu: carry on from your newest save.
+msgid "UI_MENU_CONTINUE"
+msgstr "Continue"
+
+#. Main menu: pick a save to load.
+msgid "UI_MENU_LOAD"
+msgstr "Load"
+
+#. New Game's list of campaigns: its heading.
+msgid "UI_NEW_GAME_TITLE"
+msgstr "NEW GAME"
+
+#. New Game: a campaign with no saves. {n}: its number.
+msgid "UI_CAMPAIGN_EMPTY"
+msgstr "Campaign {n}: empty"
+
+#. New Game: a campaign with saves. {n}: its number; {time}: play time, e.g. 0:12:03.
+msgid "UI_CAMPAIGN_USED"
+msgstr "Campaign {n}: {time} played"
+
+#. New Game: a used campaign, after one press. Pressing again starts over, deleting its saves.
+msgid "UI_CAMPAIGN_CONFIRM"
+msgstr "Campaign {n}: press again to start over"
+
+#. The Load list: its heading.
+msgid "UI_LOAD_TITLE"
+msgstr "LOAD"
+
+#. The Load list, when there are no saves.
+msgid "UI_LOAD_EMPTY"
+msgstr "No saves yet. Rest at a bench to save."
+
+#. On screen after resting at a bench, in a campaign: health refilled and the game saved.
+msgid "UI_HUD_RESTED_SAVED"
+msgstr "Rested. Game saved."
+
+#. On screen after resting at a bench in a Test Room (nothing is saved there).
+msgid "UI_HUD_RESTED"
+msgstr "Rested."
+
+#. On screen when resting at a bench couldn't save the game.
+msgid "UI_HUD_SAVE_FAILED"
+msgstr "Rested, but the game couldn't be saved."
+
+#. A manual save's name in save lists. {n}: its number.
+msgid "UI_SAVE_SLOT"
+msgstr "Save {n}"
+
+#. An autosave's name in save lists (benches save these). {n}: its number.
+msgid "UI_SAVE_AUTOSAVE"
+msgstr "Autosave {n}"
+
+#. A debug save's name (debug builds only). {name}: its file name.
+msgid "UI_SAVE_DEBUG"
+msgstr "Debug: {name}"
+
+#. A save in the Load list. {n}: campaign number; {slot}: the save's name; {time}: play time; {date}: when saved.
+msgid "UI_SAVE_LINE"
+msgstr "Campaign {n} · {slot} · {time} · {date}"
+
+#. Loading a save that was broken, so its backup was used. {slot}: the save's name.
+msgid "UI_SAVE_NOTE_BACKUP"
+msgstr "{slot} was damaged; loaded its backup."
+
+#. A save from a newer version of the game. {slot}: the save's name.
+msgid "UI_SAVE_NOTE_NEWER"
+msgstr "{slot} is from a newer version of the game."
+
+#. A save from an older version of the game, which this one can't load. {slot}: the save's name.
+msgid "UI_SAVE_NOTE_OLDER"
+msgstr "{slot} is from an older version and can't be loaded."
+
+#. A save that couldn't be read at all.
+msgid "UI_SAVE_UNREADABLE"
+msgstr "That save couldn't be read."

@@ -483,6 +483,21 @@ func _door_stand_point(door: Dictionary) -> Vector2:
 	return Vector2((r.position.x + 0.5) * TILE + _door_inward(door) * TILE * 2, r.end.y * TILE - Player.BODY_SIZE.y * 0.5)
 
 
+## The bench you last rested at, if it's in this room.
+func _rest_bench() -> Bench:
+	if GameState.rest_room != room:
+		return null
+	for bench in entities_of(Bench):
+		if String(bench.name) == GameState.rest_bench:
+			return bench
+	return null
+
+
+## The HUD, for things in the room to show messages on.
+func hud() -> HUD:
+	return _hud
+
+
 # The door to arrive at: the one named by the door we came through, else the
 # one leading back where we came from, else any.
 func _arrival_door() -> Variant:
@@ -505,8 +520,12 @@ func _spawn_player() -> void:
 	if marker != null:
 		start = to_local(marker.global_position) - Vector2(0, Player.BODY_SIZE.y * 0.5)
 		has_start = true
+	# Getting up from the bench you last rested at (after a load, or dying here).
+	var bench := _rest_bench()
+	if bench != null and GameState.arrived_from == "":
+		start = to_local(bench.global_position) - Vector2(0, Player.BODY_SIZE.y * 0.5)
 	# Arriving through a door (or a room with no start, e.g. run directly with F6).
-	if GameState.arrived_from != "" or not has_start:
+	elif GameState.arrived_from != "" or not has_start:
 		var door: Variant = _arrival_door()
 		if door != null:
 			start = _door_stand_point(door)
