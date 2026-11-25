@@ -523,7 +523,7 @@ func _spawn_player() -> void:
 		has_start = true
 	# Getting up from the bench you last rested at (after a load, or dying here).
 	var bench := _rest_bench()
-	if bench != null and GameState.arrived_from == "":
+	if bench != null and (GameState.arrived_from == "" or GameState.respawning):
 		start = to_local(bench.global_position) - Vector2(0, Player.BODY_SIZE.y * 0.5)
 	# Arriving through a door (or a room with no start, e.g. run directly with F6).
 	elif GameState.arrived_from != "" or not has_start:
@@ -531,6 +531,7 @@ func _spawn_player() -> void:
 		if door != null:
 			start = _door_stand_point(door)
 	GameState.arrive_at = ""
+	GameState.respawning = false
 
 	_player = Player.new()
 	_player.position = start

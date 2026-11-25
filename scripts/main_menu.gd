@@ -40,7 +40,7 @@ var save_buttons: Array = []
 
 func _ready() -> void:
 	_add_backdrop()
-	continue_button.pressed.connect(func() -> void: GameState.continue_game())
+	continue_button.pressed.connect(_on_continue)
 	start_button.pressed.connect(show_campaigns)
 	load_button.pressed.connect(show_load)
 	%CampaignBackButton.pressed.connect(_back_to_main.bind(start_button))
@@ -120,8 +120,16 @@ func _on_campaign_pressed(n: int) -> void:
 	GameState.start_new_game(n)
 
 
-## Load: every save, newest campaign's first, each a button. One that can't
-## be loaded says why when pressed.
+## Continue; if the newest save can't be loaded, says why under the title.
+func _on_continue() -> void:
+	if GameState.continue_game():
+		return
+	%MenuProblem.text = SaveSystem.load_problem()
+	%MenuProblem.visible = true
+
+
+## Load: every save, campaign by campaign, each a button (then the debug
+## saves, in debug builds). One that can't be loaded says why when pressed.
 func show_load() -> void:
 	_main_box.visible = false
 	_load_box.visible = true
@@ -136,6 +144,12 @@ func show_load() -> void:
 			button.pressed.connect(_on_save_pressed.bind(n, save.slot))
 			_saves.add_child(button)
 			save_buttons.append([button, n, save.slot])
+	for save in SaveSystem.debug_saves():
+		var button := _make_button()
+		button.text = SaveSystem.slot_name(save.slot)
+		button.pressed.connect(_on_save_pressed.bind(1, save.slot))
+		_saves.add_child(button)
+		save_buttons.append([button, 1, save.slot])
 	%LoadEmpty.visible = save_buttons.is_empty()
 	(save_buttons[0][0] if not save_buttons.is_empty() else %LoadBackButton).grab_focus()
 

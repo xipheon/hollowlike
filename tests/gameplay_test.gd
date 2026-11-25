@@ -116,6 +116,7 @@ const SEGMENTS := {
 	"saving": [
 		"_test_save_round_trip", "_test_bench_rests_and_saves", "_test_continue_gets_you_up_at_the_bench",
 		"_test_dying_gets_you_up_at_the_bench", "_test_new_game_asks_before_starting_over", "_test_load_list_and_damaged_saves",
+		"_test_saves_that_fight_back",
 	],
 	# The map page (world_map.gd, map_view.gd, the pause menu's Map).
 	"map": ["_test_map_lays_rooms_by_their_doors", "_test_map_page"],
@@ -259,6 +260,9 @@ func _all(room: Node) -> Array:
 
 
 func _despawn() -> void:
+	GameState.campaign = 0   # a test's campaign doesn't save in the next one
+	GameState.rest_room = ""
+	GameState.rest_bench = ""
 	_release_all()
 	get_tree().paused = false   # in case a check failed mid-intro
 	get_tree().current_scene.queue_free()
@@ -4519,12 +4523,12 @@ func _test_continue_gets_you_up_at_the_bench() -> void:
 
 
 func _test_dying_gets_you_up_at_the_bench() -> void:
-	print("Dying in the room you rested in gets you up at its bench, even having come in by a door")
+	print("Dying in the room you rested in gets you up at its bench, even having come back in by a door since")
 	_clear_saves()
 	await _spawn_campaign("hub")
-	GameState.arrived_from = "tunnels"   # came in through the Tunnels' door
 	var bench := _bench(_main)
 	await _rest(bench)
+	GameState.arrived_from = "tunnels"   # out to the Tunnels and back in by its door
 	var bench_x := bench.global_position.x
 	var room := _main
 	_player.kill()
@@ -4573,6 +4577,7 @@ func _test_load_list_and_damaged_saves() -> void:
 	var bench := _bench(_main)
 	await _rest(bench)
 	await _frames(2)
+	GameState.give_item(STRONG_PIPE)   # something new, so resting again saves again
 	await _rest(bench)   # a second autosave
 	var first := SaveSystem.saves(1)
 	await _despawn()
@@ -4689,3 +4694,45 @@ func _test_worker_points_the_way() -> void:
 				keys.append(line.text)
 	_check(keys.all(func(k): return tr(k) != k), "every line is in dialog.po")
 	await _despawn()
+
+
+func _test_saves_that_fight_back() -> void:
+	print("Saves gone wrong: a header without a date, fields of the wrong kind, a room that's gone; resting twice saves once")
+	_clear_saves()
+	await _spawn_campaign("hub")
+	var bench := _bench(_main)
+	await _rest(bench)
+	GameState.play_time += 60.0   # time passing isn't news
+	await _rest(bench)
+	_check(SaveSystem.saves(1).size() == 1, "resting again with nothing new keeps the older autosaves (%d saves)" % SaveSystem.saves(1).size())
+	await _despawn()
+	var slot: String = SaveSystem.latest(1).slot
+	var save := SaveSystem.read(1, slot)
+	save.header.erase("saved_at")
+	save.state.items = "not a list"
+	save.state.bosses_defeated = {"x": "nowhere"}
+	save.state.abilities = [1, 2]
+	var file := FileAccess.open(SaveSystem.path(1, slot), FileAccess.WRITE)
+	file.store_string(JSON.stringify(save))
+	file.close()
+	_check(not SaveSystem.latest_overall().is_empty(), "a header with no date still lists")
+	GameState.from_dict(SaveSystem.read(1, slot).state)
+	_check(GameState.items.is_empty() and GameState.bosses_defeated.is_empty() and GameState.rest_room == "hub",
+			"fields of the wrong kind are left out, the rest loads")
+	save.state.rest_room = "a_room_since_removed"
+	file = FileAccess.open(SaveSystem.path(1, slot), FileAccess.WRITE)
+	file.store_string(JSON.stringify(save))
+	file.close()
+	var menu := MENU_SCENE.instantiate()
+	get_tree().root.add_child(menu)
+	get_tree().current_scene = menu
+	await _frames(2)
+	await _press_pad_a()   # Continue
+	await _frames(2)
+	_check(get_tree().current_scene == menu and menu.get_node("%MenuProblem").visible
+			and menu.get_node("%MenuProblem").text == tr("UI_SAVE_NOTE_ROOM_GONE").format({"slot": SaveSystem.slot_name(slot)}),
+			"Continue into a room that's gone stays on the title, saying why")
+	menu.queue_free()
+	await _frames(2)
+	GameState.from_dict({})
+	_clear_saves()

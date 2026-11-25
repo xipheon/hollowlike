@@ -32,4 +32,5 @@ func open(blow: String) -> void:
 
 func _respawn() -> void:
 	get_tree().paused = false
+	GameState.respawning = true   # up at the bench, if you rested in this room
 	get_tree().reload_current_scene()

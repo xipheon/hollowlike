@@ -273,7 +273,7 @@ msgstr "Campaign {n}: {time} played"
 
 #. New Game: a used campaign, after one press. Pressing again starts over, deleting its saves.
 msgid "UI_CAMPAIGN_CONFIRM"
-msgstr "Campaign {n}: press again to start over"
+msgstr "Campaign {n}: press again to delete its saves and start over"
 
 #. The Load list: its heading.
 msgid "UI_LOAD_TITLE"
@@ -322,6 +322,10 @@ msgstr "{slot} is from a newer version of the game."
 #. A save from an older version of the game, which this one can't load. {slot}: the save's name.
 msgid "UI_SAVE_NOTE_OLDER"
 msgstr "{slot} is from an older version and can't be loaded."
+
+#. A save made in a room the game no longer has. {slot}: the save's name.
+msgid "UI_SAVE_NOTE_ROOM_GONE"
+msgstr "{slot} was made in a room that's no longer in the game."
 
 #. A save that couldn't be read at all.
 msgid "UI_SAVE_UNREADABLE"

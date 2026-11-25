@@ -60,6 +60,9 @@ var play_time := 0.0
 ## Continue puts you, and where you get up again if you die in that room.
 var rest_room := ""
 var rest_bench := ""
+## Set by the death screen's Respawn: the room reloading puts you at its
+## bench if you rested there, however you came in.
+var respawning := false
 
 var _fade: ColorRect
 var _transitioning := false
@@ -82,6 +85,9 @@ func _ready() -> void:
 	var settings := ConfigFile.new()
 	if settings.load(SETTINGS_PATH) == OK and settings.has_section_key("game", "language"):
 		TranslationServer.set_locale(settings.get_value("game", "language"))
+	var skin: Variant = settings.get_value("game", "skin", PlayerSprite.DEFAULT_SKIN)
+	if skin is String and PlayerSprite.SKINS.has(skin):
+		player_skin = skin
 
 
 # --------------------------------------------------------------- Language ----
@@ -205,9 +211,14 @@ func unlock(ability: String) -> void:
 	ability_unlocked.emit(ability)
 
 
+## Puts on a skin, and remembers it for next time (with the language).
 func set_player_skin(skin_id: String) -> void:
 	player_skin = skin_id
 	player_skin_changed.emit(skin_id)
+	var settings := ConfigFile.new()
+	settings.load(SETTINGS_PATH)   # keep anything else saved there
+	settings.set_value("game", "skin", skin_id)
+	settings.save(SETTINGS_PATH)
 
 
 ## Fade out, load the target room's scene, fade back in. The player arrives
@@ -231,6 +242,8 @@ func take_carried_health(full: int) -> int:
 ## Wipe progress and load the first room (from the main menu), playing
 ## `in_campaign` (its old saves are deleted; 0 saves nothing).
 func start_new_game(in_campaign := 0) -> void:
+	if _transitioning:
+		return
 	if in_campaign > 0:
 		SaveSystem.delete_campaign(in_campaign)
 	start_at_room(LevelData.FIRST_ROOM)
@@ -248,7 +261,21 @@ func rest_at(room: String, bench: String) -> bool:
 	arrived_from = ""   # you're at the bench now, not a door: dying here gets you up at it
 	if campaign <= 0:
 		return true
+	if _same_as_newest_save():
+		return true   # nothing new since the last rest: keep the older autosaves as they are
 	return SaveSystem.write(campaign, SaveSystem.next_auto_slot(campaign), to_dict(), save_header())
+
+
+## Whether the newest save holds this game as it is now, but for the time played.
+func _same_as_newest_save() -> bool:
+	var newest := SaveSystem.latest(campaign)
+	if newest.is_empty():
+		return false
+	var saved: Dictionary = SaveSystem.read(campaign, newest.slot).get("state", {})
+	var now: Dictionary = JSON.parse_string(JSON.stringify(to_dict()))   # numbers as a file has them
+	saved.erase("play_time")
+	now.erase("play_time")
+	return saved == now
 
 
 ## What a save holds: everything about this game but the language and skin.
@@ -267,31 +294,45 @@ func to_dict() -> Dictionary:
 
 
 ## Puts this game back as `d` (to_dict()) says. Items come back from their
-## files, items/<id>.tres.
+## files, items/<id>.tres. Anything missing or of the wrong kind (a damaged or
+## hand-edited file) is left out rather than stopping the load.
 func from_dict(d: Dictionary) -> void:
 	abilities = STARTING_ABILITIES.duplicate()
-	var saved_abilities: Dictionary = d.get("abilities", {})
-	for ability in saved_abilities:
+	for ability in _dict(d, "abilities"):
 		if abilities.has(ability):
-			abilities[ability] = bool(saved_abilities[ability])
+			abilities[ability] = _dict(d, "abilities")[ability] == true
 	flags = {}
-	var saved_flags: Dictionary = d.get("flags", {})
-	for flag in saved_flags:
-		flags[flag] = true
+	for flag in _dict(d, "flags"):
+		flags[str(flag)] = true
 	items = {}
 	_item_defs = {}
-	for entry: Array in d.get("items", []):
+	for entry: Variant in _list(d, "items"):
+		if not (entry is Array and entry.size() == 2 and entry[0] is String and (entry[1] is float or entry[1] is int)):
+			continue
 		var path := "res://items/%s.tres" % entry[0]
-		if ResourceLoader.exists(path):
-			items[entry[0]] = int(entry[1])
+		if entry[0].is_valid_filename() and ResourceLoader.exists(path):
+			items[entry[0]] = maxi(int(entry[1]), 1)
 			_item_defs[entry[0]] = load(path)
 	bosses_defeated = {}
-	var defeated: Dictionary = d.get("bosses_defeated", {})
+	var defeated := _dict(d, "bosses_defeated")
 	for room in defeated:
-		bosses_defeated[room] = Vector2(defeated[room][0], defeated[room][1])
-	rest_room = d.get("rest_room", "")
-	rest_bench = d.get("rest_bench", "")
-	play_time = float(d.get("play_time", 0.0))
+		var at: Variant = defeated[room]
+		if at is Array and at.size() == 2 and (at[0] is float or at[0] is int) and (at[1] is float or at[1] is int):
+			bosses_defeated[str(room)] = Vector2(at[0], at[1])
+	rest_room = str(d.get("rest_room", ""))
+	rest_bench = str(d.get("rest_bench", ""))
+	var time: Variant = d.get("play_time", 0.0)
+	play_time = float(time) if time is float or time is int else 0.0
+
+
+func _dict(d: Dictionary, key: String) -> Dictionary:
+	var v: Variant = d.get(key, {})
+	return v if v is Dictionary else {}
+
+
+func _list(d: Dictionary, key: String) -> Array:
+	var v: Variant = d.get(key, [])
+	return v if v is Array else []
 
 
 ## What save lists show besides SaveSystem's own: the room and play time.
@@ -302,8 +343,13 @@ func save_header() -> Dictionary:
 ## Loads a save and goes to the bench it was made at. False (and nothing
 ## changes) if it can't be read; SaveSystem.load_problem() says why.
 func load_game(in_campaign: int, slot: String) -> bool:
+	if _transitioning:
+		return false
 	var save := SaveSystem.read(in_campaign, slot)
-	if save.is_empty() or not LevelData.ROOMS.has(save.state.get("rest_room", "")):
+	if save.is_empty():
+		return false
+	if not LevelData.ROOMS.has(str(save.state.get("rest_room", ""))):
+		SaveSystem.notes.append(tr("UI_SAVE_NOTE_ROOM_GONE").format({"slot": SaveSystem.slot_name(slot)}))
 		return false
 	from_dict(save.state)
 	campaign = in_campaign
@@ -312,7 +358,8 @@ func load_game(in_campaign: int, slot: String) -> bool:
 	return true
 
 
-## Loads the newest save there is (the main menu's Continue). False if none.
+## Loads the newest save there is (the main menu's Continue). False if none,
+## or it can't be loaded (SaveSystem.load_problem() says why).
 func continue_game() -> bool:
 	var newest := SaveSystem.latest_overall()
 	return not newest.is_empty() and load_game(newest.campaign, newest.slot)
@@ -327,6 +374,8 @@ func _process(delta: float) -> void:
 ## the starting abilities plus any in `unlocked`, the flags in `progress` and
 ## the items in `held` (a LevelButton's abilities, flags and items).
 func start_at_room(room: String, unlocked: Array = [], progress: Array = [], held: Array = []) -> void:
+	if _transitioning:
+		return
 	abilities = STARTING_ABILITIES.duplicate()
 	for ability in unlocked:
 		abilities[ability] = true

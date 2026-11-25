@@ -94,6 +94,12 @@
 
 ## Review: commit 3e9dabb (saving)
 
+**Status:** all twelve findings were fixed in the commit after 3e9dabb. Notes on choices made:
+- Resting with nothing new since the newest save doesn't write a new autosave. Play time alone doesn't count as new.
+- Dying after coming back into your bench room by a door gets you up at the bench (Respawn sets `GameState.respawning`), as the docs say.
+- Starting a used campaign over still deletes its saves at once. The confirm text now says so.
+- The skin is kept in `settings.cfg` with the language, not in saves.
+
 Read-only review. The `saving` test segment passes (0 failed checks). "Confirmed" means I checked it in the code. None of these were run as a repro.
 
 ### Findings (most severe first)

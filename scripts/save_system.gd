@@ -110,7 +110,11 @@ static func write(campaign: int, slot: String, state: Dictionary, extra_header :
 	if file == null:
 		return false
 	file.store_string(JSON.stringify({"header": make_header(campaign, slot, extra_header), "state": state}, "\t"))
+	var failed := file.get_error() != OK
 	file.close()
+	if failed:
+		DirAccess.remove_absolute(tmp)
+		return false
 	if FileAccess.file_exists(file_path):
 		DirAccess.remove_absolute(file_path + ".bak")
 		DirAccess.rename_absolute(file_path, file_path + ".bak")
@@ -125,8 +129,8 @@ static func next_auto_slot(campaign: int) -> String:
 		var header := read_header(campaign, slot)
 		if header.is_empty():
 			return slot
-		if float(header.saved_at) < oldest_time:
-			oldest_time = float(header.saved_at)
+		if saved_at(header) < oldest_time:
+			oldest_time = saved_at(header)
 			oldest = slot
 	return oldest
 
@@ -142,6 +146,12 @@ static func make_header(campaign: int, slot: String, extra: Dictionary) -> Dicti
 
 
 # --- Reading -----------------------------------------------------------------
+
+## When a save was made (seconds since 1970), or 0 if its header doesn't say.
+static func saved_at(header: Dictionary) -> float:
+	var at: Variant = header.get("saved_at", 0.0)
+	return float(at) if at is float or at is int else 0.0
+
 
 ## True if this build can load the save with this header.
 static func is_loadable(header: Dictionary) -> bool:
@@ -206,7 +216,7 @@ static func saves(campaign: int) -> Array[Dictionary]:
 		var header := read_header(campaign, slot)
 		if not header.is_empty():
 			autos.append({"slot": slot, "header": header})
-	autos.sort_custom(func(a, b): return float(a.header.saved_at) > float(b.header.saved_at))
+	autos.sort_custom(func(a, b): return saved_at(a.header) > saved_at(b.header))
 	return manual + autos
 
 
@@ -214,7 +224,7 @@ static func saves(campaign: int) -> Array[Dictionary]:
 static func latest(campaign: int) -> Dictionary:
 	var newest := {}
 	for save in saves(campaign):
-		if newest.is_empty() or float(save.header.saved_at) > float(newest.header.saved_at):
+		if newest.is_empty() or saved_at(save.header) > saved_at(newest.header):
 			newest = save
 	return newest
 
@@ -225,7 +235,7 @@ static func latest_overall() -> Dictionary:
 	var newest := {}
 	for c in range(1, CAMPAIGNS + 1):
 		for save in saves(c):
-			if is_loadable(save.header) and (newest.is_empty() or float(save.header.saved_at) > float(newest.header.saved_at)):
+			if is_loadable(save.header) and (newest.is_empty() or saved_at(save.header) > saved_at(newest.header)):
 				newest = save
 				newest.campaign = c
 	return newest
@@ -266,7 +276,7 @@ static func delete_campaign(campaign: int) -> void:
 
 ## "2026-11-03 19:42".
 static func date_text(header: Dictionary) -> String:
-	var local := Time.get_unix_time_from_system() if header.is_empty() else float(header.saved_at)
+	var local := Time.get_unix_time_from_system() if header.is_empty() else saved_at(header)
 	local += Time.get_time_zone_from_system().bias * 60.0
 	return Time.get_datetime_string_from_unix_time(int(local), true).left(16)
 
