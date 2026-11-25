@@ -96,8 +96,8 @@ func _make_label(pos: Vector2, font_size: int) -> Label:
 func bind_player(player: Player) -> void:
 	player.health_changed.connect(_on_health_changed)
 	_on_health_changed(player.health, player.max_health)
-	player.stamina_changed.connect(_on_stamina_changed)
-	_on_stamina_changed(player.stamina, player.max_stamina)
+	player.stamina_changed.connect(_on_stamina_changed.bind(player))
+	_on_stamina_changed(player.stamina, player.max_stamina, player)
 
 
 func show_boss(boss_name: String, current: int, maximum: int) -> void:
@@ -172,7 +172,9 @@ func _on_health_changed(current: int, maximum: int) -> void:
 	_health_bar.queue_redraw()
 
 
-func _on_stamina_changed(current: float, maximum: float) -> void:
+## Shown only while the player uses stamina (Player.use_stamina).
+func _on_stamina_changed(current: float, maximum: float, player: Player) -> void:
+	_stamina_bar.visible = player.use_stamina
 	_stamina_bar.current = current
 	_stamina_bar.maximum = maximum
 	_stamina_bar.queue_redraw()

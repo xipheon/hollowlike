@@ -46,6 +46,12 @@ const RECOIL_MOSTLY := 0.5   # a recoil pointing this far up refreshes air moves
 
 @export_group("Sprint & Stamina")
 @export var sprint_speed := 480.0
+## Off: sprinting, dashing and wall jumping cost nothing, and the HUD hides
+## the stamina bar. The rest of the system is kept, for turning back on.
+@export var use_stamina := false:
+	set(value):
+		use_stamina = value
+		stamina_changed.emit(stamina, max_stamina)
 @export var max_stamina := 100.0
 @export var sprint_drain := 35.0            ## per second while sprinting
 @export var stamina_regen := 45.0           ## per second, only while standing on ground
@@ -110,7 +116,7 @@ var _coyote_timer := 0.0
 var _jump_buffer_timer := 0.0
 var _dash_timer := 0.0
 var _dash_cooldown_timer := 0.0
-var _dash_dir := Vector2.RIGHT   # one of 8 directions, normalised
+var _dash_dir := Vector2.RIGHT   # sideways, down or down at an angle, normalised
 var _air_dash_available := true
 var _air_jump_available := true
 var _wall_normal_x := 0.0
@@ -256,7 +262,7 @@ func _physics_process(delta: float) -> void:
 		_dash_buffer_timer = dash_buffer_time
 	if not stunned and _dash_timer <= 0.0 and _dash_cooldown_timer <= 0.0 \
 			and _dash_buffer_timer > 0.0 and GameState.has_ability("dash") \
-			and (on_floor or _air_dash_available) and stamina >= dash_stamina_cost:
+			and (on_floor or _air_dash_available) and _can_afford(dash_stamina_cost):
 		_dash_buffer_timer = 0.0
 		_start_dash(input_x, input_y, on_floor)
 	# A dash into the floor or a ceiling stops there.
@@ -282,8 +288,8 @@ func _physics_process(delta: float) -> void:
 				velocity.y = jump_velocity
 				_coyote_timer = 0.0
 				_jump_buffer_timer = 0.0
-			elif wall_sliding and stamina >= wall_jump_stamina_cost:
-				_set_stamina(stamina - wall_jump_stamina_cost)
+			elif wall_sliding and _can_afford(wall_jump_stamina_cost):
+				_spend(wall_jump_stamina_cost)
 				velocity = Vector2(_wall_normal_x * wall_jump_velocity.x, wall_jump_velocity.y)
 				facing = int(signf(_wall_normal_x))
 				_wall_lock_timer = wall_jump_lock_time
@@ -462,13 +468,25 @@ func _update_stamina(input_x: float, grounded: bool, delta: float) -> bool:
 		_sprint_exhausted = false
 	var sprinting := held and input_x != 0.0 and not _sprint_exhausted \
 			and stamina > 0.0 and GameState.has_ability("sprint")
-	if sprinting:
+	if sprinting and use_stamina:
 		_set_stamina(stamina - sprint_drain * delta)
 		if stamina <= 0.0:
 			_sprint_exhausted = true
 	elif grounded and _dash_timer <= 0.0:
 		_set_stamina(stamina + stamina_regen * delta)
 	return sprinting
+
+
+## Whether there's stamina enough for a move costing `cost` (always, with
+## use_stamina off).
+func _can_afford(cost: float) -> bool:
+	return not use_stamina or stamina >= cost
+
+
+## Pays for a move (nothing, with use_stamina off).
+func _spend(cost: float) -> void:
+	if use_stamina:
+		_set_stamina(stamina - cost)
 
 
 func _set_stamina(value: float) -> void:
@@ -480,14 +498,16 @@ func _set_stamina(value: float) -> void:
 
 # ---------------------------------------------------------------- Dash ----
 
-## Dashes the way the direction input points, in 8 directions (straight ahead
-## with nothing held). On the ground, down is ignored: down-forward dashes
-## along the floor.
+## Dashes the way the direction input points: sideways, or in the air down
+## or down at an angle (straight ahead with nothing held). Never up: the dash
+## crosses gaps, it doesn't gain height, so up and up-forward dash straight
+## ahead. On the ground, down is ignored too: down-forward dashes along the
+## floor.
 func _start_dash(input_x: float, input_y: float, on_floor: bool) -> void:
-	_set_stamina(stamina - dash_stamina_cost)
+	_spend(dash_stamina_cost)
 	_carried_x = 0.0
-	var dir :=Vector2(_dash_axis(input_x), _dash_axis(input_y))
-	if on_floor and dir.y > 0.0:
+	var dir := Vector2(_dash_axis(input_x), _dash_axis(input_y))
+	if dir.y < 0.0 or (on_floor and dir.y > 0.0):
 		dir.y = 0.0
 	if dir == Vector2.ZERO:
 		dir.x = facing

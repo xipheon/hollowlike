@@ -79,6 +79,7 @@ const SEGMENTS := {
 		"_test_double_jump", "_test_player_animations", "_test_attack_buffer", "_test_enemies_set_their_own_damage", "_test_armor_reduces_damage",
 		"_test_sprint_is_faster_and_drains_stamina", "_test_stamina_refills_only_on_ground",
 		"_test_dash_needs_stamina", "_test_dash_eight_directions", "_test_wall_jump_needs_stamina",
+		"_test_stamina_off_moves_are_free",
 		"_test_hit_recoil", "_test_player_light",
 	],
 	# Translations: localization/<language>/<feature>.po, keys in use, switching language (game_state.gd).
@@ -1523,6 +1524,7 @@ func _test_sprint_is_faster_and_drains_stamina() -> void:
 	_check(not GameState.has_ability("sprint") and absf(_player.velocity.x - _player.run_speed) < 1.0, "locked at first: just runs")
 	_release_all()
 	GameState.unlock("sprint")
+	_player.use_stamina = true
 	_check(_main._hud._stamina_bar.visible and _main._hud._stamina_bar.position.y > _main._hud._health_bar.position.y,
 			"stamina bar under the health bar")
 	_place_in_corridor()
@@ -1573,9 +1575,10 @@ func _test_stamina_refills_only_on_ground() -> void:
 
 
 func _test_dash_needs_stamina() -> void:
-	print("Dash costs stamina and won't fire without enough")
+	print("With stamina on: dash costs stamina and won't fire without enough")
 	await _spawn(BOSS_SCENE, true)
 	await _remove_enemies()
+	_player.use_stamina = true
 	GameState.unlock("dash")
 	_place_in_corridor()
 	await _frames(5)
@@ -1608,9 +1611,10 @@ func _try_wall_jump(stamina: float) -> float:
 
 
 func _test_wall_jump_needs_stamina() -> void:
-	print("Wall jump costs stamina and won't fire without enough")
+	print("With stamina on: wall jump costs stamina and won't fire without enough")
 	await _spawn(BOSS_SCENE, true)
 	await _remove_enemies()
+	_player.use_stamina = true
 	GameState.unlock("wall_jump")
 	var vx := await _try_wall_jump(_player.max_stamina)
 	_check(vx > 50.0, "wall jump kicks off the wall (vx %.0f)" % vx)
@@ -3175,8 +3179,43 @@ func _float_at(col: float, row: float) -> void:
 	await _frames(2)
 
 
+func _test_stamina_off_moves_are_free() -> void:
+	print("Stamina is off: no bar, and dashes, wall jumps and sprinting cost nothing")
+	await _spawn(BOSS_SCENE, true)
+	await _remove_enemies()
+	_check(not _player.use_stamina and not _main._hud._stamina_bar.visible, "off as set in the player, and the bar hidden")
+	GameState.unlock("dash")
+	GameState.unlock("wall_jump")
+	GameState.unlock("sprint")
+	var vx := await _try_wall_jump(0.0)
+	_check(vx > 50.0, "an empty bar still wall jumps (vx %.0f)" % vx)
+	await _frames(30)
+	_player.stamina = 0.0
+	_place_in_corridor()
+	await _frames(5)
+	var x0 := _player.global_position.x
+	Input.action_press("dash")
+	await _frames(1)
+	Input.action_release("dash")
+	await _frames(int(ceilf(_player.dash_duration * 60.0)))
+	_check(absf(_player.global_position.x - x0) > _player.dash_speed * _player.dash_duration * 0.8,
+			"and dashes (moved %.0f px)" % absf(_player.global_position.x - x0))
+	_place_in_corridor()
+	_player.stamina = _player.max_stamina
+	await _frames(5)
+	Input.action_press("move_right")
+	Input.action_press("sprint")
+	await _frames(30)
+	_check(_player.velocity.x > _player.run_speed and _player.stamina == _player.max_stamina, "sprinting drains nothing")
+	_release_all()
+	_player.use_stamina = true
+	await _frames(1)
+	_check(_main._hud._stamina_bar.visible, "turned on, the bar shows")
+	await _despawn()
+
+
 func _test_dash_eight_directions() -> void:
-	print("Dash goes the way you hold: 8 directions, along the floor if down on the ground")
+	print("Dash goes the way you hold, but never up: sideways, and down or down at an angle in the air")
 	await _spawn_node(_build_platform_room())
 	GameState.unlock("dash")
 	var reach := _player.dash_speed * _player.dash_duration
@@ -3185,17 +3224,21 @@ func _test_dash_eight_directions() -> void:
 	_check(moved.x > reach * 0.8 and absf(moved.y) < 2.0, "nothing held: straight ahead (%s)" % [moved.round()])
 
 	await _stand_at(32.5)
-	Input.action_press("move_up")
+	Input.action_press("move_down")
+	await _frames(1)
+	Input.action_release("move_down")
+	await _float_at(32.5, 8)
+	Input.action_press("move_down")
 	Input.action_press("dash")
 	await _frames(3)
 	var tilt := _player.sprite.rotation
 	_release_all()
-	_check(is_equal_approx(tilt, -PI / 2.0 * _player.facing), "dashing up tilts the sprite head first (%.2f)" % tilt)
+	_check(is_equal_approx(tilt, PI / 2.0 * _player.facing), "dashing down tilts the sprite head first (%.2f)" % tilt)
 	await _frames(40)
 
 	await _stand_at(32.5)
 	moved = await _dash_holding(["move_up"])
-	_check(moved.y < -reach * 0.8 and absf(moved.x) < 2.0, "up from the ground: straight up (%s)" % [moved.round()])
+	_check(moved.x * _player.facing > reach * 0.8 and absf(moved.y) < 2.0, "up from the ground: straight ahead, not up (%s)" % [moved.round()])
 	await _frames(40)
 
 	await _stand_at(30.5)
@@ -3204,8 +3247,7 @@ func _test_dash_eight_directions() -> void:
 
 	await _float_at(30.5, 8)
 	moved = await _dash_holding(["move_up", "move_right"])
-	_check(moved.x > reach * 0.55 and moved.y < -reach * 0.55 and absf(absf(moved.x) - absf(moved.y)) < 4.0,
-			"up-right in the air: diagonal (%s)" % [moved.round()])
+	_check(moved.x > reach * 0.8 and absf(moved.y) < 2.0, "up-right in the air: straight right, not up (%s)" % [moved.round()])
 
 	await _float_at(34.5, 5)
 	moved = await _dash_holding(["move_down", "move_left"])
@@ -4143,7 +4185,7 @@ func _test_hub_gap_needs_dash() -> void:
 
 ## Climbs the wall on the left from the floor at its foot, holding into it:
 ## jump, then jump again off the wall each time the rise runs out (and, with
-## `dash_up`, dash straight up at the top of the first jump). Returns the
+## `dash_up`, try to dash up at the top of the first jump). Returns the
 ## highest your feet got, in px above the floor.
 func _climb_wall(wall_col: int, floor_row: int, dash_up := false) -> float:
 	_player.global_position = Vector2((wall_col + 1) * TILE + Player.BODY_SIZE.x * 0.5 + 1.0, floor_row * TILE - Player.BODY_SIZE.y * 0.5)
@@ -4177,7 +4219,7 @@ func _climb_wall(wall_col: int, floor_row: int, dash_up := false) -> float:
 
 
 func _test_entrance_wall_needs_wall_jump() -> void:
-	print("Played: the Entrance's wall to the Vault can't be climbed with a jump and a dash, and wall jumps climb it")
+	print("Played: the Entrance's wall to the Vault can't be climbed with a jump and the dash, and wall jumps climb it")
 	await _spawn_world("entrance")
 	var door: RoomDoor = _main.get_node("Entities/VaultDoor")
 	var top_row := int(door.position.y / TILE) + door.height   # the wall's top
@@ -4192,9 +4234,9 @@ func _test_entrance_wall_needs_wall_jump() -> void:
 	var rise := await _climb_wall(wall_col, floor_row)
 	_check(rise < height - TILE, "a jump gets nowhere near the top (%.0f of %d px)" % [rise, height])
 	GameState.unlock("dash")
+	var jump_only := rise
 	rise = await _climb_wall(wall_col, floor_row, true)
-	_check(rise > _player.jump_velocity ** 2 / (2.0 * _player.gravity) + TILE and rise < height,
-			"a jump and a dash straight up gets higher but still short (%.0f of %d px)" % [rise, height])
+	_check(rise <= jump_only + 1.0, "the dash gets you no higher (%.0f px, a jump alone %.0f)" % [rise, jump_only])
 	GameState.abilities["dash"] = false
 	GameState.unlock("wall_jump")
 	rise = await _climb_wall(wall_col, floor_row)

@@ -7,12 +7,14 @@ extends RefCounted
 ## skill gets you there.
 ##
 ## It errs on the side of reaching too much, never too little. Heights are
-## exact (to the pixel, at the top of each jump, dash and wall jump); sideways
+## exact (to the pixel, at the top of each jump and wall jump; the dash never
+## goes up, but stops your fall wherever it starts); sideways
 ## it works in whole tiles with a tile of slack, ignores ceilings cutting a
 ## jump short, and lets a dash or wall jump start from anywhere you can be in
 ## the air. So "out of reach" here is certain, and "in reach" means "not ruled
 ## out": that a path really can be done is for a played test to show. It knows
-## the dash and the wall jump; not the double jump or sprint, which the game
+## the dash and the wall jump, and stamina if the player uses it (otherwise
+## wall jumps are endless); not the double jump or sprint, which the game
 ## doesn't give out, nor bouncing off enemies or riding moving platforms.
 
 const TILE := 32
@@ -31,6 +33,7 @@ var _fall_g := 0.0
 var _rise := {}            # Launch -> px it lifts your feet
 var _dash_length := 0.0    # px a dash covers
 var _wall_jumps := 0       # how many a full stamina bar pays for
+var _free_wall_jumps := false   # no stamina: as many as you like
 
 # One cells_from() at a time:
 var _dash := false
@@ -58,10 +61,11 @@ func _init(kind_at: Callable, width: int, height: int, player: Player) -> void:
 	var tick := 1.0 / Engine.physics_ticks_per_second
 	_rise[Launch.JUMP] = _rise_at(player.jump_velocity)
 	_rise[Launch.WALL_JUMP] = _rise_at(player.wall_jump_velocity.y)
-	_rise[Launch.DASH_END] = _rise_at(player.run_speed)   # a dash up ends still rising at run speed
+	_rise[Launch.DASH_END] = FALL_RISE   # the dash never goes up: it ends level or falling
 	_rise[Launch.FALL] = FALL_RISE
 	_dash_length = player.dash_speed * (player.dash_duration + tick)
-	_wall_jumps = int(player.max_stamina / player.wall_jump_stamina_cost)
+	_free_wall_jumps = not player.use_stamina
+	_wall_jumps = 0 if _free_wall_jumps else int(player.max_stamina / player.wall_jump_stamina_cost)
 
 
 ## A room's layout, read from its painted tiles (the room needn't be in the
@@ -74,12 +78,6 @@ static func of_room(room: Room, player: Player) -> Reach:
 ## How high a jump lifts your feet, in px.
 func jump_rise() -> float:
 	return _rise[Launch.JUMP]
-
-
-## The most the dash lifts your feet, in px: a dash straight up from the
-## ground (which leaves the air dash unspent), then the air dash up.
-func dash_rise() -> float:
-	return (_dash_length + _rise[Launch.DASH_END]) * 2.0
 
 
 ## How high leaving at `speed` px/s upward lifts you, in px: the arc's
@@ -232,14 +230,10 @@ func _fly(launch: Launch, x0: int, y0: float, jumps: int, dashed: bool) -> void:
 				continue
 			seen[next] = true
 			found.append(next)
-	# A dash from the ground leaves the air dash unspent: along it and off a
-	# ledge, or up (straight, or to a side) and on into the air dash.
+	# A dash along the ground leaves the air dash unspent, and can carry you
+	# off a ledge.
 	if launch == Launch.JUMP and _dash:
-		_dash_to(x0, y0, x0, y0 - _dash_length, 0, false)
-		var across := _dash_length * DIAGONAL
 		for side: int in [-1, 1]:
-			for step in range(1, int((across + TILE) / TILE) + 1):
-				_dash_to(x0, y0, x0 + side * step, y0 - across, 0, false)
 			for step in range(1, int((_dash_length + TILE) / TILE) + 1):
 				if not _open(x0 + side * step, row0):
 					break
@@ -251,14 +245,19 @@ func _be_at(x: int, row: int, y: float, jumps: int, dashed: bool) -> void:
 	_reached[row * _w + x] = 1
 	if _holds(x, row + 1):
 		_launch(Launch.JUMP, x, (row + 1) * TILE, 0, false)   # land: stamina and the dash come back
-	if _wall_jump and jumps < _wall_jumps and (_kind(x - 1, row) == RoomArt.Kind.SOLID or _kind(x + 1, row) == RoomArt.Kind.SOLID):
-		_launch(Launch.WALL_JUMP, x, y, jumps + 1, dashed)
+	# Your body is up to two cells tall: a wall beside either will do.
+	if _wall_jump and (_free_wall_jumps or jumps < _wall_jumps) and (_beside_wall(x, row) or _beside_wall(x, row - 1)):
+		_launch(Launch.WALL_JUMP, x, y, jumps if _free_wall_jumps else jumps + 1, dashed)
 	if _dash and not dashed:
 		_dash_from(x, row, y, jumps)
 	# And down from here: straight, or a column either way.
 	for dx: int in [-1, 0, 1]:
 		if _open(x + dx, row + 1) and (dx == 0 or _open(x + dx, row)):
 			_fall(x + dx, row + 1, jumps, dashed)
+
+
+func _beside_wall(x: int, row: int) -> bool:
+	return _kind(x - 1, row) == RoomArt.Kind.SOLID or _kind(x + 1, row) == RoomArt.Kind.SOLID
 
 
 func _fall(x: int, row: int, jumps: int, dashed: bool) -> void:
@@ -277,8 +276,8 @@ func _fall_through(x: int, row: int, jumps: int, dashed: bool) -> void:
 	_be_at(x, row, row * TILE, jumps, dashed)
 
 
-## The air dash, from feet at `y` in this cell: straight up, up and to a side,
-## or to a side; a launch from wherever each can end.
+## The air dash, from feet at `y` in this cell: to a side, or down (straight
+## or at an angle); a launch from wherever each can end, level or falling.
 func _dash_from(x: int, row: int, y: float, jumps: int) -> void:
 	var key := row * _w + x
 	var before: Array = _dashed_from.get(key, [])
@@ -287,20 +286,30 @@ func _dash_from(x: int, row: int, y: float, jumps: int) -> void:
 			return
 	before.append([y, jumps])
 	_dashed_from[key] = before
-	_dash_to(x, y, x, y - _dash_length, jumps, true)
+	_dash_to(x, y, x, y + _dash_length, jumps, true)
 	var across := _dash_length * DIAGONAL
 	for side: int in [-1, 1]:
 		# A dash that meets a wall slides along it, so it can end short.
 		for step in range(1, int((across + TILE) / TILE) + 1):
-			_dash_to(x, y, x + side * step, y - across, jumps, true)
+			_dash_to(x, y, x + side * step, y + across, jumps, true)
 		for step in range(1, int((_dash_length + TILE) / TILE) + 1):
 			_dash_to(x, y, x + side * step, y, jumps, true)
 
 
-## `spent`: whether it was the air dash (one from the ground isn't).
+## `spent`: whether it was the air dash (one from the ground isn't). A dash
+## that hits the floor stops there, so one ending below it lands on it.
 func _dash_to(x: int, y: float, to_x: int, to_y: float, jumps: int, spent: bool) -> void:
 	var from := Vector2((x + 0.5) * TILE, y)
 	var to := Vector2((to_x + 0.5) * TILE, to_y)
+	var steps := maxi(ceili(from.distance_to(to) / DASH_SAMPLE), 1)
+	var last := from
+	for i in range(1, steps + 1):
+		var p := from.lerp(to, float(i) / steps)
+		if not _open(floori(p.x / TILE), _row(p.y)):
+			break
+		last = p
+	if last != from:
+		_launch(Launch.DASH_END, floori(last.x / TILE), last.y, jumps, spent)
 	if _clear(from, to) or (_clear(from, Vector2(to.x, from.y)) and _clear(Vector2(to.x, from.y), to)) \
 			or (_clear(from, Vector2(from.x, to.y)) and _clear(Vector2(from.x, to.y), to)):
 		_launch(Launch.DASH_END, to_x, to_y, jumps, spent)
