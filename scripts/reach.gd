@@ -15,7 +15,12 @@ extends RefCounted
 ## out": that a path really can be done is for a played test to show. It knows
 ## the dash and the wall jump, and stamina if the player uses it (otherwise
 ## wall jumps are endless); not the double jump or sprint, which the game
-## doesn't give out, nor bouncing off enemies or riding moving platforms.
+## doesn't give out, nor riding moving platforms.
+##
+## Nor enemies: bouncing off one (a down-strike's recoil), being knocked back
+## by one, or standing on spikes while a hit's invulnerability lasts can all
+## take you further than this says. So "out of reach" holds where no enemy
+## is near the gate; keep enemies away from the ledges a gate depends on.
 
 const TILE := 32
 ## One way of leaving the ground or changing course in the air.
@@ -81,9 +86,12 @@ func jump_rise() -> float:
 
 
 ## How high leaving at `speed` px/s upward lifts you, in px: the arc's
-## height, plus the half step the game's physics ticks add to it.
+## height, plus what the game's physics ticks can add to it (half a step at
+## that speed, and up to g / 8 tps² more at the top), and the gap the body
+## keeps from the floor it left (its safe margin).
 func _rise_at(speed: float) -> float:
-	return speed * speed / (2.0 * _g) + absf(speed) / (2.0 * Engine.physics_ticks_per_second)
+	var tps := float(Engine.physics_ticks_per_second)
+	return speed * speed / (2.0 * _g) + absf(speed) / (2.0 * tps) + _g / (8.0 * tps * tps) + _player.safe_margin
 
 
 ## The cell you stand in having come through `door` (one of this room's
@@ -192,7 +200,7 @@ func _launch(launch: Launch, x: int, y: float, jumps: int, dashed: bool) -> void
 	var key := (row * _w + x) * 4 + launch
 	var before: Array = _tried.get(key, [])
 	for b: Array in before:
-		if b[0] <= y + 0.5 and b[1] <= jumps and (dashed or not b[2]):
+		if b[0] <= y and b[1] <= jumps and (dashed or not b[2]):
 			return
 	before.append([y, jumps, dashed])
 	_tried[key] = before
@@ -231,13 +239,21 @@ func _fly(launch: Launch, x0: int, y0: float, jumps: int, dashed: bool) -> void:
 			seen[next] = true
 			found.append(next)
 	# A dash along the ground leaves the air dash unspent, and can carry you
-	# off a ledge.
+	# off a ledge, still able to jump for the coyote time after (and the dash
+	# keeps you level, so that's further out than a run would get you).
 	if launch == Launch.JUMP and _dash:
+		var coyote := _player.dash_speed * _player.coyote_time + TILE
 		for side: int in [-1, 1]:
+			var ground_until := 0   # px along the dash to the last ground under it
 			for step in range(1, int((_dash_length + TILE) / TILE) + 1):
-				if not _open(x0 + side * step, row0):
+				var x := x0 + side * step
+				if not _open(x, row0):
 					break
-				_launch(Launch.FALL, x0 + side * step, y0, 0, false)
+				_launch(Launch.FALL, x, y0, 0, false)
+				if _holds(x, row0 + 1):
+					ground_until = step * TILE
+				elif step * TILE - ground_until <= coyote:
+					_launch(Launch.JUMP, x, y0, 0, false)
 
 
 ## Your feet can be in this cell, as high as `y` px: what follows from that.
@@ -282,7 +298,7 @@ func _dash_from(x: int, row: int, y: float, jumps: int) -> void:
 	var key := row * _w + x
 	var before: Array = _dashed_from.get(key, [])
 	for b: Array in before:
-		if b[0] <= y + 0.5 and b[1] <= jumps:
+		if b[0] <= y and b[1] <= jumps:
 			return
 	before.append([y, jumps])
 	_dashed_from[key] = before

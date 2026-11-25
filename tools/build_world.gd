@@ -289,6 +289,7 @@ func _place(entities: Node2D, counts: Dictionary, thing: Array) -> void:
 			var pickup := ItemPickup.new()
 			pickup.item = load("res://items/%s.tres" % thing[3])
 			_name(pickup, counts, String(thing[3]).to_pascal_case())
+			pickup.pickup_id = pickup.name
 			pickup.position = feet - Vector2(0, ItemPickup.HOVER)
 			entities.add_child(pickup)
 		"hawk", "warden":

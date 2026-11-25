@@ -236,7 +236,7 @@ msgstr "The night shift never clocked out, and something has moved in below. Tak
 
 #. The welcome card: the controls, keyboard then controller.
 msgid "UI_INTRO_CONTROLS"
-msgstr "Move: A / D or arrows   ·   Jump: Space   ·   Attack and talk: J   ·   Pause: Esc\nController: stick or d-pad   ·   A   ·   X   ·   Start"
+msgstr "Move: A / D or arrows   ·   Jump: Space   ·   Attack and talk: J   ·   Dash: K   ·   Pause: Esc\nController: stick or d-pad   ·   A   ·   X   ·   B   ·   Start"
 
 #. The welcome card: how to close it.
 msgid "UI_INTRO_CONTINUE"

@@ -7,8 +7,8 @@ extends Area2D
 ## and one can be placed in a room: add an Area2D under Entities with this
 ## script, set its `item`, and put it HOVER px above the floor. `picked_flag`
 ## remembers it's gone, so it's still there if you leave and come back
-## without it, and not once you have it (the room names a placed one's flag
-## after its node: picked_<room>_<name>).
+## without it, and not once you have it (a placed one's flag is
+## picked_<room>_<pickup_id>).
 
 const SCALE := 2.0                 # the 16 px icon, shown at 32
 const BOB := 3.0                   # px up and down
@@ -25,6 +25,10 @@ const LIGHT_HEIGHT := 24.0
 	set(value):
 		item = value
 		queue_redraw()
+## Names a placed item in its room, for remembering it's been picked up.
+## Unique in the room, and don't change it once the game's out: a saved game
+## would see it as a new item. Empty: the node's name.
+@export var pickup_id := ""
 var picked_flag := ""
 var _time := 0.0
 var _taken := false

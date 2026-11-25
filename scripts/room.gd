@@ -150,10 +150,12 @@ func _ready() -> void:
 		add_child(INTRO_CARD_SCENE.instantiate())
 
 
-## The room as a picture: a camera where you'd start, swaying gently.
+## The room as a picture: a camera where you'd start, swaying gently, and
+## everything in it (enemies, NPCs, bosses) standing still.
 func _show_as_backdrop() -> void:
 	set_physics_process(false)
 	set_process_unhandled_input(false)
+	entities().process_mode = Node.PROCESS_MODE_DISABLED
 	var found := entities_of(PlayerStart)
 	var at := Vector2(_w, _h) * TILE * 0.5
 	if not found.is_empty():
@@ -333,8 +335,13 @@ func _load_room() -> void:
 		_doors.append({"rect": Rect2i(at, Vector2i(1, door.height)), "target": door.target_room,
 				"arrive_at": door.arrive_at, "name": String(door.name)})
 	# Items placed in the room: gone if you've picked them up before.
+	var ids := {}
 	for pickup in entities_of(ItemPickup):
-		pickup.picked_flag = "picked_%s_%s" % [room, pickup.name]
+		var id: String = pickup.pickup_id if pickup.pickup_id != "" else String(pickup.name)
+		if ids.has(id):
+			push_warning("%s: two placed items share the id %s; picking up one takes both" % [room, id])
+		ids[id] = true
+		pickup.picked_flag = "picked_%s_%s" % [room, id]
 		if GameState.has_flag(pickup.picked_flag):
 			pickup.queue_free()
 	for arena in entities_of(Arena):

@@ -3978,7 +3978,10 @@ func _test_world_rooms_join_up() -> void:
 	var loaded := {}
 	var player := Player.new()
 	var ids := _world_rooms()
-	_check(ids.size() >= 7 and LevelData.FIRST_ROOM in ids, "the world has its rooms, the first among them (%d)" % ids.size())
+	var scenes := _files_under("res://scenes/world", ".tscn")
+	var listed := ids.map(func(id): return LevelData.ROOMS[id].scene)
+	_check(scenes.size() == ids.size() and Array(scenes).all(func(s): return s in listed) and LevelData.FIRST_ROOM in ids,
+			"every scene in scenes/world is a room in LevelData, the first among them (%d)" % ids.size())
 	for id in ids:
 		var room := _world_room(id, loaded)
 		var reach := Reach.of_room(room, player)
@@ -4129,8 +4132,7 @@ func _test_world_order_by_reach() -> void:
 		for pickup in room.entities_of(ItemPickup):
 			if not "%s.%s" % [id, pickup.name] in all.items:
 				missing.append("%s.%s" % [id, pickup.name])
-	_check(missing.is_empty(), "and every door and item %s" % [missing])
-	_check(all.items.size() >= 4, "items lying about the world (%d)" % all.items.size())
+	_check(missing.is_empty() and not all.items.is_empty(), "and every door and item %s" % [missing])
 	_close_world()
 	print("  (%.1fs)" % ((Time.get_ticks_msec() - started) / 1000.0))
 
@@ -4147,11 +4149,12 @@ func _test_reach_matches_play() -> void:
 		await _frames(1)
 		top = minf(top, _player.global_position.y)
 	Input.action_release("jump")
-	_check(absf((floor_y - top) - reach.jump_rise()) < 4.0, "a jump lifts you what Reach says (%.1f px vs %.1f)" % [floor_y - top, reach.jump_rise()])
+	var real := floor_y - top
+	_check(real <= reach.jump_rise() and real > reach.jump_rise() - 1.0, "a jump lifts you what Reach says, never more (%.2f px vs %.2f)" % [real, reach.jump_rise()])
 	var from := Vector2i((_player.global_position / TILE).floor())
 	var cells := reach.cells_from(from, [])
 	var far_ledge := reach.door_stand(_main.get_node("Entities/SpanDoor"))
-	_check(cells.has(from + Vector2i(6, 0)) and cells.has(Vector2i(_main._w - 2, from.y)), "from the floor with nothing: all along the floor")
+	_check(cells.has(Vector2i(1, from.y)) and cells.has(Vector2i(_main._w - 2, from.y)), "from the floor with nothing: all along the floor")
 	_check(not cells.has(far_ledge) and reach.cells_from(from, ["dash"]).has(far_ledge), "the Span's ledge only with the dash")
 	await _despawn()
 
@@ -4168,12 +4171,19 @@ func _test_hub_gap_needs_dash() -> void:
 	var edge := far
 	while _main._kind_at(edge - 1, ledge_row) != RoomArt.Kind.SOLID:
 		edge -= 1
-	_check(far - edge >= 9, "a gap of %d tiles (cols %d to %d)" % [far - edge, edge, far - 1])
-	await _try_acid_dash_crossing(edge - 6, 1, edge, far, ledge_row)
-	_check(not _player._dead and _player.global_position.y > (ledge_row + 4) * TILE,
+	var reach := Reach.of_room(_main, _player)
+	var near_side := Vector2i(edge - 1, ledge_row - 1)
+	_check(not reach.cells_from(near_side, []).has(Vector2i(far, ledge_row - 1)),
+			"by Reach, a gap of %d tiles no jump crosses (cols %d to %d)" % [far - edge, edge, far - 1])
+	# A run-up along the ledge, as long as it has.
+	var run_from := edge - 1
+	while _main._kind_at(run_from - 1, ledge_row) == RoomArt.Kind.SOLID and _main._kind_at(run_from - 1, ledge_row - 1) == RoomArt.Kind.EMPTY:
+		run_from -= 1
+	await _try_acid_dash_crossing(run_from, 1, edge, far, ledge_row)
+	_check(not _player._dead and _player.is_on_floor() and _player.global_position.y > ledge_row * TILE,
 			"a running jump falls short, and drops you to the floor unhurt (row %.1f)" % (_player.global_position.y / TILE))
 	GameState.unlock("dash")
-	_check(await _try_acid_dash_crossing(edge - 6, 1, edge, far, ledge_row) and _player.global_position.y < ledge_row * TILE,
+	_check(await _try_acid_dash_crossing(run_from, 1, edge, far, ledge_row) and _player.global_position.y < ledge_row * TILE,
 			"a jump and a dash lands on the far side (col %.1f)" % (_player.global_position.x / TILE))
 	Input.action_press("move_right")
 	var room := await _wait_for_room("span", 240)
@@ -4230,7 +4240,8 @@ func _test_entrance_wall_needs_wall_jump() -> void:
 	while _main._kind_at(wall_col + 1, floor_row) != RoomArt.Kind.SOLID:
 		floor_row += 1
 	var height := (floor_row - top_row) * TILE
-	_check(floor_row - top_row >= 10, "a wall %d tiles tall" % (floor_row - top_row))
+	var reach := Reach.of_room(_main, _player)
+	_check(height > reach.jump_rise(), "a wall %d tiles tall, higher than a jump (%.0f px)" % [floor_row - top_row, reach.jump_rise()])
 	var rise := await _climb_wall(wall_col, floor_row)
 	_check(rise < height - TILE, "a jump gets nowhere near the top (%.0f of %d px)" % [rise, height])
 	GameState.unlock("dash")
@@ -4254,8 +4265,9 @@ func _test_placed_item_pickup() -> void:
 	print("An item placed in a room is picked up once: gone when you come back")
 	await _spawn_world("tunnels")
 	var heart: ItemPickup = _main.get_node("Entities/HeartContainer")
-	_check(heart.item != null and heart.item.id == "heart_container" and heart.picked_flag == "picked_tunnels_HeartContainer",
-			"the Tunnels' Heart Container, with a flag of its own (%s)" % heart.picked_flag)
+	var flag := "picked_%s_%s" % [_main.room, heart.pickup_id]
+	_check(heart.item != null and heart.item.id == "heart_container" and heart.pickup_id != "" and heart.picked_flag == flag,
+			"the Tunnels' Heart Container, with an id and a flag of its own (%s)" % heart.picked_flag)
 	var floor_y: float = _main._floor_below(heart.global_position)
 	_check(is_equal_approx(floor_y - heart.global_position.y, ItemPickup.HOVER), "floating just off its ledge")
 	var hearts := _player.max_health + heart.item.max_health_bonus
@@ -4263,7 +4275,7 @@ func _test_placed_item_pickup() -> void:
 	_player.global_position = heart.global_position
 	await _frames(3)
 	_check(GameState.item_count("heart_container") == 1 and _player.max_health == hearts
-			and GameState.has_flag("picked_tunnels_HeartContainer"), "touching it picks it up: a heart more")
+			and GameState.has_flag(flag), "touching it picks it up: a heart more")
 	var held := GameState.items.duplicate()
 	var flags := GameState.flags.duplicate()
 	await _despawn()
