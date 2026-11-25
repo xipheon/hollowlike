@@ -13,7 +13,7 @@ extends Node
 ## "~" acid or "|" an arena gate. `doors` are 3 tiles tall on the left or
 ## right wall: {name, side, top (row), target}. `things` are placed by the
 ## cell they stand in (the cell above the floor): [what, x, y, ...]:
-##   start, guard, bench, crawler, sickly, pink, thug, ceiling (a crawler hanging
+##   start, guard, worker, bench, crawler, sickly, pink, thug, ceiling (a crawler hanging
 ##   from the cell above), item (then its id in items/), warden / hawk (then
 ##   the arena, x, y, width, height).
 ## The wall behind is decorated the way the Decorate wall button does it.
@@ -27,13 +27,13 @@ const SCENES := {
 	"crawler": "res://scenes/enemies/crawler_sewer.tscn", "ceiling": "res://scenes/enemies/crawler_sewer.tscn",
 	"sickly": "res://scenes/enemies/crawler_sickly.tscn", "pink": "res://scenes/enemies/crawler_pink.tscn",
 	"thug": "res://scenes/enemies/thug.tscn", "guard": "res://scenes/npcs/guard.tscn",
-	"bench": "res://scenes/props/bench.tscn",
+	"bench": "res://scenes/props/bench.tscn", "worker": "res://scenes/npcs/worker.tscn",
 	"warden": "res://scenes/bosses/warden.tscn", "hawk": "res://scenes/bosses/harrier.tscn",
 }
 ## Node names, and how far above the floor under its cell each one's origin is.
 const PLACED := {
 	"crawler": ["Crawler", 12.0], "sickly": ["SicklyCrawler", 12.0], "pink": ["PinkCrawler", 12.0],
-	"thug": ["Thug", 22.0], "guard": ["Guard", 0.0], "warden": ["Warden", 36.0], "bench": ["Bench", 0.0],
+	"thug": ["Thug", 22.0], "guard": ["Guard", 0.0], "warden": ["Warden", 36.0], "bench": ["Bench", 0.0], "worker": ["Worker", 0.0],
 }
 
 const ROOMS := {
@@ -120,7 +120,7 @@ const ROOMS := {
 			{"name": "HawkDoor", "side": "right", "top": 19, "target": "hawk_arena"},
 		],
 		"things": [
-			["start", 3, 21], ["bench", 6, 21], ["ceiling", 24, 11], ["crawler", 27, 21], ["thug", 33, 21],
+			["start", 3, 21], ["bench", 6, 21], ["worker", 9, 21], ["ceiling", 24, 11], ["crawler", 27, 21], ["thug", 33, 21],
 			["sickly", 62, 21], ["item", 50, 5, "heart_container"],
 		],
 	},

@@ -1,6 +1,8 @@
 class_name DialogueBox
 extends CanvasLayer
-## The box at the bottom of the screen a conversation is shown in (see NPC):
+## The box a conversation is shown in (see NPC), at the top of the screen
+## under the HUD, where it can't hide the people talking (the camera often
+## sits on the floor of a room, putting them near the bottom):
 ## the speaker's name, and the line typed out a few letters at a time. Attack
 ## shows the rest of a line being typed, then goes on to the next; after the
 ## last, the box closes. The game is paused while it's open, but the box (and

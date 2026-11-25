@@ -36,15 +36,12 @@ script = ExtResource("1")
 
 [node name="Panel" type="PanelContainer" parent="."]
 unique_name_in_owner = true
-anchors_preset = 12
-anchor_top = 1.0
+anchors_preset = 10
 anchor_right = 1.0
-anchor_bottom = 1.0
 offset_left = 120.0
-offset_top = -150.0
+offset_top = 96.0
 offset_right = -120.0
-offset_bottom = -24.0
-grow_vertical = 0
+offset_bottom = 222.0
 theme_override_styles/panel = SubResource("Box")
 
 [node name="Box" type="VBoxContainer" parent="Panel"]

@@ -90,7 +90,8 @@ const SEGMENTS := {
 	# NPC dialogue: lines, conversations and the progress states that pick them (dialogue_*.gd).
 	"dialogue": [
 		"_test_dialogue_states", "_test_npc_talk", "_test_attack_still_swings_near_npc",
-		"_test_guard_art", "_test_guard_talks", "_test_guard_gives_strong_pipe",
+		"_test_guard_art", "_test_guard_talks", "_test_guard_gives_strong_pipe", "_test_dialogue_box_clears_the_talkers",
+		"_test_worker_points_the_way",
 	],
 	# Items: what they do, the inventory, the pause menu's inventory page (item.gd, item_pickup.gd).
 	"items": [
@@ -3701,6 +3702,32 @@ func _tap_attack() -> void:
 		await _frames(1)
 
 
+func _test_dialogue_box_clears_the_talkers() -> void:
+	print("The dialogue box sits at the top, under the HUD, clear of the player and the NPC talking")
+	var guard := await _spawn_npc_room()
+	await _stand_by_npc(guard.global_position.x - 30)
+	await _frames(6)
+	await _tap_attack()
+	var box: DialogueBox = _main.get_children().filter(func(c): return c is DialogueBox)[0]
+	var panel := box._panel.get_global_rect()
+	var hud_bottom := 0.0
+	for label in _main._hud.get_children().filter(func(c): return c is Control and c.visible):
+		if label.get_global_rect().position.y < panel.position.y:
+			hud_bottom = maxf(hud_bottom, label.get_global_rect().end.y)
+	_check(box.is_open() and panel.end.y < get_viewport().get_visible_rect().size.y * 0.5, "in the top half of the screen (%s)" % panel)
+	_check(not panel.intersects(_main._hud._health_bar.get_global_rect()), "below the hearts")
+	var canvas := get_viewport().get_canvas_transform()
+	for body: Node2D in [_player, guard]:
+		var on_screen := canvas * body.global_position
+		_check(not panel.has_point(on_screen), "%s isn't under it (%s)" % [body.name, on_screen])
+	for i in 12:
+		if not box.is_open():
+			break
+		await _tap_attack()
+	await _frames(3)
+	await _despawn()
+
+
 func _test_npc_talk() -> void:
 	print("NPCs: a bubble in range; attack on the ground talks; the game pauses while the box and NPC animate; lines type and advance; then a repeat")
 	var npc := await _spawn_npc_room()
@@ -4634,4 +4661,31 @@ func _test_map_page() -> void:
 	await _frames(1)
 	_check(menu._main_box.visible and menu._map_button.has_focus(), "back to the menu")
 	menu.close()
+	await _despawn()
+
+
+func _test_worker_points_the_way() -> void:
+	print("The maintenance worker in the Span: an orange shirt; after the Warden, the way to the Sin Hawk; after it, the wall-jump spots")
+	await _spawn_world("span")
+	var worker: NPC = _main.get_node("Entities/Worker")
+	_check(worker.npc_id == "worker" and tr(worker.name_key) == "Maintenance Worker", "a maintenance worker, by name")
+	var frame: Texture2D = worker.get_node("Sprite").sprite_frames.get_frame_texture("idle", 0)
+	var img := frame.get_image()
+	var orange := 0
+	for y in img.get_height():
+		for x in img.get_width():
+			var c := img.get_pixel(x, y)
+			if c.a > 0.5 and c.s > 0.6 and absf(c.h - 0.07) < 0.04:
+				orange += 1
+	_check(orange > 40, "an orange shirt (%d px)" % orange)
+	for case in [["warden_defeated", "DLG_WORKER_AFTER_WARDEN_1"], ["harrier_defeated", "DLG_WORKER_AFTER_HAWK_1"]]:
+		GameState.set_flag(case[0])
+		var talk := DialogueState.pick(worker.states, worker.npc_id)
+		_check(talk != null and talk.lines[0].text == case[1], "with %s: %s" % [case[0], case[1]])
+	var keys := []
+	for state in worker.states:
+		for talk in [state.first_talk, state.repeat_talk]:
+			for line in talk.lines:
+				keys.append(line.text)
+	_check(keys.all(func(k): return tr(k) != k), "every line is in dialog.po")
 	await _despawn()

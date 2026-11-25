@@ -14,6 +14,9 @@ msgstr ""
 msgid "NPC_GUARD"
 msgstr "Security Guard"
 
+msgid "NPC_WORKER"
+msgstr "Maintenance Worker"
+
 #. The security guard, before you've beaten the Warden. Night shift, nervous,
 #. stuck at his post near the start. The "loading bay" is the Warden's arena.
 msgid "DLG_GUARD_BEFORE_1"
@@ -58,3 +61,41 @@ msgstr "Maybe I'll finally get some quiet on this shift."
 #. The guard, after the Sin Hawk, on every later visit.
 msgid "DLG_GUARD_AFTER_HARRIER_AGAIN"
 msgstr "Quiet nights from here on. I hope."
+
+#. The maintenance worker, resting by the bench at the Span's near end. Tired,
+#. dry, kind. Before the Warden (you can't normally get here then).
+msgid "DLG_WORKER_BEFORE_1"
+msgstr "How'd you get up here? Never mind. Mind the pits."
+
+msgid "DLG_WORKER_BEFORE_AGAIN"
+msgstr "Still here. Still on break."
+
+#. After the Warden: you crossed the Junction's gap with the dash. Points the
+#. way to the Sin Hawk's nest, and says to rest at the bench first.
+msgid "DLG_WORKER_AFTER_WARDEN_1"
+msgstr "You jumped that gap? Nobody's come over that gap in weeks."
+
+msgid "DLG_WORKER_AFTER_WARDEN_2"
+msgstr "The far door's where the Sin Hawk nests. I used to service the fans in there."
+
+msgid "DLG_WORKER_AFTER_WARDEN_3"
+msgstr "Sit on that bench before you go. Trust me."
+
+#. After the Warden, on every later visit.
+msgid "DLG_WORKER_AFTER_WARDEN_AGAIN"
+msgstr "Bench first. Then the bird."
+
+#. After the Sin Hawk: you can wall jump now. Hints at the two places it opens:
+#. the shaft in this room's ceiling, and the wall by the Entrance.
+msgid "DLG_WORKER_AFTER_HAWK_1"
+msgstr "It's quiet in there. You did that?"
+
+msgid "DLG_WORKER_AFTER_HAWK_2"
+msgstr "With spurs like those you could climb the shaft above us. Something shiny's been up there for years."
+
+msgid "DLG_WORKER_AFTER_HAWK_3"
+msgstr "And the old vault, up the wall by the way in. The door's been out of reach since the stairs came down."
+
+#. After the Sin Hawk, on every later visit.
+msgid "DLG_WORKER_AFTER_HAWK_AGAIN"
+msgstr "The shaft above us, and the vault by the way in. Go on."
